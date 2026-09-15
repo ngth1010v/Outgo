@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Outgo</string>
+
+    <string name="nav_home">Tổng quan</string>
+    <string name="nav_trade">Thêm</string>
+    <string name="nav_balance">Tài khoản</string>
+    <string name="nav_category">Danh mục</string>
+    <string name="nav_analysis">Phân tích</string>
+    <string name="nav_setting">Cài đặt</string>
+
+    <string name="trade_expense">Chi</string>
+    <string name="trade_income">Thu</string>
+    <string name="trade_recent">Gần đây</string>
+    <string name="trade_top_used">Dùng nhiều</string>
+    <string name="trade_all_categories">Tất cả</string>
+    <string name="trade_account_label">Tài khoản</string>
+    <string name="trade_note_hint">Ghi chú</string>
+    <string name="trade_save">LƯU</string>
+    <string name="trade_saved">Đã lưu</string>
+    <string name="trade_undo">HOÀN TÁC</string>
+    <string name="trade_select_category_title">Chọn danh mục</string>
+    <string name="trade_search_category_hint">Tìm danh mục</string>
+    <string name="trade_no_categories">Chưa có danh mục nào. Tạo mới ở tab Danh mục.</string>
+
+    <string name="home_total_balance">Tổng tài sản</string>
+    <string name="home_budgets">Ngân sách</string>
+    <string name="home_add_saving_goal">Thêm mục tiêu tiết kiệm</string>
+    <string name="home_last_5_months">5 tháng gần nhất</string>
+    <string name="home_income">Thu</string>
+    <string name="home_expense">Chi</string>
+    <string name="home_expense_history">Lịch sử Chi</string>
+    <string name="home_income_history">Lịch sử Thu</string>
+    <string name="home_no_budgets">Chưa có ngân sách nào. Thêm ở tab Danh mục.</string>
+    <string name="home_no_data">Chưa có dữ liệu</string>
+
+    <string name="balance_edit_title">Sửa tài khoản</string>
+    <string name="balance_create_title">Tài khoản mới</string>
+    <string name="balance_name_hint">Tên tài khoản</string>
+    <string name="balance_current_balance_hint">Số dư hiện tại</string>
+    <string name="balance_delete_confirm_title">Xoá tài khoản?</string>
+    <string name="balance_delete_confirm_message">Tài khoản chưa có giao dịch nào và sẽ bị xoá vĩnh viễn.</string>
+    <string name="balance_archive_confirm_title">Lưu trữ tài khoản?</string>
+    <string name="balance_archive_confirm_message">Tài khoản đã có giao dịch nên không thể xoá. Tài khoản sẽ được ẩn khỏi danh sách và tổng tài sản, lịch sử vẫn được giữ lại.</string>
+
+    <string name="category_expense_tab">Chi</string>
+    <string name="category_income_tab">Thu</string>
+    <string name="category_edit_title">Sửa danh mục</string>
+    <string name="category_create_parent_title">Danh mục mới</string>
+    <string name="category_create_child_title">Danh mục con mới</string>
+    <string name="category_name_hint">Tên danh mục</string>
+    <string name="category_budget_hint">Ngân sách theo tháng (không bắt buộc)</string>
+    <string name="category_delete_confirm_title">Xoá danh mục?</string>
+    <string name="category_delete_parent_confirm_message">Thao tác này sẽ xoá luôn %1$d danh mục con.</string>
+    <string name="category_delete_child_confirm_message">Danh mục chưa có giao dịch nào và sẽ bị xoá vĩnh viễn.</string>
+    <string name="category_archive_confirm_message">Danh mục đã có giao dịch nên không thể xoá. Danh mục sẽ được ẩn đi, lịch sử vẫn được giữ lại.</string>
+    <string name="category_spent_of_budget">%1$s / %2$s</string>
+
+    <string name="analysis_placeholder">Sắp ra mắt</string>
+
+    <string name="setting_section_data">Dữ liệu</string>
+    <string name="setting_export_backup">Xuất backup</string>
+    <string name="setting_export_backup_desc">Lưu toàn bộ dữ liệu thành 1 file .sqlite</string>
+    <string name="setting_import_backup">Khôi phục từ backup</string>
+    <string name="setting_import_backup_desc">Thay thế dữ liệu hiện tại bằng 1 file backup</string>
+    <string name="setting_section_display">Hiển thị</string>
+    <string name="setting_theme">Giao diện</string>
+    <string name="setting_theme_system">Theo hệ thống</string>
+    <string name="setting_theme_light">Sáng</string>
+    <string name="setting_theme_dark">Tối</string>
+    <string name="setting_section_icons">Icon</string>
+    <string name="setting_manage_icons">Quản lý icon đã import</string>
+    <string name="setting_section_about">Thông tin</string>
+    <string name="setting_version">Phiên bản</string>
+    <string name="setting_licenses">Giấy phép mã nguồn mở</string>
+    <string name="setting_licenses_body">Icon điều hướng và giao diện dựa trên Phosphor Icons (giấy phép MIT), phosphoricons.com.</string>
+
+    <string name="icon_picker_title">Chọn icon</string>
+    <string name="icon_picker_import">Import từ thiết bị</string>
+    <string name="icon_picker_import_error">Không thể import ảnh này</string>
+
+    <string name="common_save">Lưu</string>
+    <string name="common_cancel">Huỷ</string>
+    <string name="common_delete">Xoá</string>
+    <string name="common_edit">Sửa</string>
+    <string name="common_confirm">Xác nhận</string>
+    <string name="common_choose_icon">Chọn icon</string>
+    <string name="common_ok">Đồng ý</string>
+
+    <string name="history_empty">Chưa có giao dịch nào</string>
+    <string name="history_adjustment_note">Điều chỉnh số dư</string>
+    <string name="history_delete_confirm_title">Xoá giao dịch này?</string>
+
+    <string name="backup_export_success">Đã lưu backup (%1$s)</string>
+    <string name="backup_export_failed">Không thể xuất backup</string>
+    <string name="backup_restore_confirm_title">Khôi phục backup này?</string>
+    <string name="backup_restore_confirm_message">Dữ liệu hiện tại sẽ bị thay thế. Một bản sao an toàn của dữ liệu hiện tại vẫn được giữ trên máy.</string>
+    <string name="backup_restore_invalid_file">File này không phải backup của Outgo</string>
+    <string name="backup_restore_newer_app_required">Backup này được tạo từ phiên bản Outgo mới hơn. Vui lòng cập nhật app.</string>
+    <string name="backup_restore_corrupted">File backup này có vẻ đã hỏng</string>
+    <string name="backup_restore_restarting">Đang khôi phục… app sẽ khởi động lại</string>
+
+    <string name="validation_amount_required">Nhập số tiền</string>
+    <string name="validation_category_required">Chọn danh mục</string>
+    <string name="validation_account_required">Chọn tài khoản</string>
+</resources>

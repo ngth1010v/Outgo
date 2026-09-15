@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand seed color, used for the launcher icon background and as a
+         static fallback on API levels without dynamic color (< 31). -->
+    <color name="brand_primary">#3B6E5A</color>
+    <color name="ic_launcher_background">#3B6E5A</color>
+
+    <!-- Splash / cold-start background, read synchronously before Compose
+         is up so the very first frame is never a blank white flash. -->
+    <color name="starting_window_background">#FBFDF9</color>
+    <color name="starting_window_background_dark">#101512</color>
+</resources>

@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Outgo</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_trade">Add</string>
+    <string name="nav_balance">Accounts</string>
+    <string name="nav_category">Categories</string>
+    <string name="nav_analysis">Analysis</string>
+    <string name="nav_setting">Settings</string>
+
+    <!-- Trade screen -->
+    <string name="trade_expense">Expense</string>
+    <string name="trade_income">Income</string>
+    <string name="trade_recent">Recent</string>
+    <string name="trade_top_used">Most used</string>
+    <string name="trade_all_categories">All</string>
+    <string name="trade_account_label">Account</string>
+    <string name="trade_note_hint">Note</string>
+    <string name="trade_save">SAVE</string>
+    <string name="trade_saved">Saved</string>
+    <string name="trade_undo">UNDO</string>
+    <string name="trade_select_category_title">Select a category</string>
+    <string name="trade_search_category_hint">Search categories</string>
+    <string name="trade_no_categories">No categories yet. Create one from the Categories tab.</string>
+
+    <!-- Home screen -->
+    <string name="home_total_balance">Total balance</string>
+    <string name="home_budgets">Budgets</string>
+    <string name="home_add_saving_goal">Add a saving goal</string>
+    <string name="home_last_5_months">Last 5 months</string>
+    <string name="home_income">Income</string>
+    <string name="home_expense">Expense</string>
+    <string name="home_expense_history">Expense history</string>
+    <string name="home_income_history">Income history</string>
+    <string name="home_no_budgets">No budgets yet. Add one from the Categories tab.</string>
+    <string name="home_no_data">No data yet</string>
+
+    <!-- Balance screen -->
+    <string name="balance_edit_title">Edit account</string>
+    <string name="balance_create_title">New account</string>
+    <string name="balance_name_hint">Account name</string>
+    <string name="balance_current_balance_hint">Current balance</string>
+    <string name="balance_delete_confirm_title">Delete account?</string>
+    <string name="balance_delete_confirm_message">This account has no transactions and will be removed permanently.</string>
+    <string name="balance_archive_confirm_title">Archive account?</string>
+    <string name="balance_archive_confirm_message">This account has transactions, so it can\'t be deleted. It will be hidden from Accounts and your total balance instead, and its history is kept.</string>
+
+    <!-- Category screen -->
+    <string name="category_expense_tab">Expense</string>
+    <string name="category_income_tab">Income</string>
+    <string name="category_edit_title">Edit category</string>
+    <string name="category_create_parent_title">New category</string>
+    <string name="category_create_child_title">New subcategory</string>
+    <string name="category_name_hint">Category name</string>
+    <string name="category_budget_hint">Monthly budget (optional)</string>
+    <string name="category_delete_confirm_title">Delete category?</string>
+    <string name="category_delete_parent_confirm_message">This will also delete its %1$d subcategories.</string>
+    <string name="category_delete_child_confirm_message">This category has no transactions and will be removed permanently.</string>
+    <string name="category_archive_confirm_message">This category has transactions, so it can\'t be deleted. It will be hidden instead, and its history is kept.</string>
+    <string name="category_spent_of_budget">%1$s / %2$s</string>
+
+    <!-- Analysis -->
+    <string name="analysis_placeholder">Coming soon</string>
+
+    <!-- Settings -->
+    <string name="setting_section_data">Data</string>
+    <string name="setting_export_backup">Export backup</string>
+    <string name="setting_export_backup_desc">Save a single .sqlite file with all your data</string>
+    <string name="setting_import_backup">Restore from backup</string>
+    <string name="setting_import_backup_desc">Replace current data with a backup file</string>
+    <string name="setting_section_display">Display</string>
+    <string name="setting_theme">Theme</string>
+    <string name="setting_theme_system">System</string>
+    <string name="setting_theme_light">Light</string>
+    <string name="setting_theme_dark">Dark</string>
+    <string name="setting_section_icons">Icons</string>
+    <string name="setting_manage_icons">Manage imported icons</string>
+    <string name="setting_section_about">About</string>
+    <string name="setting_version">Version</string>
+    <string name="setting_licenses">Open-source licenses</string>
+    <string name="setting_licenses_body">Navigation and UI icons based on Phosphor Icons (MIT License), phosphoricons.com.</string>
+
+    <!-- Icon picker -->
+    <string name="icon_picker_title">Choose an icon</string>
+    <string name="icon_picker_import">Import from device</string>
+    <string name="icon_picker_import_error">Couldn\'t import that image</string>
+
+    <!-- Common -->
+    <string name="common_save">Save</string>
+    <string name="common_cancel">Cancel</string>
+    <string name="common_delete">Delete</string>
+    <string name="common_edit">Edit</string>
+    <string name="common_confirm">Confirm</string>
+    <string name="common_choose_icon">Choose icon</string>
+    <string name="common_ok">OK</string>
+
+    <!-- History -->
+    <string name="history_empty">No transactions yet</string>
+    <string name="history_adjustment_note">Balance adjustment</string>
+    <string name="history_delete_confirm_title">Delete this transaction?</string>
+
+    <!-- Backup / restore -->
+    <string name="backup_export_success">Backup saved (%1$s)</string>
+    <string name="backup_export_failed">Couldn\'t export backup</string>
+    <string name="backup_restore_confirm_title">Restore this backup?</string>
+    <string name="backup_restore_confirm_message">Your current data will be replaced. A safety copy of what you have now is kept on this device.</string>
+    <string name="backup_restore_invalid_file">This file isn\'t an Outgo backup</string>
+    <string name="backup_restore_newer_app_required">This backup was made with a newer version of Outgo. Please update the app.</string>
+    <string name="backup_restore_corrupted">This backup file looks corrupted</string>
+    <string name="backup_restore_restarting">Restoring… the app will restart</string>
+
+    <!-- Validation -->
+    <string name="validation_amount_required">Enter an amount</string>
+    <string name="validation_category_required">Choose a category</string>
+    <string name="validation_account_required">Choose an account</string>
+</resources>

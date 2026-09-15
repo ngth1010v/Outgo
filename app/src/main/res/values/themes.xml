@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Real theme: Compose draws everything, so this only needs to stop
+         the platform from drawing a system action bar / decor we don't use. -->
+    <style name="Theme.Outgo" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+
+    <!-- Cold-start theme: applied only until MainActivity.onCreate() calls
+         setTheme(R.style.Theme_Outgo). Its sole job is to paint the window
+         background synchronously so the very first frame (before Compose
+         has inflated anything) is never a flash of plain white. -->
+    <style name="Theme.Outgo.Starting" parent="Theme.Outgo">
+        <item name="android:windowBackground">@color/starting_window_background</item>
+    </style>
+
+</resources>
