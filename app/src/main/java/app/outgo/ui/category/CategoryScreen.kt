@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -45,10 +46,12 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import app.outgo.R
 import app.outgo.data.db.dao.BudgetWithProgress
 import app.outgo.data.db.entity.CategoryEntity
+import app.outgo.data.repo.CategoryColorPalette
 import app.outgo.domain.CategoryKind
 import app.outgo.domain.budgetLevel
 import app.outgo.ui.LocalAppContainer
 import app.outgo.ui.component.BudgetProgressBlock
+import app.outgo.ui.component.ColorPickerGrid
 import app.outgo.ui.component.ConfirmDialog
 import app.outgo.ui.component.IconPickerSheet
 import app.outgo.ui.component.IconView
@@ -58,10 +61,11 @@ import app.outgo.util.Money
 
 private sealed interface EditTarget {
     data object NewParent : EditTarget
-    data class NewChild(val parentId: Long) : EditTarget
+    data class NewChild(val parentId: Long, val parentColor: Int) : EditTarget
     data class Edit(val category: CategoryEntity) : EditTarget
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CategoryScreen() {
     val container = LocalAppContainer.current
@@ -72,10 +76,10 @@ fun CategoryScreen() {
     var expanded by remember { mutableStateOf(setOf<Long>()) }
     var editTarget by remember { mutableStateOf<EditTarget?>(null) }
 
-    Scaffold { padding ->
+    Scaffold(topBar = { CenterAlignedTopAppBar(title = { Text(stringResource(R.string.nav_category)) }) }) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             SingleChoiceSegmentedButtonRow(
-                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 4.dp, end = 16.dp, bottom = 16.dp),
             ) {
                 SegmentedButton(
                     selected = state.type == CategoryKind.EXPENSE,
@@ -120,7 +124,7 @@ fun CategoryScreen() {
                                 )
                             }
                             PlusRow(
-                                onClick = { editTarget = EditTarget.NewChild(parent.id) },
+                                onClick = { editTarget = EditTarget.NewChild(parent.id, parent.color) },
                                 modifier = Modifier
                                     .padding(start = 20.dp)
                                     .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
@@ -166,7 +170,7 @@ private fun CategoryRow(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp).clickable(onClick = onRowClick),
         ) {
-            IconView(iconId = category.iconId, size = 28.dp)
+            IconView(iconId = category.iconId, size = 28.dp, color = category.color)
             Spacer(Modifier.width(12.dp))
             Text(category.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
             trailing?.invoke()
@@ -197,6 +201,9 @@ private fun EditCategorySheet(
     val effectiveType = existing?.type ?: currentType
     var name by remember { mutableStateOf(existing?.name.orEmpty()) }
     var iconId by remember { mutableStateOf(existing?.iconId) }
+    var color by remember {
+        mutableStateOf(existing?.color ?: (target as? EditTarget.NewChild)?.parentColor ?: CategoryColorPalette[0])
+    }
     var budgetText by remember { mutableStateOf("") }
     var showIconPicker by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -223,7 +230,7 @@ private fun EditCategorySheet(
             Spacer(Modifier.height(12.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconView(iconId = iconId, size = 48.dp, modifier = Modifier.padding(end = 12.dp))
+                IconView(iconId = iconId, size = 48.dp, color = color, modifier = Modifier.padding(end = 12.dp))
                 OutlinedButton(onClick = { showIconPicker = true }) { Text(stringResource(R.string.common_choose_icon)) }
             }
             Spacer(Modifier.height(12.dp))
@@ -246,15 +253,20 @@ private fun EditCategorySheet(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
+            Spacer(Modifier.height(12.dp))
+
+            Text(stringResource(R.string.category_color_label), style = MaterialTheme.typography.labelLarge)
+            Spacer(Modifier.height(8.dp))
+            ColorPickerGrid(selected = color, onSelect = { color = it })
             Spacer(Modifier.height(16.dp))
 
             Button(
                 onClick = {
                     val budget = budgetText.toLongOrNull()
                     when {
-                        existing != null -> viewModel.update(existing, name, iconId, budget)
-                        target is EditTarget.NewChild -> viewModel.createChild(target.parentId, name, iconId, budget)
-                        else -> viewModel.createParent(name, iconId, budget, defaultChildName)
+                        existing != null -> viewModel.update(existing, name, iconId, color, budget)
+                        target is EditTarget.NewChild -> viewModel.createChild(target.parentId, name, iconId, color, budget)
+                        else -> viewModel.createParent(name, iconId, color, budget, defaultChildName)
                     }
                     onDismiss()
                 },

@@ -30,22 +30,30 @@ class AccountRepository(
         (accountDao.lastUsedAccount() ?: accountDao.firstActiveOrNull())?.id
     }
 
-    suspend fun create(name: String, iconId: Long?, initialBalance: Long): Long = withContext(Dispatchers.IO) {
+    suspend fun create(name: String, iconId: Long?, color: Int, initialBalance: Long): Long = withContext(Dispatchers.IO) {
         db.withTransaction {
             val now = System.currentTimeMillis()
             val order = accountDao.maxSortOrder() + 1
             val id = accountDao.insert(
-                AccountEntity(name = name, iconId = iconId, balance = 0, sortOrder = order, createdAt = now, updatedAt = now),
+                AccountEntity(
+                    name = name,
+                    iconId = iconId,
+                    balance = 0,
+                    color = color,
+                    sortOrder = order,
+                    createdAt = now,
+                    updatedAt = now,
+                ),
             )
             if (initialBalance != 0L) tradeRepository.recordAdjustment(id, initialBalance)
             id
         }
     }
 
-    suspend fun update(accountId: Long, name: String, iconId: Long?, newBalance: Long) = withContext(Dispatchers.IO) {
+    suspend fun update(accountId: Long, name: String, iconId: Long?, color: Int, newBalance: Long) = withContext(Dispatchers.IO) {
         db.withTransaction {
             val existing = accountDao.findById(accountId) ?: return@withTransaction
-            accountDao.update(existing.copy(name = name, iconId = iconId, updatedAt = System.currentTimeMillis()))
+            accountDao.update(existing.copy(name = name, iconId = iconId, color = color, updatedAt = System.currentTimeMillis()))
             val delta = newBalance - existing.balance
             if (delta != 0L) tradeRepository.recordAdjustment(accountId, delta)
         }

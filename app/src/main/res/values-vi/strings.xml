@@ -49,6 +49,7 @@
     <string name="category_create_parent_title">Danh mục mới</string>
     <string name="category_create_child_title">Danh mục con mới</string>
     <string name="category_name_hint">Tên danh mục</string>
+    <string name="category_color_label">Màu sắc</string>
     <string name="category_budget_hint">Ngân sách theo tháng (không bắt buộc)</string>
     <string name="category_delete_confirm_title">Xoá danh mục?</string>
     <string name="category_delete_parent_confirm_message">Thao tác này sẽ xoá luôn %1$d danh mục con.</string>

@@ -1,5 +1,6 @@
 package app.outgo.ui.balance
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -13,7 +14,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -39,7 +42,9 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.outgo.R
 import app.outgo.data.db.entity.AccountEntity
+import app.outgo.data.repo.CategoryColorPalette
 import app.outgo.ui.LocalAppContainer
+import app.outgo.ui.component.ColorPickerGrid
 import app.outgo.ui.component.ConfirmDialog
 import app.outgo.ui.component.IconPickerSheet
 import app.outgo.ui.component.IconView
@@ -47,6 +52,7 @@ import app.outgo.ui.component.PlusRow
 import app.outgo.util.Money
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BalanceScreen() {
     val container = LocalAppContainer.current
@@ -57,26 +63,35 @@ fun BalanceScreen() {
     var editing by remember { mutableStateOf<AccountEntity?>(null) }
     var showCreate by remember { mutableStateOf(false) }
 
-    Scaffold { padding ->
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
+    Scaffold(topBar = { CenterAlignedTopAppBar(title = { Text(stringResource(R.string.nav_balance)) }) }) { padding ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             items(accounts, key = { it.id }) { account ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
                         .clickable { editing = account }
-                        .padding(vertical = 14.dp),
+                        .padding(horizontal = 12.dp, vertical = 14.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconView(iconId = account.iconId, size = 32.dp)
+                        IconView(iconId = account.iconId, size = 32.dp, color = account.color)
                         Spacer(Modifier.width(12.dp))
                         Text(account.name, style = MaterialTheme.typography.bodyLarge)
                     }
                     Text(Money.format(account.balance), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
                 }
             }
-            item { PlusRow(onClick = { showCreate = true }) }
+            item {
+                PlusRow(
+                    onClick = { showCreate = true },
+                    modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
+                )
+            }
         }
     }
 
@@ -99,6 +114,7 @@ private fun EditAccountSheet(account: AccountEntity?, onDismiss: () -> Unit, vie
     var name by remember { mutableStateOf(account?.name.orEmpty()) }
     var balanceText by remember { mutableStateOf(account?.balance?.takeIf { it != 0L }?.toString().orEmpty()) }
     var iconId by remember { mutableStateOf(account?.iconId) }
+    var color by remember { mutableStateOf(account?.color ?: CategoryColorPalette[0]) }
     var showIconPicker by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var hasTrades by remember { mutableStateOf(false) }
@@ -116,7 +132,7 @@ private fun EditAccountSheet(account: AccountEntity?, onDismiss: () -> Unit, vie
             Spacer(Modifier.height(12.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconView(iconId = iconId, size = 48.dp, modifier = Modifier.padding(end = 12.dp))
+                IconView(iconId = iconId, size = 48.dp, color = color, modifier = Modifier.padding(end = 12.dp))
                 OutlinedButton(onClick = { showIconPicker = true }) { Text(stringResource(R.string.common_choose_icon)) }
             }
             Spacer(Modifier.height(12.dp))
@@ -136,15 +152,20 @@ private fun EditAccountSheet(account: AccountEntity?, onDismiss: () -> Unit, vie
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
+            Spacer(Modifier.height(12.dp))
+
+            Text(stringResource(R.string.category_color_label), style = MaterialTheme.typography.labelLarge)
+            Spacer(Modifier.height(8.dp))
+            ColorPickerGrid(selected = color, onSelect = { color = it })
             Spacer(Modifier.height(16.dp))
 
             val balance = balanceText.toLongOrNull() ?: 0L
             Button(
                 onClick = {
                     if (account == null) {
-                        viewModel.create(name, iconId, balance)
+                        viewModel.create(name, iconId, color, balance)
                     } else {
-                        viewModel.update(account.id, name, iconId, balance)
+                        viewModel.update(account.id, name, iconId, color, balance)
                     }
                     onDismiss()
                 },

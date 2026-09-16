@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -36,6 +38,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingScreen() {
     val container = LocalAppContainer.current
@@ -82,8 +85,8 @@ fun SettingScreen() {
         }
     }
 
-    Scaffold { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
+    Scaffold(topBar = { CenterAlignedTopAppBar(title = { Text(stringResource(R.string.nav_setting)) }) }) { padding ->
+        Column(modifier = Modifier.fillMaxSize().padding(padding).padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp)) {
             SectionLabel(stringResource(R.string.setting_section_data))
             SettingRow(
                 title = stringResource(R.string.setting_export_backup),

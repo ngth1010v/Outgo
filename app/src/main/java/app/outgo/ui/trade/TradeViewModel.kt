@@ -22,6 +22,7 @@ data class TradeUiState(
     val type: Int = CategoryKind.EXPENSE,
     val amount: Long = 0,
     val selectedCategory: CategoryEntity? = null,
+    val selectedParentCategory: CategoryEntity? = null,
     val selectedAccountId: Long? = null,
     val occurredAt: Long = System.currentTimeMillis(),
     val note: String = "",
@@ -81,11 +82,13 @@ class TradeViewModel(
     private suspend fun loadForEdit(tradeId: Long) {
         val trade = tradeRepository.findById(tradeId) ?: return
         val category = trade.categoryId?.let { categoryRepository.findById(it) }
+        val parent = category?.parentId?.let { categoryRepository.findById(it) }
         _state.update {
             it.copy(
                 type = trade.type,
                 amount = trade.amount,
                 selectedCategory = category,
+                selectedParentCategory = parent,
                 selectedAccountId = trade.accountId,
                 occurredAt = trade.occurredAt,
                 note = trade.note.orEmpty(),
@@ -100,7 +103,7 @@ class TradeViewModel(
 
     fun onTypeChange(type: Int) {
         if (type == _state.value.type) return
-        _state.update { it.copy(type = type, selectedCategory = null) }
+        _state.update { it.copy(type = type, selectedCategory = null, selectedParentCategory = null) }
         viewModelScope.launch { loadPicker(type) }
     }
 
@@ -109,7 +112,11 @@ class TradeViewModel(
     }
 
     fun onCategorySelected(category: CategoryEntity) {
-        _state.update { it.copy(selectedCategory = category) }
+        _state.update { it.copy(selectedCategory = category, selectedParentCategory = null) }
+        viewModelScope.launch {
+            val parent = category.parentId?.let { categoryRepository.findById(it) }
+            _state.update { it.copy(selectedParentCategory = parent) }
+        }
     }
 
     fun onAccountSelected(accountId: Long) {
@@ -184,6 +191,7 @@ class TradeViewModel(
             it.copy(
                 amount = 0,
                 selectedCategory = null,
+                selectedParentCategory = null,
                 occurredAt = System.currentTimeMillis(),
                 note = "",
                 type = CategoryKind.EXPENSE,

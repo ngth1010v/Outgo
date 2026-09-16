@@ -55,16 +55,16 @@ class CategoryViewModel(
     suspend fun childCount(parentId: Long): Int = categoryRepository.childCount(parentId)
     suspend fun hasTrades(categoryId: Long): Boolean = categoryRepository.hasTrades(categoryId)
 
-    fun createParent(name: String, iconId: Long?, budget: Long?, defaultChildName: String) {
-        viewModelScope.launch { categoryRepository.createParent(type.value, name, iconId, budget, defaultChildName) }
+    fun createParent(name: String, iconId: Long?, color: Int, budget: Long?, defaultChildName: String) {
+        viewModelScope.launch { categoryRepository.createParent(type.value, name, iconId, color, budget, defaultChildName) }
     }
 
-    fun createChild(parentId: Long, name: String, iconId: Long?, budget: Long?) {
-        viewModelScope.launch { categoryRepository.createChild(parentId, name, iconId, budget) }
+    fun createChild(parentId: Long, name: String, iconId: Long?, color: Int, budget: Long?) {
+        viewModelScope.launch { categoryRepository.createChild(parentId, name, iconId, color, budget) }
     }
 
-    fun update(category: CategoryEntity, name: String, iconId: Long?, budget: Long?) {
-        viewModelScope.launch { categoryRepository.update(category, name, iconId, budget) }
+    fun update(category: CategoryEntity, name: String, iconId: Long?, color: Int, budget: Long?) {
+        viewModelScope.launch { categoryRepository.update(category, name, iconId, color, budget) }
     }
 
     fun deleteOrArchive(category: CategoryEntity) {

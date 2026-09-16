@@ -1,15 +1,21 @@
 package app.outgo.ui.home
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -27,6 +33,7 @@ import app.outgo.util.MonthKey
  * architecture.md §7.2. Only parent categories are ever passed in here
  * (the DAO query already sums children into their parent).
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun StackedDivergingBarChart(totals: List<MonthCategoryTotal>, months: List<Int>, modifier: Modifier = Modifier) {
     val byMonth = remember(totals, months) { totals.groupBy { it.monthKey } }
@@ -120,6 +127,32 @@ fun StackedDivergingBarChart(totals: List<MonthCategoryTotal>, months: List<Int>
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+        }
+
+        val legend = remember(totals, rootOrder) {
+            val byRoot = totals.associateBy { it.rootId }
+            rootOrder.mapNotNull { byRoot[it] }
+        }
+        if (legend.isNotEmpty()) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp),
+            ) {
+                legend.forEach { entry ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.foundation.layout.Box(
+                            modifier = Modifier.size(10.dp).background(Color(entry.color), RoundedCornerShape(2.dp)),
+                        )
+                        Text(
+                            entry.name,
+                            modifier = Modifier.padding(start = 4.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             }
         }
     }

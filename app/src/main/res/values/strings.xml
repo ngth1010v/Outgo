@@ -54,6 +54,7 @@
     <string name="category_create_parent_title">New category</string>
     <string name="category_create_child_title">New subcategory</string>
     <string name="category_name_hint">Category name</string>
+    <string name="category_color_label">Color</string>
     <string name="category_budget_hint">Monthly budget (optional)</string>
     <string name="category_delete_confirm_title">Delete category?</string>
     <string name="category_delete_parent_confirm_message">This will also delete its %1$d subcategories.</string>

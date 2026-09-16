@@ -8,7 +8,6 @@ import app.outgo.domain.CategoryPicker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
-import kotlin.random.Random
 
 class CategoryRepository(
     private val db: OutgoDatabase,
@@ -22,29 +21,24 @@ class CategoryRepository(
     suspend fun findById(id: Long): CategoryEntity? = withContext(Dispatchers.IO) { categoryDao.findById(id) }
 
     /**
-     * Builds the Trade screen's two quick-pick rows: up to 5 recently used
-     * and up to 5 most used child categories, never overlapping. Short rows
-     * are padded with random categories, using a seed stable for the day so
-     * the grid doesn't reshuffle every time the screen opens.
+     * Builds the Trade screen's two quick-pick rows: up to 5 recently used and
+     * up to 5 most used child categories, each ranked independently (a category
+     * can appear in both rows) so "Most used" always reflects true trade-count
+     * order. Short rows are padded with never-used categories in their normal
+     * sort order, never randomly.
      */
     suspend fun getPicker(type: Int): CategoryPicker = withContext(Dispatchers.IO) {
         val recent = categoryDao.mostRecent(type, 5)
+        val top = categoryDao.mostUsed(type, 5)
+        if (recent.size >= 5 && top.size >= 5) return@withContext CategoryPicker(recent, top)
+
+        val allChildren = categoryDao.allChildrenOnce(type)
         val recentIds = recent.map { it.id }.toSet()
-        val top = categoryDao.mostUsed(type, 20).filter { it.id !in recentIds }.take(5)
-        val chosenIds = recentIds + top.map { it.id }
+        val topIds = top.map { it.id }.toSet()
 
-        val needRecent = 5 - recent.size
-        val needTop = 5 - top.size
-        if (needRecent <= 0 && needTop <= 0) return@withContext CategoryPicker(recent, top)
-
-        val pool = categoryDao.allChildrenOnce(type).filter { it.id !in chosenIds }
-        if (pool.isEmpty()) return@withContext CategoryPicker(recent, top)
-
-        val seed = java.time.LocalDate.now().toEpochDay()
-        val shuffled = pool.shuffled(Random(seed))
-        val recentFill = shuffled.take(maxOf(0, needRecent))
-        val topFill = shuffled.drop(recentFill.size).take(maxOf(0, needTop))
-        CategoryPicker(recent + recentFill, top + topFill)
+        val recentFilled = recent + allChildren.filter { it.id !in recentIds }.take(5 - recent.size)
+        val topFilled = top + allChildren.filter { it.id !in topIds }.take(5 - top.size)
+        CategoryPicker(recentFilled, topFilled)
     }
 
     /**
@@ -52,7 +46,7 @@ class CategoryRepository(
      * picks a child), so a budget set on it could never accrue spend. Every new
      * parent gets one default child up front so it's reachable right away.
      */
-    suspend fun createParent(type: Int, name: String, iconId: Long?, budget: Long?, defaultChildName: String): Long =
+    suspend fun createParent(type: Int, name: String, iconId: Long?, color: Int, budget: Long?, defaultChildName: String): Long =
         withContext(Dispatchers.IO) {
             db.withTransaction {
                 val order = categoryDao.maxSortOrder(null) + 1
@@ -62,7 +56,7 @@ class CategoryRepository(
                         type = type,
                         name = name,
                         iconId = iconId,
-                        color = ChartPalette[order % ChartPalette.size],
+                        color = color,
                         sortOrder = order,
                         createdAt = System.currentTimeMillis(),
                     ),
@@ -74,7 +68,7 @@ class CategoryRepository(
                         type = type,
                         name = defaultChildName,
                         iconId = iconId,
-                        color = 0,
+                        color = color,
                         sortOrder = 0,
                         createdAt = System.currentTimeMillis(),
                     ),
@@ -83,7 +77,7 @@ class CategoryRepository(
             }
         }
 
-    suspend fun createChild(parentId: Long, name: String, iconId: Long?, budget: Long?): Long = withContext(Dispatchers.IO) {
+    suspend fun createChild(parentId: Long, name: String, iconId: Long?, color: Int, budget: Long?): Long = withContext(Dispatchers.IO) {
         db.withTransaction {
             val parent = categoryDao.findById(parentId) ?: error("parent category not found")
             val order = categoryDao.maxSortOrder(parentId) + 1
@@ -93,7 +87,7 @@ class CategoryRepository(
                     type = parent.type,
                     name = name,
                     iconId = iconId,
-                    color = 0,
+                    color = color,
                     sortOrder = order,
                     createdAt = System.currentTimeMillis(),
                 ),
@@ -103,9 +97,9 @@ class CategoryRepository(
         }
     }
 
-    suspend fun update(category: CategoryEntity, name: String, iconId: Long?, budget: Long?) = withContext(Dispatchers.IO) {
+    suspend fun update(category: CategoryEntity, name: String, iconId: Long?, color: Int, budget: Long?) = withContext(Dispatchers.IO) {
         db.withTransaction {
-            categoryDao.update(category.copy(name = name, iconId = iconId))
+            categoryDao.update(category.copy(name = name, iconId = iconId, color = color))
             budgetRepository.setLimitForCategory(category.id, budget)
         }
     }
@@ -144,9 +138,18 @@ class CategoryRepository(
     }
 }
 
-/** Cycled when a new parent category is created, so Home chart segments stay visually distinct. */
-val ChartPalette = intArrayOf(
-    0xFF2E7D32.toInt(), 0xFFC62828.toInt(), 0xFF1565C0.toInt(), 0xFFF9A825.toInt(),
-    0xFF6A1B9A.toInt(), 0xFF00838F.toInt(), 0xFFAD1457.toInt(), 0xFF4E342E.toInt(),
-    0xFF558B2F.toInt(), 0xFFEF6C00.toInt(), 0xFF283593.toInt(),
+/**
+ * The 33 swatches offered in the category/account color picker, laid out as
+ * 3 rows of 11, lightest to darkest (see [app.outgo.ui.component.ColorPickerGrid]).
+ */
+val CategoryColorPalette = intArrayOf(
+    0xFFFAA1A4.toInt(), 0xFFFFCC80.toInt(), 0xFFFFF59D.toInt(), 0xFFA5D6A7.toInt(), 0xFF70CCBD.toInt(),
+    0xFF80DEEA.toInt(), 0xFF90BFF9.toInt(), 0xFFB39DDB.toInt(), 0xFFCE93D8.toInt(), 0xFFF48FB1.toInt(),
+    0xFFCCCCCC.toInt(),
+    0xFFF7525F.toInt(), 0xFFFFA726.toInt(), 0xFFFFEE58.toInt(), 0xFF66BB6A.toInt(), 0xFF22AB94.toInt(),
+    0xFF26C6DA.toInt(), 0xFF3179F5.toInt(), 0xFF7E57C2.toInt(), 0xFFAB47BC.toInt(), 0xFFEC407A.toInt(),
+    0xFF666666.toInt(),
+    0xFF801922.toInt(), 0xFFE65100.toInt(), 0xFFF57F17.toInt(), 0xFF1B5E20.toInt(), 0xFF00332A.toInt(),
+    0xFF006064.toInt(), 0xFF0C3299.toInt(), 0xFF311B92.toInt(), 0xFF4A148C.toInt(), 0xFF880E4F.toInt(),
+    0xFF000000.toInt(),
 )

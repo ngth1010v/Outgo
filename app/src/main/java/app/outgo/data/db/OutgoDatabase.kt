@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import app.outgo.data.db.dao.AccountDao
 import app.outgo.data.db.dao.BudgetDao
@@ -43,7 +44,7 @@ import app.outgo.domain.IconKind
         BudgetEntity::class,
         SettingEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class OutgoDatabase : RoomDatabase() {
@@ -57,16 +58,26 @@ abstract class OutgoDatabase : RoomDatabase() {
 
     companion object {
         const val FILE_NAME = "outgo.sqlite"
-        const val SCHEMA_VERSION = 1
+        const val SCHEMA_VERSION = 2
 
         // "OUTO" packed into 4 bytes, stamped once via PRAGMA application_id so a
         // restore can reject a file that isn't an Outgo backup before touching real data.
         const val APPLICATION_ID = 0x4F55544F
 
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Existing accounts get the neutral default (0) — only newly created
+                // ones are assigned a palette color; falling back to destructive
+                // recreation here would also silently drop the onCreate-only triggers.
+                db.execSQL("ALTER TABLE account ADD COLUMN color INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun build(context: Context): OutgoDatabase =
             Room.databaseBuilder(context.applicationContext, OutgoDatabase::class.java, FILE_NAME)
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
                 .addCallback(OutgoCallback)
+                .addMigrations(MIGRATION_1_2)
                 .build()
     }
 }
@@ -185,11 +196,15 @@ private object OutgoCallback : RoomDatabase.Callback() {
             db.insert("icon", android.database.sqlite.SQLiteDatabase.CONFLICT_ABORT, cv)
         }
 
+        var colorIndex = 0
+        fun nextColor(): Int = SeedPalette[colorIndex++ % SeedPalette.size]
+
         fun account(name: String, iconId: Long) {
             val cv = ContentValues().apply {
                 put("name", name)
                 put("icon_id", iconId)
                 put("balance", 0)
+                put("color", nextColor())
                 put("sort_order", 0)
                 put("archived", 0)
                 put("created_at", now)
@@ -198,22 +213,26 @@ private object OutgoCallback : RoomDatabase.Callback() {
             db.insert("account", android.database.sqlite.SQLiteDatabase.CONFLICT_ABORT, cv)
         }
 
-        var colorIndex = 0
-        fun nextColor(): Int = SeedPalette[colorIndex++ % SeedPalette.size]
+        // Children share their parent's color — it's the same category for
+        // charting/coloring purposes, just a more specific pick within it.
+        val parentColors = HashMap<Long, Int>()
 
         fun parent(type: Int, name: String, iconAsset: String, order: Int): Long {
+            val color = nextColor()
             val cv = ContentValues().apply {
                 put("parent_id", null as Long?)
                 put("type", type)
                 put("name", name)
                 put("icon_id", icon(iconAsset))
-                put("color", nextColor())
+                put("color", color)
                 put("sort_order", order)
                 put("use_count", 0)
                 put("archived", 0)
                 put("created_at", now)
             }
-            return db.insert("category", android.database.sqlite.SQLiteDatabase.CONFLICT_ABORT, cv)
+            val id = db.insert("category", android.database.sqlite.SQLiteDatabase.CONFLICT_ABORT, cv)
+            parentColors[id] = color
+            return id
         }
 
         fun child(type: Int, parentId: Long, name: String, iconAsset: String, order: Int) {
@@ -222,7 +241,7 @@ private object OutgoCallback : RoomDatabase.Callback() {
                 put("type", type)
                 put("name", name)
                 put("icon_id", icon(iconAsset))
-                put("color", 0)
+                put("color", parentColors[parentId] ?: 0)
                 put("sort_order", order)
                 put("use_count", 0)
                 put("archived", 0)

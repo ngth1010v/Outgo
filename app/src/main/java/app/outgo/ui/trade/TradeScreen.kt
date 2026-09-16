@@ -2,7 +2,6 @@ package app.outgo.ui.trade
 
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -16,9 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -115,10 +112,10 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit) {
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(start = 16.dp, top = 4.dp, end = 16.dp, bottom = 16.dp),
         ) {
             ExpenseIncomeToggle(type = state.type, onTypeChange = viewModel::onTypeChange)
+            Spacer(Modifier.height(16.dp))
 
             AmountField(
                 amount = state.amount,
@@ -127,7 +124,8 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit) {
                 modifier = Modifier.padding(vertical = 8.dp),
             )
 
-            SelectedCategoryChip(state.selectedCategory)
+            SelectedCategoryChip(state.selectedParentCategory, state.selectedCategory)
+            Spacer(Modifier.height(8.dp))
 
             CategoryPickerSection(
                 title = stringResource(R.string.trade_recent),
@@ -136,24 +134,28 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit) {
                 onSelect = viewModel::onCategorySelected,
                 onSeeAll = { showAllCategories = true },
             )
+            Spacer(Modifier.height(16.dp))
             CategoryPickerSection(
                 title = stringResource(R.string.trade_top_used),
                 categories = state.picker.top,
                 selectedId = state.selectedCategory?.id,
                 onSelect = viewModel::onCategorySelected,
             )
+            Spacer(Modifier.height(16.dp))
 
             AccountDropdown(
                 accounts = state.accounts,
                 selectedAccount = state.selectedAccount,
                 onSelect = { viewModel.onAccountSelected(it.id) },
             )
+            Spacer(Modifier.height(16.dp))
 
             DateTimeRow(
                 occurredAt = state.occurredAt,
                 onDateChange = viewModel::onDateChange,
                 onTimeChange = viewModel::onTimeChange,
             )
+            Spacer(Modifier.height(16.dp))
 
             OutlinedTextField(
                 value = state.note,
@@ -163,12 +165,14 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit) {
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 modifier = Modifier.fillMaxWidth(),
             )
+            Spacer(Modifier.height(16.dp))
 
             if (state.isEditing) {
                 TextButton(onClick = { showDeleteConfirm = true }, modifier = Modifier.fillMaxWidth()) {
                     Icon(painterResource(R.drawable.ph_trash), contentDescription = null, tint = MaterialTheme.colorScheme.error)
                     Text("  " + stringResource(R.string.common_delete), color = MaterialTheme.colorScheme.error)
                 }
+                Spacer(Modifier.height(16.dp))
             }
 
             androidx.compose.material3.Button(
@@ -222,15 +226,23 @@ private fun ExpenseIncomeToggle(type: Int, onTypeChange: (Int) -> Unit) {
 }
 
 @Composable
-private fun SelectedCategoryChip(category: CategoryEntity?) {
+private fun SelectedCategoryChip(parent: CategoryEntity?, category: CategoryEntity?) {
     if (category == null) return
     Row(
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
     ) {
-        IconView(iconId = category.iconId, size = 24.dp)
-        Spacer(Modifier.width(8.dp))
+        if (parent != null) {
+            IconView(iconId = parent.iconId, size = 20.dp, color = parent.color)
+            Spacer(Modifier.width(6.dp))
+            Text(parent.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            Spacer(Modifier.width(6.dp))
+            Text("/", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.width(6.dp))
+        }
+        IconView(iconId = category.iconId, size = 20.dp, color = category.color)
+        Spacer(Modifier.width(6.dp))
         Text(category.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
     }
 }
@@ -295,7 +307,7 @@ private fun CategoryCell(category: CategoryEntity, selected: Boolean, onClick: (
                 .padding(2.dp),
             contentAlignment = Alignment.Center,
         ) {
-            IconView(iconId = category.iconId, size = 40.dp)
+            IconView(iconId = category.iconId, size = 40.dp, color = category.color)
         }
         Text(
             category.name,
@@ -320,7 +332,7 @@ private fun AccountDropdown(accounts: List<AccountEntity>, selectedAccount: Acco
                     .padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconView(iconId = selectedAccount?.iconId, size = 24.dp)
+                IconView(iconId = selectedAccount?.iconId, size = 24.dp, color = selectedAccount?.color)
                 Spacer(Modifier.width(8.dp))
                 Text(selectedAccount?.name ?: "—", modifier = Modifier.weight(1f))
                 Icon(painterResource(R.drawable.ph_caret_down), contentDescription = null)
@@ -329,7 +341,7 @@ private fun AccountDropdown(accounts: List<AccountEntity>, selectedAccount: Acco
                 accounts.forEach { account ->
                     DropdownMenuItem(
                         text = { Text(account.name) },
-                        leadingIcon = { IconView(iconId = account.iconId, size = 24.dp) },
+                        leadingIcon = { IconView(iconId = account.iconId, size = 24.dp, color = account.color) },
                         onClick = { onSelect(account); expanded = false },
                     )
                 }
@@ -399,10 +411,15 @@ private fun AllCategoriesSheet(type: Int, onSelect: (CategoryEntity) -> Unit, on
     val container = LocalAppContainer.current
     val all by container.categoryRepository.observeAllOfType(type).collectAsState(initial = emptyList())
     var query by remember { mutableStateOf("") }
-    val filtered = remember(all, query) {
-        if (query.isBlank()) all.filter { it.parentId != null } else all.filter { it.parentId != null && it.name.contains(query, ignoreCase = true) }
+    val parents = remember(all) { all.filter { it.parentId == null } }
+    val childrenByParent = remember(all) { all.filter { it.parentId != null }.groupBy { it.parentId!! } }
+    val groups = remember(parents, childrenByParent, query) {
+        parents.mapNotNull { parent ->
+            val children = childrenByParent[parent.id].orEmpty()
+                .filter { query.isBlank() || it.name.contains(query, ignoreCase = true) }
+            if (query.isNotBlank() && children.isEmpty()) null else parent to children
+        }
     }
-    val parentsById = remember(all) { all.filter { it.parentId == null }.associateBy { it.id } }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
         Column(modifier = Modifier.padding(16.dp).fillMaxSize()) {
@@ -415,16 +432,25 @@ private fun AllCategoriesSheet(type: Int, onSelect: (CategoryEntity) -> Unit, on
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
             )
-            LazyVerticalGrid(columns = GridCells.Fixed(4)) {
-                items(filtered, key = { it.id }) { category ->
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.clickable { onSelect(category) }.padding(8.dp),
-                    ) {
-                        IconView(iconId = category.iconId, size = 40.dp)
-                        Text(category.name, style = MaterialTheme.typography.labelSmall, maxLines = 1)
-                        parentsById[category.parentId]?.let {
-                            Text(it.name, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                groups.forEach { (parent, children) ->
+                    item(key = parent.id) {
+                        Column {
+                            Text(parent.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium)
+                            Spacer(Modifier.height(8.dp))
+                            children.chunked(5).forEach { rowItems ->
+                                Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                    rowItems.forEach { child ->
+                                        CategoryCell(
+                                            category = child,
+                                            selected = false,
+                                            onClick = { onSelect(child) },
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                    }
+                                    repeat(5 - rowItems.size) { Spacer(Modifier.weight(1f)) }
+                                }
+                            }
                         }
                     }
                 }

@@ -34,6 +34,8 @@ data class AccountEntity(
     val iconId: Long?,
     @ColumnInfo(name = "balance")
     val balance: Long = 0,
+    @ColumnInfo(name = "color")
+    val color: Int = 0,
     @ColumnInfo(name = "sort_order")
     val sortOrder: Int = 0,
     @ColumnInfo(name = "archived")
