@@ -115,7 +115,7 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit) {
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+                .padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             ExpenseIncomeToggle(type = state.type, onTypeChange = viewModel::onTypeChange)

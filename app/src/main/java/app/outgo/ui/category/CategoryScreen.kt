@@ -71,7 +71,9 @@ fun CategoryScreen() {
 
     Scaffold { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+            SingleChoiceSegmentedButtonRow(
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp),
+            ) {
                 SegmentedButton(
                     selected = state.type == CategoryKind.EXPENSE,
                     onClick = { viewModel.setType(CategoryKind.EXPENSE) },

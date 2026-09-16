@@ -113,11 +113,16 @@ class CategoryRepository(
     suspend fun childCount(parentId: Long): Int = withContext(Dispatchers.IO) { categoryDao.countChildren(parentId) }
     suspend fun hasTrades(categoryId: Long): Boolean = withContext(Dispatchers.IO) { categoryDao.countTrades(categoryId) > 0 }
 
-    /** Deletes (or archives, if it has history) a category; for a parent, applies the same rule to every child. */
+    /**
+     * Deletes (or archives, if it has history) a category; for a parent, applies the same rule
+     * to every child first. `parent_id` is a RESTRICT foreign key, so children must be resolved
+     * before the parent, and the parent can only be deleted (not archived) once none of its
+     * children still exist — an archived child left behind would otherwise reference a deleted parent.
+     */
     suspend fun deleteOrArchive(category: CategoryEntity) = withContext(Dispatchers.IO) {
         db.withTransaction {
-            val ids = if (category.isParent) listOf(category.id) + categoryDao.childIds(category.id) else listOf(category.id)
-            for (id in ids) {
+            val childIds = if (category.isParent) categoryDao.childIds(category.id) else emptyList()
+            for (id in childIds) {
                 val row = categoryDao.findById(id) ?: continue
                 budgetRepository.findByCategory(id)?.let { budgetRepository.delete(it) }
                 if (categoryDao.countTrades(id) > 0) {
@@ -125,6 +130,15 @@ class CategoryRepository(
                 } else {
                     categoryDao.delete(row)
                 }
+            }
+
+            val parent = categoryDao.findById(category.id) ?: return@withTransaction
+            budgetRepository.findByCategory(category.id)?.let { budgetRepository.delete(it) }
+            val hasRemainingChildren = category.isParent && categoryDao.childIds(category.id).isNotEmpty()
+            if (hasRemainingChildren || categoryDao.countTrades(category.id) > 0) {
+                categoryDao.update(parent.copy(archived = true))
+            } else {
+                categoryDao.delete(parent)
             }
         }
     }
