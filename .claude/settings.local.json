@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmd *)",
+      "PowerShell(& \"E:\\\\CODE\\\\Outgo\\\\build.bat\" 2>&1)",
+      "PowerShell(Set-Location E:\\\\CODE\\\\Outgo; $output = cmd /c \"E:\\\\CODE\\\\Outgo\\\\gradlew.bat assembleDebug --console=plain\" 2>&1; $output -join \"`n\"; Write-Host \"Exit code: $LASTEXITCODE\")"
+    ]
+  }
+}
