@@ -1,5 +1,6 @@
 package app.outgo.ui.category
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -8,10 +9,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -86,10 +89,13 @@ fun CategoryScreen() {
                 ) { Text(stringResource(R.string.category_income_tab)) }
             }
 
-            LazyColumn(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 items(state.parents, key = { it.id }) { parent ->
                     val isExpanded = expanded.contains(parent.id)
-                    Column {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         CategoryRow(
                             category = parent,
                             budget = state.budgetsByCategory[parent.id],
@@ -105,20 +111,29 @@ fun CategoryScreen() {
                             },
                         )
                         if (isExpanded) {
-                            Column(modifier = Modifier.padding(start = 20.dp)) {
-                                state.childrenByParent[parent.id].orEmpty().forEach { child ->
-                                    CategoryRow(
-                                        category = child,
-                                        budget = state.budgetsByCategory[child.id],
-                                        onRowClick = { editTarget = EditTarget.Edit(child) },
-                                    )
-                                }
-                                PlusRow(onClick = { editTarget = EditTarget.NewChild(parent.id) })
+                            state.childrenByParent[parent.id].orEmpty().forEach { child ->
+                                CategoryRow(
+                                    category = child,
+                                    budget = state.budgetsByCategory[child.id],
+                                    onRowClick = { editTarget = EditTarget.Edit(child) },
+                                    modifier = Modifier.padding(start = 20.dp),
+                                )
                             }
+                            PlusRow(
+                                onClick = { editTarget = EditTarget.NewChild(parent.id) },
+                                modifier = Modifier
+                                    .padding(start = 20.dp)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
+                            )
                         }
                     }
                 }
-                item { PlusRow(onClick = { editTarget = EditTarget.NewParent }) }
+                item {
+                    PlusRow(
+                        onClick = { editTarget = EditTarget.NewParent },
+                        modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
+                    )
+                }
             }
         }
     }
@@ -138,12 +153,18 @@ private fun CategoryRow(
     category: CategoryEntity,
     budget: BudgetWithProgress?,
     onRowClick: () -> Unit,
+    modifier: Modifier = Modifier,
     trailing: (@Composable () -> Unit)? = null,
 ) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().clickable(onClick = onRowClick),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp).clickable(onClick = onRowClick),
         ) {
             IconView(iconId = category.iconId, size = 28.dp)
             Spacer(Modifier.width(12.dp))
