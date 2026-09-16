@@ -100,11 +100,10 @@ private object OutgoCallback : RoomDatabase.Callback() {
                      updated_at = NEW.updated_at
                WHERE id = NEW.account_id;
 
-              INSERT OR IGNORE INTO category_month_stat(category_id, month_key)
-                SELECT NEW.category_id, NEW.month_key WHERE NEW.category_id IS NOT NULL;
-              UPDATE category_month_stat
-                 SET total = total + NEW.amount, trade_count = trade_count + 1
-               WHERE category_id = NEW.category_id AND month_key = NEW.month_key;
+              INSERT INTO category_month_stat(category_id, month_key, total, trade_count)
+                SELECT NEW.category_id, NEW.month_key, NEW.amount, 1 WHERE NEW.category_id IS NOT NULL
+              ON CONFLICT(category_id, month_key) DO UPDATE
+                 SET total = total + excluded.total, trade_count = trade_count + excluded.trade_count;
 
               UPDATE category
                  SET use_count = use_count + 1,
@@ -154,11 +153,10 @@ private object OutgoCallback : RoomDatabase.Callback() {
                WHERE category_id = OLD.category_id AND month_key = OLD.month_key;
               DELETE FROM category_month_stat
                WHERE category_id = OLD.category_id AND month_key = OLD.month_key AND trade_count = 0;
-              INSERT OR IGNORE INTO category_month_stat(category_id, month_key)
-                SELECT NEW.category_id, NEW.month_key WHERE NEW.category_id IS NOT NULL;
-              UPDATE category_month_stat
-                 SET total = total + NEW.amount, trade_count = trade_count + 1
-               WHERE category_id = NEW.category_id AND month_key = NEW.month_key;
+              INSERT INTO category_month_stat(category_id, month_key, total, trade_count)
+                SELECT NEW.category_id, NEW.month_key, NEW.amount, 1 WHERE NEW.category_id IS NOT NULL
+              ON CONFLICT(category_id, month_key) DO UPDATE
+                 SET total = total + excluded.total, trade_count = trade_count + excluded.trade_count;
 
               UPDATE category SET use_count = use_count - 1 WHERE id = OLD.category_id;
               UPDATE category SET use_count = use_count + 1 WHERE id = NEW.category_id;
@@ -193,6 +191,7 @@ private object OutgoCallback : RoomDatabase.Callback() {
                 put("icon_id", iconId)
                 put("balance", 0)
                 put("sort_order", 0)
+                put("archived", 0)
                 put("created_at", now)
                 put("updated_at", now)
             }
@@ -210,6 +209,8 @@ private object OutgoCallback : RoomDatabase.Callback() {
                 put("icon_id", icon(iconAsset))
                 put("color", nextColor())
                 put("sort_order", order)
+                put("use_count", 0)
+                put("archived", 0)
                 put("created_at", now)
             }
             return db.insert("category", android.database.sqlite.SQLiteDatabase.CONFLICT_ABORT, cv)
@@ -223,6 +224,8 @@ private object OutgoCallback : RoomDatabase.Callback() {
                 put("icon_id", icon(iconAsset))
                 put("color", 0)
                 put("sort_order", order)
+                put("use_count", 0)
+                put("archived", 0)
                 put("created_at", now)
             }
             db.insert("category", android.database.sqlite.SQLiteDatabase.CONFLICT_ABORT, cv)

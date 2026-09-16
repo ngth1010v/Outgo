@@ -47,24 +47,41 @@ class CategoryRepository(
         CategoryPicker(recent + recentFill, top + topFill)
     }
 
-    suspend fun createParent(type: Int, name: String, iconId: Long?, budget: Long?): Long = withContext(Dispatchers.IO) {
-        db.withTransaction {
-            val order = categoryDao.maxSortOrder(null) + 1
-            val id = categoryDao.insert(
-                CategoryEntity(
-                    parentId = null,
-                    type = type,
-                    name = name,
-                    iconId = iconId,
-                    color = ChartPalette[order % ChartPalette.size],
-                    sortOrder = order,
-                    createdAt = System.currentTimeMillis(),
-                ),
-            )
-            budgetRepository.setLimitForCategory(id, budget)
-            id
+    /**
+     * A parent with no children is invisible to the Trade screen (which only ever
+     * picks a child), so a budget set on it could never accrue spend. Every new
+     * parent gets one default child up front so it's reachable right away.
+     */
+    suspend fun createParent(type: Int, name: String, iconId: Long?, budget: Long?, defaultChildName: String): Long =
+        withContext(Dispatchers.IO) {
+            db.withTransaction {
+                val order = categoryDao.maxSortOrder(null) + 1
+                val id = categoryDao.insert(
+                    CategoryEntity(
+                        parentId = null,
+                        type = type,
+                        name = name,
+                        iconId = iconId,
+                        color = ChartPalette[order % ChartPalette.size],
+                        sortOrder = order,
+                        createdAt = System.currentTimeMillis(),
+                    ),
+                )
+                budgetRepository.setLimitForCategory(id, budget)
+                categoryDao.insert(
+                    CategoryEntity(
+                        parentId = id,
+                        type = type,
+                        name = defaultChildName,
+                        iconId = iconId,
+                        color = 0,
+                        sortOrder = 0,
+                        createdAt = System.currentTimeMillis(),
+                    ),
+                )
+                id
+            }
         }
-    }
 
     suspend fun createChild(parentId: Long, name: String, iconId: Long?, budget: Long?): Long = withContext(Dispatchers.IO) {
         db.withTransaction {

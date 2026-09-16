@@ -179,6 +179,7 @@ private fun EditCategorySheet(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var hasTrades by remember { mutableStateOf(false) }
     var childCount by remember { mutableStateOf(0) }
+    val defaultChildName = stringResource(R.string.category_default_child_name)
 
     LaunchedEffect(existing?.id) {
         if (existing != null) {
@@ -230,7 +231,7 @@ private fun EditCategorySheet(
                     when {
                         existing != null -> viewModel.update(existing, name, iconId, budget)
                         target is EditTarget.NewChild -> viewModel.createChild(target.parentId, name, iconId, budget)
-                        else -> viewModel.createParent(name, iconId, budget)
+                        else -> viewModel.createParent(name, iconId, budget, defaultChildName)
                     }
                     onDismiss()
                 },

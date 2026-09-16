@@ -224,7 +224,11 @@ private fun ExpenseIncomeToggle(type: Int, onTypeChange: (Int) -> Unit) {
 @Composable
 private fun SelectedCategoryChip(category: CategoryEntity?) {
     if (category == null) return
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
+    Row(
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+    ) {
         IconView(iconId = category.iconId, size = 24.dp)
         Spacer(Modifier.width(8.dp))
         Text(category.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)

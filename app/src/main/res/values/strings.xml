@@ -60,6 +60,7 @@
     <string name="category_delete_child_confirm_message">This category has no transactions and will be removed permanently.</string>
     <string name="category_archive_confirm_message">This category has transactions, so it can\'t be deleted. It will be hidden instead, and its history is kept.</string>
     <string name="category_spent_of_budget">%1$s / %2$s</string>
+    <string name="category_default_child_name">General</string>
 
     <!-- Analysis -->
     <string name="analysis_placeholder">Coming soon</string>

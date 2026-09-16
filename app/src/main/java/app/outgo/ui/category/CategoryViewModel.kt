@@ -55,8 +55,8 @@ class CategoryViewModel(
     suspend fun childCount(parentId: Long): Int = categoryRepository.childCount(parentId)
     suspend fun hasTrades(categoryId: Long): Boolean = categoryRepository.hasTrades(categoryId)
 
-    fun createParent(name: String, iconId: Long?, budget: Long?) {
-        viewModelScope.launch { categoryRepository.createParent(type.value, name, iconId, budget) }
+    fun createParent(name: String, iconId: Long?, budget: Long?, defaultChildName: String) {
+        viewModelScope.launch { categoryRepository.createParent(type.value, name, iconId, budget, defaultChildName) }
     }
 
     fun createChild(parentId: Long, name: String, iconId: Long?, budget: Long?) {

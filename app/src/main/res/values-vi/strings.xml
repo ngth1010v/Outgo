@@ -55,6 +55,7 @@
     <string name="category_delete_child_confirm_message">Danh mục chưa có giao dịch nào và sẽ bị xoá vĩnh viễn.</string>
     <string name="category_archive_confirm_message">Danh mục đã có giao dịch nên không thể xoá. Danh mục sẽ được ẩn đi, lịch sử vẫn được giữ lại.</string>
     <string name="category_spent_of_budget">%1$s / %2$s</string>
+    <string name="category_default_child_name">Khác</string>
 
     <string name="analysis_placeholder">Sắp ra mắt</string>
 
