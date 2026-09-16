@@ -71,11 +71,6 @@
     <string name="setting_export_backup_desc">Save a single .sqlite file with all your data</string>
     <string name="setting_import_backup">Restore from backup</string>
     <string name="setting_import_backup_desc">Replace current data with a backup file</string>
-    <string name="setting_section_display">Display</string>
-    <string name="setting_theme">Theme</string>
-    <string name="setting_theme_system">System</string>
-    <string name="setting_theme_light">Light</string>
-    <string name="setting_theme_dark">Dark</string>
     <string name="setting_section_icons">Icons</string>
     <string name="setting_manage_icons">Manage imported icons</string>
     <string name="setting_section_about">About</string>

@@ -20,6 +20,5 @@ data class SettingEntity(
 
 /** Well-known [SettingEntity.key] values. */
 object SettingKeys {
-    const val THEME = "theme" // "system" | "light" | "dark"
     const val DEFAULT_ACCOUNT_ID = "default_account_id"
 }

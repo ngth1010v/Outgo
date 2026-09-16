@@ -5,19 +5,14 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,7 +28,6 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import app.outgo.R
 import app.outgo.data.backup.RestoreError
 import app.outgo.data.backup.RestoreException
-import app.outgo.data.repo.ThemeMode
 import app.outgo.ui.LocalAppContainer
 import app.outgo.ui.component.ConfirmDialog
 import kotlinx.coroutines.launch
@@ -46,9 +40,8 @@ import java.util.Locale
 fun SettingScreen() {
     val container = LocalAppContainer.current
     val viewModel: SettingViewModel = viewModel(
-        factory = viewModelFactory { initializer { SettingViewModel(container.settingRepository, container.backupManager) } },
+        factory = viewModelFactory { initializer { SettingViewModel(container.backupManager) } },
     )
-    val themeMode by viewModel.themeMode.collectAsState()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val versionName = remember {
@@ -111,13 +104,6 @@ fun SettingScreen() {
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
-            SectionLabel(stringResource(R.string.setting_section_display))
-            ThemeOption(ThemeMode.SYSTEM, stringResource(R.string.setting_theme_system), themeMode, viewModel::setThemeMode)
-            ThemeOption(ThemeMode.LIGHT, stringResource(R.string.setting_theme_light), themeMode, viewModel::setThemeMode)
-            ThemeOption(ThemeMode.DARK, stringResource(R.string.setting_theme_dark), themeMode, viewModel::setThemeMode)
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-
             SectionLabel(stringResource(R.string.setting_section_about))
             SettingRow(title = stringResource(R.string.setting_version), subtitle = versionName, onClick = null)
             SettingRow(title = stringResource(R.string.setting_licenses), subtitle = stringResource(R.string.setting_licenses_body), onClick = null)
@@ -157,19 +143,5 @@ private fun SettingRow(title: String, subtitle: String?, onClick: (() -> Unit)?)
         if (!subtitle.isNullOrBlank()) {
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-    }
-}
-
-@Composable
-private fun ThemeOption(mode: ThemeMode, label: String, current: ThemeMode, onSelect: (ThemeMode) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .selectable(selected = current == mode, onClick = { onSelect(mode) })
-            .padding(vertical = 8.dp),
-        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-    ) {
-        RadioButton(selected = current == mode, onClick = { onSelect(mode) })
-        Text(label, modifier = Modifier.padding(start = 8.dp))
     }
 }

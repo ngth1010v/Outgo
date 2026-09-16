@@ -8,5 +8,4 @@
     <!-- Splash / cold-start background, read synchronously before Compose
          is up so the very first frame is never a blank white flash. -->
     <color name="starting_window_background">#FBFDF9</color>
-    <color name="starting_window_background_dark">#101512</color>
 </resources>

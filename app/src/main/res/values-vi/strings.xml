@@ -64,11 +64,6 @@
     <string name="setting_export_backup_desc">Lưu toàn bộ dữ liệu thành 1 file .sqlite</string>
     <string name="setting_import_backup">Khôi phục từ backup</string>
     <string name="setting_import_backup_desc">Thay thế dữ liệu hiện tại bằng 1 file backup</string>
-    <string name="setting_section_display">Hiển thị</string>
-    <string name="setting_theme">Giao diện</string>
-    <string name="setting_theme_system">Theo hệ thống</string>
-    <string name="setting_theme_light">Sáng</string>
-    <string name="setting_theme_dark">Tối</string>
     <string name="setting_section_icons">Icon</string>
     <string name="setting_manage_icons">Quản lý icon đã import</string>
     <string name="setting_section_about">Thông tin</string>
