@@ -1,7 +1,9 @@
 package app.outgo
 
 import android.app.Application
+import android.content.Context
 import app.outgo.di.AppContainer
+import app.outgo.util.LocalePrefs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -11,6 +13,10 @@ class OutgoApp : Application() {
 
     lateinit var container: AppContainer
         private set
+
+    override fun attachBaseContext(base: Context) {
+        super.attachBaseContext(LocalePrefs.wrap(base))
+    }
 
     /** Long-lived scope for work that should survive any single screen (e.g. warming up the DB). */
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)

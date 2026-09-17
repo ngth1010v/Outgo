@@ -100,6 +100,11 @@
     <string name="analysis_general">General</string>
 
     <!-- Settings -->
+    <string name="setting_section_general">General</string>
+    <string name="setting_language">Language</string>
+    <string name="setting_language_system">System default</string>
+    <string name="setting_language_english">English</string>
+    <string name="setting_language_vietnamese">Tiếng Việt</string>
     <string name="setting_section_data">Data</string>
     <string name="setting_export_backup">Export backup</string>
     <string name="setting_export_backup_desc">Save a single .sqlite file with all your data</string>

@@ -34,7 +34,7 @@ class AppContainer(private val context: Context) {
         CategoryRepository(database, database.categoryDao(), budgetRepository)
     }
 
-    val settingRepository: SettingRepository by lazy { SettingRepository(database.settingDao()) }
+    val settingRepository: SettingRepository by lazy { SettingRepository(context, database.settingDao()) }
 
     val statDao get() = database.statDao()
 

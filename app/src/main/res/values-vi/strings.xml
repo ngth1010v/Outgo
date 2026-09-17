@@ -43,7 +43,7 @@
 
     <string name="home_total_balance">Tổng tài sản</string>
     <string name="home_budgets">Ngân sách</string>
-    <string name="home_add_saving_goal">Thêm mục tiêu tiết kiệm</string>
+    <string name="home_savings">Tiết kiệm</string>
     <string name="home_last_5_months">5 tháng gần nhất</string>
     <string name="home_income">Thu</string>
     <string name="home_expense">Chi</string>
@@ -62,6 +62,14 @@
     <string name="balance_delete_confirm_message">Tài khoản chưa có giao dịch nào và sẽ bị xoá vĩnh viễn.</string>
     <string name="balance_archive_confirm_title">Lưu trữ tài khoản?</string>
     <string name="balance_archive_confirm_message">Tài khoản đã có giao dịch nên không thể xoá. Tài khoản sẽ được ẩn khỏi danh sách và tổng tài sản, lịch sử vẫn được giữ lại.</string>
+    <string name="balance_type_normal">Thường</string>
+    <string name="balance_type_savings">Tiết kiệm</string>
+    <string name="balance_savings_label">Tiết kiệm</string>
+    <string name="balance_target_hint">Mục tiêu tiết kiệm hàng tháng (không bắt buộc)</string>
+    <string name="balance_savings_remain">Còn %1$s</string>
+    <string name="balance_savings_of_target">%1$s/%2$s</string>
+    <string name="balance_savings_to_go">Còn %1$s nữa</string>
+    <string name="balance_savings_ahead">Vượt %1$s</string>
 
     <string name="category_expense_tab">Chi</string>
     <string name="category_income_tab">Thu</string>
@@ -76,6 +84,7 @@
     <string name="category_delete_child_confirm_message">Danh mục chưa có giao dịch nào và sẽ bị xoá vĩnh viễn.</string>
     <string name="category_archive_confirm_message">Danh mục đã có giao dịch nên không thể xoá. Danh mục sẽ được ẩn đi, lịch sử vẫn được giữ lại.</string>
     <string name="category_spent_of_budget">%1$s / %2$s</string>
+    <string name="category_budget_over">Vượt %1$s</string>
     <string name="category_default_child_name">Khác</string>
 
     <string name="analysis_placeholder">Sắp ra mắt</string>
@@ -83,6 +92,11 @@
     <string name="analysis_most_expense">Chi nhiều nhất</string>
     <string name="analysis_general">Tổng quan</string>
 
+    <string name="setting_section_general">Chung</string>
+    <string name="setting_language">Ngôn ngữ</string>
+    <string name="setting_language_system">Theo hệ thống</string>
+    <string name="setting_language_english">English</string>
+    <string name="setting_language_vietnamese">Tiếng Việt</string>
     <string name="setting_section_data">Dữ liệu</string>
     <string name="setting_export_backup">Xuất backup</string>
     <string name="setting_export_backup_desc">Lưu toàn bộ dữ liệu thành 1 file .sqlite</string>

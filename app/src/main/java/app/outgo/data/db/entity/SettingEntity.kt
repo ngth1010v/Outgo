@@ -21,4 +21,7 @@ data class SettingEntity(
 /** Well-known [SettingEntity.key] values. */
 object SettingKeys {
     const val DEFAULT_ACCOUNT_ID = "default_account_id"
+
+    /** BCP-47 language tag ("en", "vi"), or absent/empty to follow the system locale. */
+    const val LOCALE = "locale"
 }
