@@ -44,7 +44,7 @@ import app.outgo.domain.IconKind
         BudgetEntity::class,
         SettingEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class OutgoDatabase : RoomDatabase() {
@@ -58,7 +58,7 @@ abstract class OutgoDatabase : RoomDatabase() {
 
     companion object {
         const val FILE_NAME = "outgo.sqlite"
-        const val SCHEMA_VERSION = 3
+        const val SCHEMA_VERSION = 4
 
         // "OUTO" packed into 4 bytes, stamped once via PRAGMA application_id so a
         // restore can reject a file that isn't an Outgo backup before touching real data.
@@ -80,11 +80,24 @@ abstract class OutgoDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE trade ADD COLUMN to_account_id INTEGER")
+                // Trigger bodies changed (transfer support) — the trigger SQL itself
+                // lives outside Room's migration/schema tracking, so it has to be
+                // dropped and recreated by hand whenever it changes.
+                db.execSQL("DROP TRIGGER IF EXISTS trg_trade_ai")
+                db.execSQL("DROP TRIGGER IF EXISTS trg_trade_ad")
+                db.execSQL("DROP TRIGGER IF EXISTS trg_trade_au")
+                createTradeTriggers(db)
+            }
+        }
+
         fun build(context: Context): OutgoDatabase =
             Room.databaseBuilder(context.applicationContext, OutgoDatabase::class.java, FILE_NAME)
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
                 .addCallback(OutgoCallback)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
     }
 }
@@ -104,86 +117,8 @@ private object OutgoCallback : RoomDatabase.Callback() {
     override fun onCreate(db: SupportSQLiteDatabase) {
         super.onCreate(db)
         db.execSQL("PRAGMA application_id = ${OutgoDatabase.APPLICATION_ID}")
-        createTriggers(db)
+        createTradeTriggers(db)
         seed(db)
-    }
-
-    private fun createTriggers(db: SupportSQLiteDatabase) {
-        db.execSQL(
-            """
-            CREATE TRIGGER trg_trade_ai AFTER INSERT ON trade
-            BEGIN
-              UPDATE account
-                 SET balance = balance + CASE WHEN NEW.type IN (1,2) THEN NEW.amount ELSE -NEW.amount END,
-                     updated_at = NEW.updated_at
-               WHERE id = NEW.account_id;
-
-              INSERT INTO category_month_stat(category_id, month_key, total, trade_count)
-                SELECT NEW.category_id, NEW.month_key, NEW.amount, 1 WHERE NEW.category_id IS NOT NULL
-              ON CONFLICT(category_id, month_key) DO UPDATE
-                 SET total = total + excluded.total, trade_count = trade_count + excluded.trade_count;
-
-              UPDATE category
-                 SET use_count = use_count + 1,
-                     last_used_at = MAX(COALESCE(last_used_at, 0), NEW.created_at)
-               WHERE id = NEW.category_id;
-            END;
-            """.trimIndent(),
-        )
-
-        db.execSQL(
-            """
-            CREATE TRIGGER trg_trade_ad AFTER DELETE ON trade
-            BEGIN
-              UPDATE account
-                 SET balance = balance - CASE WHEN OLD.type IN (1,2) THEN OLD.amount ELSE -OLD.amount END
-               WHERE id = OLD.account_id;
-
-              UPDATE category_month_stat
-                 SET total = total - OLD.amount, trade_count = trade_count - 1
-               WHERE category_id = OLD.category_id AND month_key = OLD.month_key;
-              DELETE FROM category_month_stat
-               WHERE category_id = OLD.category_id AND month_key = OLD.month_key AND trade_count = 0;
-
-              UPDATE category
-                 SET use_count = use_count - 1,
-                     last_used_at = (SELECT MAX(created_at) FROM trade WHERE category_id = OLD.category_id)
-               WHERE id = OLD.category_id;
-            END;
-            """.trimIndent(),
-        )
-
-        // UPDATE = undo the OLD row's effect, then apply the NEW row's effect.
-        db.execSQL(
-            """
-            CREATE TRIGGER trg_trade_au AFTER UPDATE ON trade
-            BEGIN
-              UPDATE account
-                 SET balance = balance - CASE WHEN OLD.type IN (1,2) THEN OLD.amount ELSE -OLD.amount END
-               WHERE id = OLD.account_id;
-              UPDATE account
-                 SET balance = balance + CASE WHEN NEW.type IN (1,2) THEN NEW.amount ELSE -NEW.amount END,
-                     updated_at = NEW.updated_at
-               WHERE id = NEW.account_id;
-
-              UPDATE category_month_stat
-                 SET total = total - OLD.amount, trade_count = trade_count - 1
-               WHERE category_id = OLD.category_id AND month_key = OLD.month_key;
-              DELETE FROM category_month_stat
-               WHERE category_id = OLD.category_id AND month_key = OLD.month_key AND trade_count = 0;
-              INSERT INTO category_month_stat(category_id, month_key, total, trade_count)
-                SELECT NEW.category_id, NEW.month_key, NEW.amount, 1 WHERE NEW.category_id IS NOT NULL
-              ON CONFLICT(category_id, month_key) DO UPDATE
-                 SET total = total + excluded.total, trade_count = trade_count + excluded.trade_count;
-
-              UPDATE category SET use_count = use_count - 1 WHERE id = OLD.category_id;
-              UPDATE category SET use_count = use_count + 1 WHERE id = NEW.category_id;
-              UPDATE category
-                 SET last_used_at = (SELECT MAX(created_at) FROM trade WHERE category_id = category.id)
-               WHERE id IN (OLD.category_id, NEW.category_id);
-            END;
-            """.trimIndent(),
-        )
     }
 
     /** A handful of starter accounts/categories so the Trade screen isn't empty on first launch. */
@@ -327,6 +262,106 @@ private object OutgoCallback : RoomDatabase.Callback() {
             child(inc, p, "Khác", "other_income", 1)
         }
     }
+}
+
+/**
+ * Creates the balance/stat-maintaining triggers described in [OutgoDatabase]'s doc comment.
+ * Called from [OutgoCallback.onCreate] for fresh installs and from `MIGRATION_3_4` (after a
+ * `DROP TRIGGER`) for upgrades, since trigger bodies aren't tracked by Room's own migrations.
+ *
+ * Trade types: 0=EXPENSE, 1=INCOME, 2=ADJUST_IN, 3=ADJUST_OUT, 4=TRANSFER (see
+ * [app.outgo.domain.TradeType]). EXPENSE/ADJUST_OUT/TRANSFER debit `account_id`; INCOME/ADJUST_IN
+ * credit it. TRANSFER additionally credits `to_account_id` — the WHERE clause on those extra
+ * statements makes them no-ops for every other type.
+ */
+private fun createTradeTriggers(db: SupportSQLiteDatabase) {
+    db.execSQL(
+        """
+        CREATE TRIGGER trg_trade_ai AFTER INSERT ON trade
+        BEGIN
+          UPDATE account
+             SET balance = balance + CASE WHEN NEW.type IN (1,2) THEN NEW.amount ELSE -NEW.amount END,
+                 updated_at = NEW.updated_at
+           WHERE id = NEW.account_id;
+          UPDATE account
+             SET balance = balance + NEW.amount, updated_at = NEW.updated_at
+           WHERE NEW.type = 4 AND id = NEW.to_account_id;
+
+          INSERT INTO category_month_stat(category_id, month_key, total, trade_count)
+            SELECT NEW.category_id, NEW.month_key, NEW.amount, 1 WHERE NEW.category_id IS NOT NULL
+          ON CONFLICT(category_id, month_key) DO UPDATE
+             SET total = total + excluded.total, trade_count = trade_count + excluded.trade_count;
+
+          UPDATE category
+             SET use_count = use_count + 1,
+                 last_used_at = MAX(COALESCE(last_used_at, 0), NEW.created_at)
+           WHERE id = NEW.category_id;
+        END;
+        """.trimIndent(),
+    )
+
+    db.execSQL(
+        """
+        CREATE TRIGGER trg_trade_ad AFTER DELETE ON trade
+        BEGIN
+          UPDATE account
+             SET balance = balance - CASE WHEN OLD.type IN (1,2) THEN OLD.amount ELSE -OLD.amount END
+           WHERE id = OLD.account_id;
+          UPDATE account
+             SET balance = balance - OLD.amount
+           WHERE OLD.type = 4 AND id = OLD.to_account_id;
+
+          UPDATE category_month_stat
+             SET total = total - OLD.amount, trade_count = trade_count - 1
+           WHERE category_id = OLD.category_id AND month_key = OLD.month_key;
+          DELETE FROM category_month_stat
+           WHERE category_id = OLD.category_id AND month_key = OLD.month_key AND trade_count = 0;
+
+          UPDATE category
+             SET use_count = use_count - 1,
+                 last_used_at = (SELECT MAX(created_at) FROM trade WHERE category_id = OLD.category_id)
+           WHERE id = OLD.category_id;
+        END;
+        """.trimIndent(),
+    )
+
+    // UPDATE = undo the OLD row's effect, then apply the NEW row's effect.
+    db.execSQL(
+        """
+        CREATE TRIGGER trg_trade_au AFTER UPDATE ON trade
+        BEGIN
+          UPDATE account
+             SET balance = balance - CASE WHEN OLD.type IN (1,2) THEN OLD.amount ELSE -OLD.amount END
+           WHERE id = OLD.account_id;
+          UPDATE account
+             SET balance = balance - OLD.amount
+           WHERE OLD.type = 4 AND id = OLD.to_account_id;
+          UPDATE account
+             SET balance = balance + CASE WHEN NEW.type IN (1,2) THEN NEW.amount ELSE -NEW.amount END,
+                 updated_at = NEW.updated_at
+           WHERE id = NEW.account_id;
+          UPDATE account
+             SET balance = balance + NEW.amount, updated_at = NEW.updated_at
+           WHERE NEW.type = 4 AND id = NEW.to_account_id;
+
+          UPDATE category_month_stat
+             SET total = total - OLD.amount, trade_count = trade_count - 1
+           WHERE category_id = OLD.category_id AND month_key = OLD.month_key;
+          DELETE FROM category_month_stat
+           WHERE category_id = OLD.category_id AND month_key = OLD.month_key AND trade_count = 0;
+          INSERT INTO category_month_stat(category_id, month_key, total, trade_count)
+            SELECT NEW.category_id, NEW.month_key, NEW.amount, 1 WHERE NEW.category_id IS NOT NULL
+          ON CONFLICT(category_id, month_key) DO UPDATE
+             SET total = total + excluded.total, trade_count = trade_count + excluded.trade_count;
+
+          UPDATE category SET use_count = use_count - 1 WHERE id = OLD.category_id;
+          UPDATE category SET use_count = use_count + 1 WHERE id = NEW.category_id;
+          UPDATE category
+             SET last_used_at = (SELECT MAX(created_at) FROM trade WHERE category_id = category.id)
+           WHERE id IN (OLD.category_id, NEW.category_id);
+        END;
+        """.trimIndent(),
+    )
 }
 
 /** Cycled across seed parent categories so the Home chart starts out legible. */

@@ -10,13 +10,16 @@ object CategoryKind {
  * Values for `trade.type`. EXPENSE/INCOME are real user transactions and
  * always carry a category. ADJUST_IN/ADJUST_OUT are balance-adjustment
  * trades created when an account's "current balance" is edited directly;
- * they have no category and are excluded from charts and budgets.
+ * they have no category and are excluded from charts and budgets. TRANSFER
+ * moves money between two of the user's own accounts (`account_id` ->
+ * `to_account_id`); it has no category either and is excluded the same way.
  */
 object TradeType {
     const val EXPENSE = 0
     const val INCOME = 1
     const val ADJUST_IN = 2
     const val ADJUST_OUT = 3
+    const val TRANSFER = 4
 
     /** True for types that increase the account balance. */
     fun isCredit(type: Int) = type == INCOME || type == ADJUST_IN

@@ -107,12 +107,18 @@ fun HomeScreen(onOpenHistory: (HistoryType) -> Unit) {
             }
 
             item {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                    OutlinedButton(onClick = { onOpenHistory(HistoryType.EXPENSE) }, modifier = Modifier.weight(1f)) {
-                        Text(stringResource(R.string.home_expense_history))
-                    }
-                    OutlinedButton(onClick = { onOpenHistory(HistoryType.INCOME) }, modifier = Modifier.weight(1f)) {
-                        Text(stringResource(R.string.home_income_history))
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(stringResource(R.string.home_history_section), style = MaterialTheme.typography.titleMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(onClick = { onOpenHistory(HistoryType.EXPENSE) }, modifier = Modifier.weight(1f)) {
+                            Text(stringResource(R.string.trade_expense))
+                        }
+                        OutlinedButton(onClick = { onOpenHistory(HistoryType.INCOME) }, modifier = Modifier.weight(1f)) {
+                            Text(stringResource(R.string.trade_income))
+                        }
+                        OutlinedButton(onClick = { onOpenHistory(HistoryType.TRANSFER) }, modifier = Modifier.weight(1f)) {
+                            Text(stringResource(R.string.trade_transfer))
+                        }
                     }
                 }
             }

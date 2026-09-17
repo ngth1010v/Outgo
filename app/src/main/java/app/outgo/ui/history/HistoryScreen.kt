@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -36,6 +37,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.outgo.R
+import app.outgo.data.db.entity.AccountEntity
+import app.outgo.data.db.entity.CategoryEntity
 import app.outgo.data.db.entity.TradeEntity
 import app.outgo.domain.TradeType
 import app.outgo.ui.LocalAppContainer
@@ -65,6 +68,8 @@ fun HistoryScreen(type: HistoryType, onBack: () -> Unit, onOpenTrade: (Long) -> 
     val state by viewModel.state.collectAsState()
     val listState = rememberLazyListState()
 
+    LaunchedEffect(viewModel) { viewModel.refresh() }
+
     val items = remember(state.trades) {
         val out = mutableListOf<HistoryListItem>()
         var lastDay: String? = null
@@ -92,7 +97,15 @@ fun HistoryScreen(type: HistoryType, onBack: () -> Unit, onOpenTrade: (Long) -> 
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(if (type == HistoryType.EXPENSE) stringResource(R.string.home_expense_history) else stringResource(R.string.home_income_history)) },
+                title = {
+                    Text(
+                        when (type) {
+                            HistoryType.EXPENSE -> stringResource(R.string.home_expense_history)
+                            HistoryType.INCOME -> stringResource(R.string.home_income_history)
+                            HistoryType.TRANSFER -> stringResource(R.string.home_transfer_history)
+                        },
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(painterResource(R.drawable.ph_caret_right), contentDescription = null, modifier = Modifier.rotate(180f))
@@ -128,9 +141,9 @@ fun HistoryScreen(type: HistoryType, onBack: () -> Unit, onOpenTrade: (Long) -> 
                     )
                     is HistoryListItem.Row -> TradeRow(
                         trade = item.trade,
-                        categoryName = state.categoriesById[item.trade.categoryId]?.name,
-                        categoryIconId = state.categoriesById[item.trade.categoryId]?.iconId,
-                        accountName = state.accountsById[item.trade.accountId]?.name,
+                        category = state.categoriesById[item.trade.categoryId],
+                        fromAccount = state.accountsById[item.trade.accountId],
+                        toAccount = state.accountsById[item.trade.toAccountId],
                         onClick = { onOpenTrade(item.trade.id) },
                     )
                 }
@@ -142,19 +155,27 @@ fun HistoryScreen(type: HistoryType, onBack: () -> Unit, onOpenTrade: (Long) -> 
 @Composable
 private fun TradeRow(
     trade: TradeEntity,
-    categoryName: String?,
-    categoryIconId: Long?,
-    accountName: String?,
+    category: CategoryEntity?,
+    fromAccount: AccountEntity?,
+    toAccount: AccountEntity?,
     onClick: () -> Unit,
 ) {
+    val isTransfer = trade.type == TradeType.TRANSFER
     Row(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconView(iconId = categoryIconId, size = 32.dp)
+        if (isTransfer) {
+            TransferIconStack(fromAccount = fromAccount, toAccount = toAccount)
+        } else {
+            IconView(iconId = category?.iconId, size = 32.dp, color = category?.color)
+        }
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(categoryName ?: stringResource(R.string.history_adjustment_note), style = MaterialTheme.typography.bodyLarge)
+            Text(
+                (if (isTransfer) toAccount?.name else category?.name) ?: stringResource(R.string.history_adjustment_note),
+                style = MaterialTheme.typography.bodyLarge,
+            )
             if (!trade.note.isNullOrBlank()) {
                 Text(trade.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
@@ -162,15 +183,34 @@ private fun TradeRow(
         Column(horizontalAlignment = Alignment.End) {
             val isCredit = TradeType.isCredit(trade.type)
             Text(
-                (if (isCredit) "+" else "-") + Money.format(trade.amount),
+                (if (isTransfer) "" else if (isCredit) "+" else "-") + Money.format(trade.amount),
                 fontWeight = FontWeight.Bold,
-                color = if (isCredit) app.outgo.ui.theme.IncomeGreen else app.outgo.ui.theme.ExpenseRed,
+                color = when {
+                    isTransfer -> MaterialTheme.colorScheme.onSurface
+                    isCredit -> app.outgo.ui.theme.IncomeGreen
+                    else -> app.outgo.ui.theme.ExpenseRed
+                },
             )
             Text(
-                (accountName ?: "") + " · " + formatTime(trade.occurredAt),
+                (fromAccount?.name ?: "") + " · " + formatTime(trade.occurredAt),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+/** Transfer row leading visual: from-account icon, a neutral arrow, then to-account icon. */
+@Composable
+private fun TransferIconStack(fromAccount: AccountEntity?, toAccount: AccountEntity?) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        IconView(iconId = fromAccount?.iconId, size = 28.dp, color = fromAccount?.color)
+        Icon(
+            painter = painterResource(R.drawable.ph_arrow_right),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(14.dp).padding(horizontal = 1.dp),
+        )
+        IconView(iconId = toAccount?.iconId, size = 28.dp, color = toAccount?.color)
     }
 }

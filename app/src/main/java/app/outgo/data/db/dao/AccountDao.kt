@@ -14,7 +14,9 @@ interface AccountDao {
     @Query(
         """
         SELECT a.*, COALESCE((
-            SELECT SUM(t.amount) FROM trade t WHERE t.account_id = a.id AND t.type = 1 AND t.month_key = :monthKey
+            SELECT SUM(t.amount) FROM trade t
+             WHERE t.month_key = :monthKey
+               AND ((t.account_id = a.id AND t.type = 1) OR (t.to_account_id = a.id AND t.type = 4))
         ), 0) AS monthlyIncome
         FROM account a WHERE a.archived = 0 ORDER BY a.sort_order, a.id
         """,

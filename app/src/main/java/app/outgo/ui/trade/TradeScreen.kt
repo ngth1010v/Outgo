@@ -61,6 +61,7 @@ import app.outgo.R
 import app.outgo.data.db.entity.AccountEntity
 import app.outgo.data.db.entity.CategoryEntity
 import app.outgo.domain.CategoryKind
+import app.outgo.domain.TradeType
 import app.outgo.ui.LocalAppContainer
 import app.outgo.ui.component.AmountField
 import app.outgo.ui.component.ConfirmDialog
@@ -114,41 +115,55 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit) {
                 .verticalScroll(rememberScrollState())
                 .padding(start = 16.dp, top = 4.dp, end = 16.dp, bottom = 16.dp),
         ) {
-            ExpenseIncomeToggle(type = state.type, onTypeChange = viewModel::onTypeChange)
+            ExpenseIncomeToggle(type = state.type, onTypeChange = viewModel::onTypeChange, enabled = !state.isEditing)
             Spacer(Modifier.height(16.dp))
 
             AmountField(
                 amount = state.amount,
                 onAmountChange = viewModel::onAmountChange,
                 isIncome = state.type == CategoryKind.INCOME,
+                isTransfer = state.isTransfer,
                 modifier = Modifier.padding(vertical = 8.dp),
             )
 
-            SelectedCategoryChip(state.selectedParentCategory, state.selectedCategory)
-            Spacer(Modifier.height(8.dp))
+            if (!state.isTransfer) {
+                SelectedCategoryChip(state.selectedParentCategory, state.selectedCategory)
+                Spacer(Modifier.height(8.dp))
 
-            CategoryPickerSection(
-                title = stringResource(R.string.trade_recent),
-                categories = state.picker.recent,
-                selectedId = state.selectedCategory?.id,
-                onSelect = viewModel::onCategorySelected,
-                onSeeAll = { showAllCategories = true },
-            )
-            Spacer(Modifier.height(16.dp))
-            CategoryPickerSection(
-                title = stringResource(R.string.trade_top_used),
-                categories = state.picker.top,
-                selectedId = state.selectedCategory?.id,
-                onSelect = viewModel::onCategorySelected,
-            )
-            Spacer(Modifier.height(16.dp))
+                CategoryPickerSection(
+                    title = stringResource(R.string.trade_recent),
+                    categories = state.picker.recent,
+                    selectedId = state.selectedCategory?.id,
+                    onSelect = viewModel::onCategorySelected,
+                    onSeeAll = { showAllCategories = true },
+                )
+                Spacer(Modifier.height(16.dp))
+                CategoryPickerSection(
+                    title = stringResource(R.string.trade_top_used),
+                    categories = state.picker.top,
+                    selectedId = state.selectedCategory?.id,
+                    onSelect = viewModel::onCategorySelected,
+                )
+                Spacer(Modifier.height(16.dp))
+            }
 
             AccountDropdown(
+                label = if (state.isTransfer) stringResource(R.string.trade_from_account_label) else stringResource(R.string.trade_account_label),
                 accounts = state.accounts,
                 selectedAccount = state.selectedAccount,
                 onSelect = { viewModel.onAccountSelected(it.id) },
             )
             Spacer(Modifier.height(16.dp))
+
+            if (state.isTransfer) {
+                AccountDropdown(
+                    label = stringResource(R.string.trade_to_account_label),
+                    accounts = state.accounts,
+                    selectedAccount = state.selectedToAccount,
+                    onSelect = { viewModel.onToAccountSelected(it.id) },
+                )
+                Spacer(Modifier.height(16.dp))
+            }
 
             DateTimeRow(
                 occurredAt = state.occurredAt,
@@ -168,7 +183,15 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit) {
             Spacer(Modifier.height(16.dp))
 
             if (state.isEditing) {
-                TextButton(onClick = { showDeleteConfirm = true }, modifier = Modifier.fillMaxWidth()) {
+                TextButton(onClick = onClose, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+                TextButton(
+                    onClick = { showDeleteConfirm = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, MaterialTheme.colorScheme.error, RoundedCornerShape(20.dp)),
+                ) {
                     Icon(painterResource(R.drawable.ph_trash), contentDescription = null, tint = MaterialTheme.colorScheme.error)
                     Text("  " + stringResource(R.string.common_delete), color = MaterialTheme.colorScheme.error)
                 }
@@ -210,18 +233,26 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit) {
 }
 
 @Composable
-private fun ExpenseIncomeToggle(type: Int, onTypeChange: (Int) -> Unit) {
+private fun ExpenseIncomeToggle(type: Int, onTypeChange: (Int) -> Unit, enabled: Boolean = true) {
     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
         SegmentedButton(
             selected = type == CategoryKind.EXPENSE,
             onClick = { onTypeChange(CategoryKind.EXPENSE) },
-            shape = SegmentedButtonDefaults.itemShape(0, 2),
+            enabled = enabled,
+            shape = SegmentedButtonDefaults.itemShape(0, 3),
         ) { Text(stringResource(R.string.trade_expense)) }
         SegmentedButton(
             selected = type == CategoryKind.INCOME,
             onClick = { onTypeChange(CategoryKind.INCOME) },
-            shape = SegmentedButtonDefaults.itemShape(1, 2),
+            enabled = enabled,
+            shape = SegmentedButtonDefaults.itemShape(1, 3),
         ) { Text(stringResource(R.string.trade_income)) }
+        SegmentedButton(
+            selected = type == TradeType.TRANSFER,
+            onClick = { onTypeChange(TradeType.TRANSFER) },
+            enabled = enabled,
+            shape = SegmentedButtonDefaults.itemShape(2, 3),
+        ) { Text(stringResource(R.string.trade_transfer)) }
     }
 }
 
@@ -319,10 +350,15 @@ private fun CategoryCell(category: CategoryEntity, selected: Boolean, onClick: (
 }
 
 @Composable
-private fun AccountDropdown(accounts: List<AccountEntity>, selectedAccount: AccountEntity?, onSelect: (AccountEntity) -> Unit) {
+private fun AccountDropdown(
+    accounts: List<AccountEntity>,
+    selectedAccount: AccountEntity?,
+    onSelect: (AccountEntity) -> Unit,
+    label: String = stringResource(R.string.trade_account_label),
+) {
     var expanded by remember { mutableStateOf(false) }
     Column {
-        Text(stringResource(R.string.trade_account_label), style = MaterialTheme.typography.labelLarge)
+        Text(label, style = MaterialTheme.typography.labelLarge)
         Box {
             Row(
                 modifier = Modifier

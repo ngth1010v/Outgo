@@ -46,6 +46,9 @@ data class TradeEntity(
     val accountId: Long,
     @ColumnInfo(name = "category_id")
     val categoryId: Long?,
+    /** Destination account for [app.outgo.domain.TradeType.TRANSFER]; null otherwise. */
+    @ColumnInfo(name = "to_account_id")
+    val toAccountId: Long? = null,
     @ColumnInfo(name = "occurred_at")
     val occurredAt: Long,
     @ColumnInfo(name = "month_key")

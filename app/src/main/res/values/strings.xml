@@ -13,10 +13,13 @@
     <!-- Trade screen -->
     <string name="trade_expense">Expense</string>
     <string name="trade_income">Income</string>
+    <string name="trade_transfer">Transfer</string>
     <string name="trade_recent">Recent</string>
     <string name="trade_top_used">Most used</string>
     <string name="trade_all_categories">All</string>
     <string name="trade_account_label">Account</string>
+    <string name="trade_from_account_label">From account</string>
+    <string name="trade_to_account_label">To account</string>
     <string name="trade_note_hint">Note</string>
     <string name="trade_save">SAVE</string>
     <string name="trade_saved">Saved</string>
@@ -34,6 +37,8 @@
     <string name="home_expense">Expense</string>
     <string name="home_expense_history">Expense history</string>
     <string name="home_income_history">Income history</string>
+    <string name="home_transfer_history">Transfer history</string>
+    <string name="home_history_section">History</string>
     <string name="home_no_budgets">No budgets yet. Add one from the Categories tab.</string>
     <string name="home_no_data">No data yet</string>
 

@@ -20,7 +20,7 @@ object Routes {
 }
 
 enum class HistoryType(val arg: String) {
-    EXPENSE("expense"), INCOME("income");
+    EXPENSE("expense"), INCOME("income"), TRANSFER("transfer");
 
     companion object {
         fun fromArg(arg: String?): HistoryType = entries.find { it.arg == arg } ?: EXPENSE

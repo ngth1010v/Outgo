@@ -2,10 +2,11 @@ package app.outgo.domain
 
 /** What the Trade screen collects before it is turned into a [app.outgo.data.db.entity.TradeEntity]. */
 data class TradeDraft(
-    val type: Int, // TradeType.EXPENSE or TradeType.INCOME
+    val type: Int, // TradeType.EXPENSE, INCOME or TRANSFER
     val amount: Long,
     val accountId: Long,
-    val categoryId: Long,
+    val categoryId: Long?, // null for TradeType.TRANSFER
+    val toAccountId: Long? = null, // set for TradeType.TRANSFER
     val occurredAt: Long,
     val note: String?,
 )

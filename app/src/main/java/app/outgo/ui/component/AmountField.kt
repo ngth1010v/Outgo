@@ -23,12 +23,13 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import app.outgo.ui.theme.ExpenseRed
 import app.outgo.ui.theme.IncomeGreen
+import app.outgo.ui.theme.TransferBlue
 import app.outgo.util.Money
 
 /**
  * The Trade screen's amount input: large, bold, centered, colored by
- * Expense/Income, digits only (never negative — the sign always comes from
- * the Expense/Income toggle, not the number itself).
+ * Expense/Income/Transfer, digits only (never negative — the sign always
+ * comes from the Expense/Income toggle, not the number itself).
  */
 @Composable
 fun AmountField(
@@ -37,8 +38,9 @@ fun AmountField(
     isIncome: Boolean,
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null,
+    isTransfer: Boolean = false,
 ) {
-    val color = if (isIncome) IncomeGreen else ExpenseRed
+    val color = if (isTransfer) TransferBlue else if (isIncome) IncomeGreen else ExpenseRed
     val text = if (amount == 0L) "" else Money.groupThousands(amount)
     val style = MaterialTheme.typography.headlineLarge.copy(
         color = color,

@@ -19,4 +19,5 @@ val md_light_error = Color(0xFFBA1A1A)
 // amount field and budget progress bars rely on these exact hues everywhere.
 val ExpenseRed = Color(0xFFD32F2F)
 val IncomeGreen = Color(0xFF2E7D32)
+val TransferBlue = Color(0xFF1565C0)
 val BudgetWarningYellow = Color(0xFFF9A825)

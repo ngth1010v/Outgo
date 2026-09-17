@@ -35,8 +35,12 @@ class HistoryViewModel(
     historyType: HistoryType,
 ) : ViewModel() {
 
-    private val tradeType = if (historyType == HistoryType.EXPENSE) TradeType.EXPENSE else TradeType.INCOME
-    private val categoryKind = if (historyType == HistoryType.EXPENSE) CategoryKind.EXPENSE else CategoryKind.INCOME
+    private val tradeType = when (historyType) {
+        HistoryType.EXPENSE -> TradeType.EXPENSE
+        HistoryType.INCOME -> TradeType.INCOME
+        HistoryType.TRANSFER -> TradeType.TRANSFER
+    }
+    private val categoryKind = if (historyType == HistoryType.INCOME) CategoryKind.INCOME else CategoryKind.EXPENSE
 
     private val _state = MutableStateFlow(HistoryUiState())
     val state: StateFlow<HistoryUiState> = _state.asStateFlow()
@@ -52,6 +56,11 @@ class HistoryViewModel(
                 _state.update { it.copy(categoriesById = list.associateBy { c -> c.id }) }
             }
         }
+        refresh()
+    }
+
+    /** Re-runs the first page query. Call when the screen re-enters composition — the trade list is a one-shot fetch, not a Flow, so an edit made elsewhere (e.g. the trade-edit screen) isn't seen until this runs again. */
+    fun refresh() {
         viewModelScope.launch {
             val first = tradeRepository.firstPage(tradeType, PAGE_SIZE)
             _state.update { it.copy(trades = first, isLoading = false, canLoadMore = first.size == PAGE_SIZE) }

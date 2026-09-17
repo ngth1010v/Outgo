@@ -11,10 +11,13 @@
 
     <string name="trade_expense">Chi</string>
     <string name="trade_income">Thu</string>
+    <string name="trade_transfer">Chuyển khoản</string>
     <string name="trade_recent">Gần đây</string>
     <string name="trade_top_used">Dùng nhiều</string>
     <string name="trade_all_categories">Tất cả</string>
     <string name="trade_account_label">Tài khoản</string>
+    <string name="trade_from_account_label">Từ tài khoản</string>
+    <string name="trade_to_account_label">Đến tài khoản</string>
     <string name="trade_note_hint">Ghi chú</string>
     <string name="trade_save">LƯU</string>
     <string name="trade_saved">Đã lưu</string>
@@ -31,6 +34,8 @@
     <string name="home_expense">Chi</string>
     <string name="home_expense_history">Lịch sử Chi</string>
     <string name="home_income_history">Lịch sử Thu</string>
+    <string name="home_transfer_history">Lịch sử chuyển khoản</string>
+    <string name="home_history_section">Lịch sử</string>
     <string name="home_no_budgets">Chưa có ngân sách nào. Thêm ở tab Danh mục.</string>
     <string name="home_no_data">Chưa có dữ liệu</string>
 

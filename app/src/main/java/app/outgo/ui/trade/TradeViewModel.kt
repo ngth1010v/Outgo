@@ -10,6 +10,7 @@ import app.outgo.data.repo.TradeRepository
 import app.outgo.domain.CategoryKind
 import app.outgo.domain.CategoryPicker
 import app.outgo.domain.TradeDraft
+import app.outgo.domain.TradeType
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -24,6 +25,7 @@ data class TradeUiState(
     val selectedCategory: CategoryEntity? = null,
     val selectedParentCategory: CategoryEntity? = null,
     val selectedAccountId: Long? = null,
+    val selectedToAccountId: Long? = null,
     val occurredAt: Long = System.currentTimeMillis(),
     val note: String = "",
     val picker: CategoryPicker = CategoryPicker(emptyList(), emptyList()),
@@ -33,8 +35,15 @@ data class TradeUiState(
     val editingTradeId: Long? = null,
 ) {
     val isEditing: Boolean get() = editingTradeId != null
-    val isValid: Boolean get() = amount > 0 && selectedCategory != null && selectedAccountId != null
+    val isTransfer: Boolean get() = type == TradeType.TRANSFER
+    val isValid: Boolean
+        get() = amount > 0 && selectedAccountId != null && if (isTransfer) {
+            selectedToAccountId != null && selectedToAccountId != selectedAccountId
+        } else {
+            selectedCategory != null
+        }
     val selectedAccount: AccountEntity? get() = accounts.find { it.id == selectedAccountId }
+    val selectedToAccount: AccountEntity? get() = accounts.find { it.id == selectedToAccountId }
 }
 
 sealed interface TradeEvent {
@@ -90,6 +99,7 @@ class TradeViewModel(
                 selectedCategory = category,
                 selectedParentCategory = parent,
                 selectedAccountId = trade.accountId,
+                selectedToAccountId = trade.toAccountId,
                 occurredAt = trade.occurredAt,
                 note = trade.note.orEmpty(),
             )
@@ -104,7 +114,9 @@ class TradeViewModel(
     fun onTypeChange(type: Int) {
         if (type == _state.value.type) return
         _state.update { it.copy(type = type, selectedCategory = null, selectedParentCategory = null) }
-        viewModelScope.launch { loadPicker(type) }
+        if (type != TradeType.TRANSFER) {
+            viewModelScope.launch { loadPicker(type) }
+        }
     }
 
     fun onAmountChange(amount: Long) {
@@ -121,6 +133,10 @@ class TradeViewModel(
 
     fun onAccountSelected(accountId: Long) {
         _state.update { it.copy(selectedAccountId = accountId) }
+    }
+
+    fun onToAccountSelected(accountId: Long) {
+        _state.update { it.copy(selectedToAccountId = accountId) }
     }
 
     fun onDateChange(epochMillisAtMidnight: Long) {
@@ -151,7 +167,8 @@ class TradeViewModel(
             type = s.type,
             amount = s.amount,
             accountId = s.selectedAccountId!!,
-            categoryId = s.selectedCategory!!.id,
+            categoryId = if (s.isTransfer) null else s.selectedCategory!!.id,
+            toAccountId = if (s.isTransfer) s.selectedToAccountId else null,
             occurredAt = s.occurredAt,
             note = s.note,
         )
@@ -192,6 +209,7 @@ class TradeViewModel(
                 amount = 0,
                 selectedCategory = null,
                 selectedParentCategory = null,
+                selectedToAccountId = null,
                 occurredAt = System.currentTimeMillis(),
                 note = "",
                 type = CategoryKind.EXPENSE,
