@@ -23,6 +23,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -39,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
@@ -194,6 +196,7 @@ private fun EditAccountSheet(account: AccountEntity?, onDismiss: () -> Unit, vie
                 onValueChange = { balanceText = it.filter { c -> c.isDigit() } },
                 label = { Text(stringResource(R.string.balance_current_balance_hint)) },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.fillMaxWidth(),
             )
             if (accountType == AccountType.SAVINGS) {
@@ -203,6 +206,7 @@ private fun EditAccountSheet(account: AccountEntity?, onDismiss: () -> Unit, vie
                     onValueChange = { targetText = it.filter { c -> c.isDigit() } },
                     label = { Text(stringResource(R.string.balance_target_hint)) },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
