@@ -19,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -35,7 +36,14 @@ import app.outgo.util.MonthKey
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun StackedDivergingBarChart(totals: List<MonthCategoryTotal>, months: List<Int>, modifier: Modifier = Modifier) {
+fun StackedDivergingBarChart(
+    totals: List<MonthCategoryTotal>,
+    months: List<Int>,
+    modifier: Modifier = Modifier,
+    showMonthLabels: Boolean = true,
+    showLegend: Boolean = true,
+    chartHeight: androidx.compose.ui.unit.Dp = 160.dp,
+) {
     val byMonth = remember(totals, months) { totals.groupBy { it.monthKey } }
 
     val rootOrder = remember(totals) {
@@ -57,17 +65,19 @@ fun StackedDivergingBarChart(totals: List<MonthCategoryTotal>, months: List<Int>
     Column(modifier = modifier.fillMaxWidth()) {
         if (maxIncome == 0L && maxExpense == 0L) {
             androidx.compose.foundation.layout.Box(
-                modifier = Modifier.fillMaxWidth().height(160.dp),
+                modifier = Modifier.fillMaxWidth().height(chartHeight),
                 contentAlignment = androidx.compose.ui.Alignment.Center,
             ) {
-                Text(
-                    stringResource(R.string.home_no_data),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall,
-                )
+                if (showMonthLabels || showLegend) {
+                    Text(
+                        stringResource(R.string.home_no_data),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
             }
         } else {
-            Canvas(modifier = Modifier.fillMaxWidth().height(160.dp).padding(horizontal = 4.dp)) {
+            Canvas(modifier = Modifier.fillMaxWidth().height(chartHeight).padding(horizontal = 4.dp)) {
                 val barWidthTotal = size.width / months.size
                 val barPad = barWidthTotal * 0.18f
                 val total = (maxIncome + maxExpense).coerceAtLeast(1)
@@ -118,17 +128,22 @@ fun StackedDivergingBarChart(totals: List<MonthCategoryTotal>, months: List<Int>
             }
         }
 
-        Row(modifier = Modifier.fillMaxWidth()) {
-            months.forEach { month ->
-                Text(
-                    MonthKey.label(month),
-                    modifier = Modifier.weight(1f),
-                    textAlign = TextAlign.Center,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+        if (showMonthLabels) {
+            val monthAbbrev = stringArrayResource(R.array.month_abbrev)
+            Row(modifier = Modifier.fillMaxWidth()) {
+                months.forEach { month ->
+                    Text(
+                        monthAbbrev.getOrElse((month % 100) - 1) { MonthKey.label(month) },
+                        modifier = Modifier.weight(1f),
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
+
+        if (!showLegend) return@Column
 
         val legend = remember(totals, rootOrder) {
             val byRoot = totals.associateBy { it.rootId }

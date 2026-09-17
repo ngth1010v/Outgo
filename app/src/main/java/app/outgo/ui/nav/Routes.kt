@@ -17,6 +17,17 @@ object Routes {
 
     const val TRADE_EDIT_PATTERN = "trade/edit/{tradeId}"
     fun tradeEdit(tradeId: Long) = "trade/edit/$tradeId"
+
+    const val ANALYSIS_SUB_PATTERN = "analysis/{kind}"
+    fun analysisSub(kind: AnalysisKind) = "analysis/${kind.arg}"
+}
+
+enum class AnalysisKind(val arg: String) {
+    GENERAL("general"), INCOME("income"), EXPENSE("expense"), TRANSFER("transfer");
+
+    companion object {
+        fun fromArg(arg: String?): AnalysisKind = entries.find { it.arg == arg } ?: GENERAL
+    }
 }
 
 enum class HistoryType(val arg: String) {

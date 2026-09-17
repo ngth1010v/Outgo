@@ -1,24 +1,224 @@
 package app.outgo.ui.analysis
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
-import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import app.outgo.R
+import app.outgo.ui.LocalAppContainer
+import app.outgo.ui.component.IconView
+import app.outgo.ui.home.StackedDivergingBarChart
+import app.outgo.ui.nav.AnalysisKind
+import app.outgo.ui.theme.ExpenseRed
+import app.outgo.ui.theme.IncomeGreen
+import app.outgo.ui.theme.TransferBlue
+import app.outgo.util.Money
 
-/** Intentionally empty for v1 — see architecture.md §7.6. The schema (category_month_stat) is already shaped for this. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AnalysisScreen() {
+fun AnalysisScreen(onOpenSub: (AnalysisKind) -> Unit) {
+    val container = LocalAppContainer.current
+    val viewModel: AnalysisViewModel = viewModel(
+        factory = viewModelFactory { initializer { AnalysisViewModel(container.statDao) } },
+    )
+    val state by viewModel.state.collectAsState()
+
     Scaffold(topBar = { CenterAlignedTopAppBar(title = { Text(stringResource(R.string.nav_analysis)) }) }) { padding ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 8.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp),
+        ) {
+            item {
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    StackedDivergingBarChart(
+                        totals = state.chartTotals,
+                        months = state.chartMonths,
+                        showMonthLabels = true,
+                        showLegend = false,
+                        chartHeight = 140.dp,
+                        modifier = Modifier.weight(0.3f),
+                    )
+                    Spacer(Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(0.7f), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                        CategoryStatSection(
+                            title = stringResource(R.string.analysis_most_income),
+                            stats = state.topIncome,
+                            reverseColor = false,
+                        )
+                        CategoryStatSection(
+                            title = stringResource(R.string.analysis_most_expense),
+                            stats = state.topExpense,
+                            reverseColor = true,
+                        )
+                    }
+                }
+            }
+
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                        AnalysisKindButton(
+                            label = stringResource(R.string.analysis_general),
+                            iconRes = R.drawable.ph_chart_pie_slice_fill,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            onClick = { onOpenSub(AnalysisKind.GENERAL) },
+                            modifier = Modifier.weight(1f),
+                        )
+                        AnalysisKindButton(
+                            label = stringResource(R.string.trade_income),
+                            iconRes = R.drawable.ph_trend_up,
+                            color = IncomeGreen,
+                            onClick = { onOpenSub(AnalysisKind.INCOME) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                        AnalysisKindButton(
+                            label = stringResource(R.string.trade_expense),
+                            iconRes = R.drawable.ph_trend_down,
+                            color = ExpenseRed,
+                            onClick = { onOpenSub(AnalysisKind.EXPENSE) },
+                            modifier = Modifier.weight(1f),
+                        )
+                        AnalysisKindButton(
+                            label = stringResource(R.string.trade_transfer),
+                            iconRes = R.drawable.ph_swap_horizontal,
+                            color = TransferBlue,
+                            onClick = { onOpenSub(AnalysisKind.TRANSFER) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategoryStatSection(title: String, stats: List<CategoryStat>, reverseColor: Boolean) {
+    Column {
+        Text(title, style = MaterialTheme.typography.titleSmall)
+        Spacer(Modifier.height(4.dp))
+        stats.forEach { stat -> CategoryStatRow(stat, reverseColor) }
+    }
+}
+
+@Composable
+private fun CategoryStatRow(stat: CategoryStat, reverseColor: Boolean) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconView(iconId = stat.iconId, size = 32.dp, color = stat.color)
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(stat.name, style = MaterialTheme.typography.bodyLarge)
+            Text(Money.format(stat.total), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        val pct = stat.deviationPercent ?: 0
+        val positiveColor = if (reverseColor) ExpenseRed else IncomeGreen
+        val negativeColor = if (reverseColor) IncomeGreen else ExpenseRed
+        Text(
+            (if (pct > 0) "+" else "") + "$pct%",
+            fontWeight = FontWeight.Bold,
+            color = when {
+                pct > 0 -> positiveColor
+                pct < 0 -> negativeColor
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        )
+    }
+}
+
+@Composable
+private fun AnalysisKindButton(
+    label: String,
+    iconRes: Int,
+    color: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .aspectRatio(1.4f / 0.75f)
+            .clickable(onClick = onClick)
+            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp))
+            .padding(9.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .background(color.copy(alpha = 0.15f), androidx.compose.foundation.shape.CircleShape)
+                .padding(8.dp),
+        ) {
+            Icon(
+                painter = painterResource(iconRes),
+                contentDescription = null,
+                tint = color,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(label, color = color, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AnalysisSubScreen(kind: AnalysisKind, onBack: () -> Unit) {
+    val title = when (kind) {
+        AnalysisKind.GENERAL -> stringResource(R.string.analysis_general)
+        AnalysisKind.INCOME -> stringResource(R.string.trade_income)
+        AnalysisKind.EXPENSE -> stringResource(R.string.trade_expense)
+        AnalysisKind.TRANSFER -> stringResource(R.string.trade_transfer)
+    }
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text(title) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(painterResource(R.drawable.ph_caret_right), contentDescription = null, modifier = Modifier.rotate(180f))
+                    }
+                },
+            )
+        },
+    ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
             Text(stringResource(R.string.analysis_placeholder), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }

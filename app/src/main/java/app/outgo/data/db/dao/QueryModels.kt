@@ -16,6 +16,7 @@ data class MonthCategoryTotal(
     val type: Int,
     val name: String,
     val color: Int,
+    val iconId: Long?,
     val total: Long,
 )
 

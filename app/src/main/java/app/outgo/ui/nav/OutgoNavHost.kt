@@ -11,6 +11,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import app.outgo.ui.analysis.AnalysisScreen
+import app.outgo.ui.analysis.AnalysisSubScreen
 import app.outgo.ui.balance.BalanceScreen
 import app.outgo.ui.category.CategoryScreen
 import app.outgo.ui.history.HistoryScreen
@@ -36,8 +37,18 @@ fun OutgoRoot() {
             }
             composable(Routes.BALANCE) { BalanceScreen() }
             composable(Routes.CATEGORY) { CategoryScreen() }
-            composable(Routes.ANALYSIS) { AnalysisScreen() }
+            composable(Routes.ANALYSIS) {
+                AnalysisScreen(onOpenSub = { kind -> navController.navigate(Routes.analysisSub(kind)) })
+            }
             composable(Routes.SETTING) { SettingScreen() }
+
+            composable(
+                route = Routes.ANALYSIS_SUB_PATTERN,
+                arguments = listOf(navArgument("kind") { type = NavType.StringType }),
+            ) { entry ->
+                val kind = AnalysisKind.fromArg(entry.arguments?.getString("kind"))
+                AnalysisSubScreen(kind = kind, onBack = { navController.popBackStack() })
+            }
 
             composable(
                 route = Routes.HISTORY_PATTERN,
