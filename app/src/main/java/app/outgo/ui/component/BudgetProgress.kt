@@ -16,8 +16,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import app.outgo.domain.BudgetLevel
+import app.outgo.R
+import app.outgo.ui.theme.ExpenseRed
+import app.outgo.util.Money
 
 /** Shared "remaining / spent-of-total + progress bar" block used by Home, Category and Balance rows. */
 @Composable
@@ -34,7 +37,7 @@ fun BudgetProgressBlock(
             Text(spentOfTotalText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         // Two overlapping bars: a blank track behind, the colored progress on top.
-        Box(modifier = Modifier.fillMaxWidth().height(6.dp).padding(top = 4.dp)) {
+        Box(modifier = Modifier.fillMaxWidth().height(9.dp).padding(top = 4.dp)) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -53,9 +56,28 @@ fun BudgetProgressBlock(
     }
 }
 
+/** "<left> remain" while under budget, else "<over> over" (call site should also switch the color to red). */
 @Composable
-fun BudgetLevel.toColor(): Color = when (this) {
-    BudgetLevel.OK -> app.outgo.ui.theme.IncomeGreen
-    BudgetLevel.WARNING -> app.outgo.ui.theme.BudgetWarningYellow
-    BudgetLevel.OVER -> app.outgo.ui.theme.ExpenseRed
+fun budgetRemainingText(spent: Long, limit: Long): String {
+    val remaining = limit - spent
+    return if (remaining >= 0) {
+        stringResource(R.string.balance_savings_remain, Money.groupThousands(remaining))
+    } else {
+        stringResource(R.string.category_budget_over, Money.groupThousands(-remaining))
+    }
+}
+
+/** The category's own color while under budget, forced to red once spend passes the limit. */
+fun budgetRemainingColor(spent: Long, limit: Long, categoryColor: Color): Color =
+    if (spent > limit) ExpenseRed else categoryColor
+
+/** "<left> to go" while under target, else "<over> ahead". */
+@Composable
+fun savingsProgressText(saved: Long, target: Long): String {
+    val remaining = target - saved
+    return if (remaining >= 0) {
+        stringResource(R.string.balance_savings_to_go, Money.groupThousands(remaining))
+    } else {
+        stringResource(R.string.balance_savings_ahead, Money.groupThousands(-remaining))
+    }
 }

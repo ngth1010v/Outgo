@@ -30,11 +30,12 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import app.outgo.R
 import app.outgo.data.db.dao.AccountWithProgress
 import app.outgo.data.db.dao.BudgetWithProgress
-import app.outgo.domain.budgetLevel
 import app.outgo.ui.LocalAppContainer
 import app.outgo.ui.component.BudgetProgressBlock
 import app.outgo.ui.component.IconView
-import app.outgo.ui.component.toColor
+import app.outgo.ui.component.budgetRemainingColor
+import app.outgo.ui.component.budgetRemainingText
+import app.outgo.ui.component.savingsProgressText
 import app.outgo.ui.nav.HistoryType
 import app.outgo.util.Money
 
@@ -123,21 +124,20 @@ fun HomeScreen(onOpenHistory: (HistoryType) -> Unit) {
 private fun BudgetRow(budget: BudgetWithProgress, modifier: Modifier = Modifier) {
     Column(modifier = modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconView(iconId = budget.displayIconId, size = 32.dp)
+            IconView(iconId = budget.displayIconId, size = 32.dp, color = budget.categoryColor)
             Spacer(Modifier.width(12.dp))
             Text(budget.displayName, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         }
         val limit = budget.limitAmount ?: 0L
-        val level = budgetLevel(budget.spent, limit)
         BudgetProgressBlock(
-            remainingText = Money.formatSignedNoCurrency(limit - budget.spent),
+            remainingText = budgetRemainingText(budget.spent, limit),
             spentOfTotalText = stringResource(
                 R.string.category_spent_of_budget,
                 Money.groupThousands(budget.spent),
                 Money.groupThousands(limit),
             ),
             progress = if (limit > 0) budget.spent.toFloat() / limit.toFloat() else 0f,
-            color = level.toColor(),
+            color = budgetRemainingColor(budget.spent, limit, budget.categoryColor?.let { Color(it) } ?: MaterialTheme.colorScheme.primary),
         )
     }
 }
@@ -154,9 +154,8 @@ private fun SavingsAccountRow(row: AccountWithProgress, modifier: Modifier = Mod
         }
         val target = account.savingsTarget
         if (target != null && target > 0) {
-            val remain = (target - row.monthlyIncome).coerceAtLeast(0)
             BudgetProgressBlock(
-                remainingText = stringResource(R.string.balance_savings_remain, Money.groupThousands(remain)),
+                remainingText = savingsProgressText(row.monthlyIncome, target),
                 spentOfTotalText = stringResource(
                     R.string.balance_savings_of_target,
                     Money.groupThousands(row.monthlyIncome),

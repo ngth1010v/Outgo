@@ -31,6 +31,7 @@ data class BudgetWithProgress(
     val spent: Long,
     val categoryName: String?,
     val categoryIconId: Long?,
+    val categoryColor: Int?,
 ) {
     val displayName: String get() = if (name != null) name else categoryName.orEmpty()
     val displayIconId: Long? get() = iconId ?: categoryIconId

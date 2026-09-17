@@ -37,6 +37,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -48,7 +49,6 @@ import app.outgo.data.db.dao.BudgetWithProgress
 import app.outgo.data.db.entity.CategoryEntity
 import app.outgo.data.repo.CategoryColorPalette
 import app.outgo.domain.CategoryKind
-import app.outgo.domain.budgetLevel
 import app.outgo.ui.LocalAppContainer
 import app.outgo.ui.component.BudgetProgressBlock
 import app.outgo.ui.component.ColorPickerGrid
@@ -56,7 +56,8 @@ import app.outgo.ui.component.ConfirmDialog
 import app.outgo.ui.component.IconPickerSheet
 import app.outgo.ui.component.IconView
 import app.outgo.ui.component.PlusRow
-import app.outgo.ui.component.toColor
+import app.outgo.ui.component.budgetRemainingColor
+import app.outgo.ui.component.budgetRemainingText
 import app.outgo.util.Money
 
 private sealed interface EditTarget {
@@ -177,16 +178,15 @@ private fun CategoryRow(
         }
         if (budget != null) {
             val limit = budget.limitAmount ?: 0L
-            val level = budgetLevel(budget.spent, limit)
             BudgetProgressBlock(
-                remainingText = Money.formatSignedNoCurrency(limit - budget.spent),
+                remainingText = budgetRemainingText(budget.spent, limit),
                 spentOfTotalText = stringResource(
                     R.string.category_spent_of_budget,
                     Money.groupThousands(budget.spent),
                     Money.groupThousands(limit),
                 ),
                 progress = if (limit > 0) budget.spent.toFloat() / limit.toFloat() else 0f,
-                color = level.toColor(),
+                color = budgetRemainingColor(budget.spent, limit, Color(category.color)),
                 modifier = Modifier.padding(start = 40.dp),
             )
         }

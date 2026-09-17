@@ -40,7 +40,8 @@ interface BudgetDao {
                    WHERE s.month_key = :monthKey AND (c.id = b.category_id OR c.parent_id = b.category_id)
                ), 0) AS spent,
                cat.name AS categoryName,
-               cat.icon_id AS categoryIconId
+               cat.icon_id AS categoryIconId,
+               cat.color AS categoryColor
         FROM budget b
         LEFT JOIN category cat ON cat.id = b.category_id
         WHERE b.kind = 0

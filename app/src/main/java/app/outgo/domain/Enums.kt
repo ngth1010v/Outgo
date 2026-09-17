@@ -42,14 +42,3 @@ object IconKind {
 object BudgetKind {
     const val LIMIT = 0
 }
-
-/** Traffic-light color band for a budget's remaining amount. */
-enum class BudgetLevel { OK, WARNING, OVER }
-
-fun budgetLevel(spent: Long, limit: Long): BudgetLevel = when {
-    limit <= 0 -> BudgetLevel.OK
-    spent > limit -> BudgetLevel.OVER
-    // spent / limit > 0.9 without floating point
-    spent * 10 > limit * 9 -> BudgetLevel.WARNING
-    else -> BudgetLevel.OK
-}
