@@ -1,5 +1,14 @@
 package app.outgo.data.db.dao
 
+import androidx.room.Embedded
+import app.outgo.data.db.entity.AccountEntity
+
+/** An account joined with how much income it's received this month, toward [AccountEntity.savingsTarget]. */
+data class AccountWithProgress(
+    @Embedded val account: AccountEntity,
+    val monthlyIncome: Long,
+)
+
 /** One (month, parent category) bar segment for the Home stacked chart. */
 data class MonthCategoryTotal(
     val monthKey: Int,
@@ -10,11 +19,7 @@ data class MonthCategoryTotal(
     val total: Long,
 )
 
-/**
- * A budget joined with how much of it has been used this month. [spent] is
- * meaningful for [app.outgo.domain.BudgetKind.LIMIT], [saved] for
- * [app.outgo.domain.BudgetKind.SAVING].
- */
+/** A LIMIT budget joined with how much of it has been spent this month. */
 data class BudgetWithProgress(
     val id: Long,
     val kind: Int,
@@ -22,13 +27,8 @@ data class BudgetWithProgress(
     val iconId: Long?,
     val categoryId: Long?,
     val limitAmount: Long?,
-    val accountId: Long?,
-    val targetAmount: Long?,
-    val deadline: Long?,
     val sortOrder: Int,
     val spent: Long,
-    val saved: Long,
-    // Only set for kind == LIMIT (budget.name/icon_id are only meaningful for SAVING).
     val categoryName: String?,
     val categoryIconId: Long?,
 ) {

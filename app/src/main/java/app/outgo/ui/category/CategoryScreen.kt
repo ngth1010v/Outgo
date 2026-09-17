@@ -179,8 +179,12 @@ private fun CategoryRow(
             val limit = budget.limitAmount ?: 0L
             val level = budgetLevel(budget.spent, limit)
             BudgetProgressBlock(
-                remainingText = Money.formatSigned(limit - budget.spent),
-                spentOfTotalText = stringResource(R.string.category_spent_of_budget, Money.format(budget.spent), Money.format(limit)),
+                remainingText = Money.formatSignedNoCurrency(limit - budget.spent),
+                spentOfTotalText = stringResource(
+                    R.string.category_spent_of_budget,
+                    Money.groupThousands(budget.spent),
+                    Money.groupThousands(limit),
+                ),
                 progress = if (limit > 0) budget.spent.toFloat() / limit.toFloat() else 0f,
                 color = level.toColor(),
                 modifier = Modifier.padding(start = 40.dp),

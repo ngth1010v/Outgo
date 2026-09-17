@@ -22,16 +22,25 @@ object TradeType {
     fun isCredit(type: Int) = type == INCOME || type == ADJUST_IN
 }
 
+/** Values for `account.account_type`. */
+object AccountType {
+    const val NORMAL = 0
+    const val SAVINGS = 1
+}
+
 /** Values for `icon.kind`. */
 object IconKind {
     const val BUILTIN = 0
     const val USER = 1
 }
 
-/** Values for `budget.kind`. */
+/**
+ * Values for `budget.kind`. Only LIMIT (a monthly spending cap on a
+ * category) remains — the old SAVING kind was replaced by savings accounts
+ * (see [AccountType.SAVINGS]).
+ */
 object BudgetKind {
     const val LIMIT = 0
-    const val SAVING = 1
 }
 
 /** Traffic-light color band for a budget's remaining amount. */

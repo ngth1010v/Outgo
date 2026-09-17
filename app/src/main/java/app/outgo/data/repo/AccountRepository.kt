@@ -3,7 +3,9 @@ package app.outgo.data.repo
 import androidx.room.withTransaction
 import app.outgo.data.db.OutgoDatabase
 import app.outgo.data.db.dao.AccountDao
+import app.outgo.data.db.dao.AccountWithProgress
 import app.outgo.data.db.entity.AccountEntity
+import app.outgo.domain.AccountType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -20,6 +22,7 @@ class AccountRepository(
     private val tradeRepository: TradeRepository,
 ) {
     fun observeActive(): Flow<List<AccountEntity>> = accountDao.observeActive()
+    fun observeActiveWithProgress(monthKey: Int): Flow<List<AccountWithProgress>> = accountDao.observeActiveWithProgress(monthKey)
     fun observeAll(): Flow<List<AccountEntity>> = accountDao.observeAll()
     fun observeTotalBalance(): Flow<Long> = accountDao.observeTotalBalance()
 
@@ -30,7 +33,14 @@ class AccountRepository(
         (accountDao.lastUsedAccount() ?: accountDao.firstActiveOrNull())?.id
     }
 
-    suspend fun create(name: String, iconId: Long?, color: Int, initialBalance: Long): Long = withContext(Dispatchers.IO) {
+    suspend fun create(
+        name: String,
+        iconId: Long?,
+        color: Int,
+        initialBalance: Long,
+        accountType: Int = AccountType.NORMAL,
+        savingsTarget: Long? = null,
+    ): Long = withContext(Dispatchers.IO) {
         db.withTransaction {
             val now = System.currentTimeMillis()
             val order = accountDao.maxSortOrder() + 1
@@ -40,6 +50,8 @@ class AccountRepository(
                     iconId = iconId,
                     balance = 0,
                     color = color,
+                    accountType = accountType,
+                    savingsTarget = savingsTarget.takeIf { accountType == AccountType.SAVINGS },
                     sortOrder = order,
                     createdAt = now,
                     updatedAt = now,
@@ -50,10 +62,27 @@ class AccountRepository(
         }
     }
 
-    suspend fun update(accountId: Long, name: String, iconId: Long?, color: Int, newBalance: Long) = withContext(Dispatchers.IO) {
+    suspend fun update(
+        accountId: Long,
+        name: String,
+        iconId: Long?,
+        color: Int,
+        newBalance: Long,
+        accountType: Int,
+        savingsTarget: Long?,
+    ) = withContext(Dispatchers.IO) {
         db.withTransaction {
             val existing = accountDao.findById(accountId) ?: return@withTransaction
-            accountDao.update(existing.copy(name = name, iconId = iconId, color = color, updatedAt = System.currentTimeMillis()))
+            accountDao.update(
+                existing.copy(
+                    name = name,
+                    iconId = iconId,
+                    color = color,
+                    accountType = accountType,
+                    savingsTarget = savingsTarget.takeIf { accountType == AccountType.SAVINGS },
+                    updatedAt = System.currentTimeMillis(),
+                ),
+            )
             val delta = newBalance - existing.balance
             if (delta != 0L) tradeRepository.recordAdjustment(accountId, delta)
         }

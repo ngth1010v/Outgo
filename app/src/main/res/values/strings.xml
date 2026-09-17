@@ -28,7 +28,7 @@
     <!-- Home screen -->
     <string name="home_total_balance">Total balance</string>
     <string name="home_budgets">Budgets</string>
-    <string name="home_add_saving_goal">Add a saving goal</string>
+    <string name="home_savings">Savings</string>
     <string name="home_last_5_months">Last 5 months</string>
     <string name="home_income">Income</string>
     <string name="home_expense">Expense</string>
@@ -46,6 +46,12 @@
     <string name="balance_delete_confirm_message">This account has no transactions and will be removed permanently.</string>
     <string name="balance_archive_confirm_title">Archive account?</string>
     <string name="balance_archive_confirm_message">This account has transactions, so it can\'t be deleted. It will be hidden from Accounts and your total balance instead, and its history is kept.</string>
+    <string name="balance_type_normal">Normal</string>
+    <string name="balance_type_savings">Savings</string>
+    <string name="balance_savings_label">Savings</string>
+    <string name="balance_target_hint">Monthly savings target (optional)</string>
+    <string name="balance_savings_remain">%1$s remain</string>
+    <string name="balance_savings_of_target">%1$s/%2$s</string>
 
     <!-- Category screen -->
     <string name="category_expense_tab">Expense</string>

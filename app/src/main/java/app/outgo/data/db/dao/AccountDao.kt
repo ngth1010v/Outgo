@@ -10,6 +10,16 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface AccountDao {
+    /** Active accounts joined with this month's income (counts toward [AccountEntity.savingsTarget]). */
+    @Query(
+        """
+        SELECT a.*, COALESCE((
+            SELECT SUM(t.amount) FROM trade t WHERE t.account_id = a.id AND t.type = 1 AND t.month_key = :monthKey
+        ), 0) AS monthlyIncome
+        FROM account a WHERE a.archived = 0 ORDER BY a.sort_order, a.id
+        """,
+    )
+    fun observeActiveWithProgress(monthKey: Int): Flow<List<AccountWithProgress>>
     @Insert
     suspend fun insert(account: AccountEntity): Long
 

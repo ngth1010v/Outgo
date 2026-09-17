@@ -20,6 +20,12 @@ object Money {
         return "$sign${groupThousands(kotlin.math.abs(amount))} ₫"
     }
 
+    /** Same as [formatSigned] but without the currency symbol, e.g. "+50.000". */
+    fun formatSignedNoCurrency(amount: Long): String {
+        val sign = if (amount > 0) "+" else if (amount < 0) "-" else ""
+        return "$sign${groupThousands(kotlin.math.abs(amount))}"
+    }
+
     /** "1234567" -> "1.234.567" (no currency symbol), used inside the amount input field. */
     fun groupThousands(amount: Long): String {
         val negative = amount < 0

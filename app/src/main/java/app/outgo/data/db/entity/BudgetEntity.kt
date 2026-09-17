@@ -7,10 +7,11 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
- * Either a monthly spending LIMIT on one category, or a SAVING goal tied to
- * one account (the goal's progress is simply that account's balance — the
- * user "saves" by recording Income trades into it, so no new trade type is
- * needed). See [app.outgo.domain.BudgetKind].
+ * A monthly spending LIMIT on one category. See [app.outgo.domain.BudgetKind].
+ *
+ * account_id/target_amount/deadline are leftover columns from a removed
+ * SAVING budget kind (replaced by savings accounts, [app.outgo.domain.AccountType.SAVINGS])
+ * and are no longer written or read by app code.
  */
 @Entity(
     tableName = "budget",

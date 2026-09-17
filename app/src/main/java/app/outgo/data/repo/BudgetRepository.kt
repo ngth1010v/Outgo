@@ -40,34 +40,4 @@ class BudgetRepository(private val budgetDao: BudgetDao) {
             }
         }
     }
-
-    suspend fun createSavingGoal(name: String, iconId: Long?, accountId: Long, targetAmount: Long, deadline: Long?): Long =
-        withContext(Dispatchers.IO) {
-            val order = budgetDao.maxSortOrder(BudgetKind.SAVING) + 1
-            budgetDao.insert(
-                BudgetEntity(
-                    kind = BudgetKind.SAVING,
-                    name = name,
-                    iconId = iconId,
-                    accountId = accountId,
-                    targetAmount = targetAmount,
-                    deadline = deadline,
-                    sortOrder = order,
-                    createdAt = System.currentTimeMillis(),
-                ),
-            )
-        }
-
-    suspend fun updateSavingGoal(
-        budget: BudgetEntity,
-        name: String,
-        iconId: Long?,
-        accountId: Long,
-        targetAmount: Long,
-        deadline: Long?,
-    ) = withContext(Dispatchers.IO) {
-        budgetDao.update(
-            budget.copy(name = name, iconId = iconId, accountId = accountId, targetAmount = targetAmount, deadline = deadline),
-        )
-    }
 }

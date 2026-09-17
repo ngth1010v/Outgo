@@ -24,6 +24,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -41,16 +44,19 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.outgo.R
+import app.outgo.data.db.dao.AccountWithProgress
 import app.outgo.data.db.entity.AccountEntity
 import app.outgo.data.repo.CategoryColorPalette
+import app.outgo.domain.AccountType
 import app.outgo.ui.LocalAppContainer
+import app.outgo.ui.component.BudgetProgressBlock
 import app.outgo.ui.component.ColorPickerGrid
 import app.outgo.ui.component.ConfirmDialog
 import app.outgo.ui.component.IconPickerSheet
 import app.outgo.ui.component.IconView
 import app.outgo.ui.component.PlusRow
 import app.outgo.util.Money
-import kotlinx.coroutines.launch
+import androidx.compose.ui.graphics.Color
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,22 +74,50 @@ fun BalanceScreen() {
             modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            items(accounts, key = { it.id }) { account ->
-                Row(
+            items(accounts, key = { it.account.id }) { row ->
+                val account = row.account
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
                         .clickable { editing = account }
                         .padding(horizontal = 12.dp, vertical = 14.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconView(iconId = account.iconId, size = 32.dp, color = account.color)
-                        Spacer(Modifier.width(12.dp))
-                        Text(account.name, style = MaterialTheme.typography.bodyLarge)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconView(iconId = account.iconId, size = 32.dp, color = account.color)
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text(account.name, style = MaterialTheme.typography.bodyLarge)
+                                if (account.accountType == AccountType.SAVINGS) {
+                                    Text(
+                                        stringResource(R.string.balance_savings_label),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                        Text(Money.format(account.balance), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
                     }
-                    Text(Money.format(account.balance), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
+                    val target = account.savingsTarget
+                    if (account.accountType == AccountType.SAVINGS && target != null && target > 0) {
+                        val remain = (target - row.monthlyIncome).coerceAtLeast(0)
+                        BudgetProgressBlock(
+                            remainingText = stringResource(R.string.balance_savings_remain, Money.groupThousands(remain)),
+                            spentOfTotalText = stringResource(
+                                R.string.balance_savings_of_target,
+                                Money.groupThousands(row.monthlyIncome),
+                                Money.groupThousands(target),
+                            ),
+                            progress = row.monthlyIncome.toFloat() / target.toFloat(),
+                            color = Color(account.color),
+                        )
+                    }
                 }
             }
             item {
@@ -111,8 +145,10 @@ fun BalanceScreen() {
 @Composable
 private fun EditAccountSheet(account: AccountEntity?, onDismiss: () -> Unit, viewModel: BalanceViewModel) {
     val scope = rememberCoroutineScope()
+    var accountType by remember { mutableStateOf(account?.accountType ?: AccountType.NORMAL) }
     var name by remember { mutableStateOf(account?.name.orEmpty()) }
     var balanceText by remember { mutableStateOf(account?.balance?.takeIf { it != 0L }?.toString().orEmpty()) }
+    var targetText by remember { mutableStateOf(account?.savingsTarget?.toString().orEmpty()) }
     var iconId by remember { mutableStateOf(account?.iconId) }
     var color by remember { mutableStateOf(account?.color ?: CategoryColorPalette[0]) }
     var showIconPicker by remember { mutableStateOf(false) }
@@ -131,9 +167,17 @@ private fun EditAccountSheet(account: AccountEntity?, onDismiss: () -> Unit, vie
             )
             Spacer(Modifier.height(12.dp))
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconView(iconId = iconId, size = 48.dp, color = color, modifier = Modifier.padding(end = 12.dp))
-                OutlinedButton(onClick = { showIconPicker = true }) { Text(stringResource(R.string.common_choose_icon)) }
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                SegmentedButton(
+                    selected = accountType == AccountType.NORMAL,
+                    onClick = { accountType = AccountType.NORMAL },
+                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                ) { Text(stringResource(R.string.balance_type_normal)) }
+                SegmentedButton(
+                    selected = accountType == AccountType.SAVINGS,
+                    onClick = { accountType = AccountType.SAVINGS },
+                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                ) { Text(stringResource(R.string.balance_type_savings)) }
             }
             Spacer(Modifier.height(12.dp))
 
@@ -152,6 +196,22 @@ private fun EditAccountSheet(account: AccountEntity?, onDismiss: () -> Unit, vie
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
+            if (accountType == AccountType.SAVINGS) {
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = targetText,
+                    onValueChange = { targetText = it.filter { c -> c.isDigit() } },
+                    label = { Text(stringResource(R.string.balance_target_hint)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconView(iconId = iconId, size = 48.dp, color = color, modifier = Modifier.padding(end = 12.dp))
+                OutlinedButton(onClick = { showIconPicker = true }) { Text(stringResource(R.string.common_choose_icon)) }
+            }
             Spacer(Modifier.height(12.dp))
 
             Text(stringResource(R.string.category_color_label), style = MaterialTheme.typography.labelLarge)
@@ -160,12 +220,13 @@ private fun EditAccountSheet(account: AccountEntity?, onDismiss: () -> Unit, vie
             Spacer(Modifier.height(16.dp))
 
             val balance = balanceText.toLongOrNull() ?: 0L
+            val target = targetText.toLongOrNull()
             Button(
                 onClick = {
                     if (account == null) {
-                        viewModel.create(name, iconId, color, balance)
+                        viewModel.create(name, iconId, color, balance, accountType, target)
                     } else {
-                        viewModel.update(account.id, name, iconId, color, balance)
+                        viewModel.update(account.id, name, iconId, color, balance, accountType, target)
                     }
                     onDismiss()
                 },

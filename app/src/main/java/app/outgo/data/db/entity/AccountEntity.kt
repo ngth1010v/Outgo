@@ -36,6 +36,12 @@ data class AccountEntity(
     val balance: Long = 0,
     @ColumnInfo(name = "color")
     val color: Int = 0,
+    /** [app.outgo.domain.AccountType]. */
+    @ColumnInfo(name = "account_type", defaultValue = "0")
+    val accountType: Int = 0,
+    /** Monthly savings target; only meaningful when [accountType] is SAVINGS. */
+    @ColumnInfo(name = "savings_target")
+    val savingsTarget: Long? = null,
     @ColumnInfo(name = "sort_order")
     val sortOrder: Int = 0,
     @ColumnInfo(name = "archived")
