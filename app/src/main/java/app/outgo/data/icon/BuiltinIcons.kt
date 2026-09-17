@@ -10,7 +10,7 @@ object BuiltinIcons {
         "food", "coffee", "transport", "bus", "fuel", "groceries", "shopping", "movie",
         "rent", "electricity", "water", "internet", "phone", "beer", "medicine", "health",
         "gift", "education", "fee", "travel", "clothing", "repair", "pet", "book", "sport",
-        "laundry", "other",
+        "laundry", "other", "beauty", "family",
         "salary", "bonus", "investment", "interest", "freelance", "other_income",
         "wallet", "bank", "card", "ewallet",
         "target", "flag",

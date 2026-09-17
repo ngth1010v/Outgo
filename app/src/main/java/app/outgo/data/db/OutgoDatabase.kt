@@ -257,56 +257,74 @@ private object OutgoCallback : RoomDatabase.Callback() {
             db.insert("category", android.database.sqlite.SQLiteDatabase.CONFLICT_ABORT, cv)
         }
 
-        account("Cash", icon("wallet"))
+        account("Tiền mặt", icon("wallet"))
 
+        // Categories typical of a Vietnamese household budget (Money Lover/MISA-style taxonomy).
         val exp = CategoryKind.EXPENSE
-        parent(exp, "Food & Drink", "food", 0).also { p ->
-            child(exp, p, "Dining out", "food", 0)
-            child(exp, p, "Coffee", "coffee", 1)
-            child(exp, p, "Groceries", "groceries", 2)
+        parent(exp, "Ăn uống", "food", 0).also { p ->
+            child(exp, p, "Ăn ngoài", "food", 0)
+            child(exp, p, "Cà phê", "coffee", 1)
+            child(exp, p, "Đi chợ", "groceries", 2)
         }
-        parent(exp, "Transport", "transport", 1).also { p ->
-            child(exp, p, "Fuel", "fuel", 0)
-            child(exp, p, "Bus", "bus", 1)
+        parent(exp, "Di chuyển", "transport", 1).also { p ->
+            child(exp, p, "Xăng xe", "fuel", 0)
+            child(exp, p, "Xe buýt / Taxi", "bus", 1)
+            child(exp, p, "Sửa xe", "repair", 2)
         }
-        parent(exp, "Housing", "rent", 2).also { p ->
-            child(exp, p, "Rent", "rent", 0)
-            child(exp, p, "Electricity", "electricity", 1)
-            child(exp, p, "Water", "water", 2)
+        parent(exp, "Nhà ở", "rent", 2).also { p ->
+            child(exp, p, "Tiền nhà", "rent", 0)
+            child(exp, p, "Điện", "electricity", 1)
+            child(exp, p, "Nước", "water", 2)
             child(exp, p, "Internet", "internet", 3)
+            child(exp, p, "Điện thoại", "phone", 4)
         }
-        parent(exp, "Shopping", "shopping", 3).also { p ->
-            child(exp, p, "Clothing", "clothing", 0)
-            child(exp, p, "Household", "shopping", 1)
+        parent(exp, "Mua sắm", "shopping", 3).also { p ->
+            child(exp, p, "Quần áo", "clothing", 0)
+            child(exp, p, "Đồ gia dụng", "shopping", 1)
         }
-        parent(exp, "Entertainment", "movie", 4).also { p ->
-            child(exp, p, "Movies", "movie", 0)
-            child(exp, p, "Bar", "beer", 1)
+        parent(exp, "Giải trí", "movie", 4).also { p ->
+            child(exp, p, "Phim ảnh", "movie", 0)
+            child(exp, p, "Nhậu", "beer", 1)
         }
-        parent(exp, "Health", "health", 5).also { p ->
-            child(exp, p, "Medicine", "medicine", 0)
-            child(exp, p, "Checkups", "health", 1)
+        parent(exp, "Sức khỏe", "health", 5).also { p ->
+            child(exp, p, "Thuốc", "medicine", 0)
+            child(exp, p, "Khám bệnh", "health", 1)
         }
-        parent(exp, "Other", "other", 6).also { p ->
-            child(exp, p, "Gifts", "gift", 0)
-            child(exp, p, "Travel", "travel", 1)
-            child(exp, p, "Fees", "fee", 2)
+        parent(exp, "Giáo dục", "education", 6).also { p ->
+            child(exp, p, "Học phí", "education", 0)
+            child(exp, p, "Sách vở", "book", 1)
+        }
+        parent(exp, "Làm đẹp", "beauty", 7).also { p ->
+            child(exp, p, "Mỹ phẩm", "beauty", 0)
+            child(exp, p, "Tóc & Spa", "beauty", 1)
+        }
+        parent(exp, "Gia đình", "family", 8).also { p ->
+            child(exp, p, "Con cái", "family", 0)
+            child(exp, p, "Cha mẹ", "family", 1)
+        }
+        parent(exp, "Khác", "other", 9).also { p ->
+            child(exp, p, "Quà tặng", "gift", 0)
+            child(exp, p, "Du lịch", "travel", 1)
+            child(exp, p, "Thú cưng", "pet", 2)
+            child(exp, p, "Thể thao", "sport", 3)
+            child(exp, p, "Giặt ủi", "laundry", 4)
+            child(exp, p, "Phí & lệ phí", "fee", 5)
         }
 
         val inc = CategoryKind.INCOME
-        parent(inc, "Salary", "salary", 0).also { p ->
-            child(inc, p, "Salary", "salary", 0)
+        parent(inc, "Lương", "salary", 0).also { p ->
+            child(inc, p, "Lương", "salary", 0)
         }
-        parent(inc, "Bonus", "bonus", 1).also { p ->
-            child(inc, p, "Bonus", "bonus", 0)
+        parent(inc, "Thưởng", "bonus", 1).also { p ->
+            child(inc, p, "Thưởng", "bonus", 0)
         }
-        parent(inc, "Investment", "investment", 2).also { p ->
-            child(inc, p, "Investment", "investment", 0)
-            child(inc, p, "Interest", "interest", 1)
+        parent(inc, "Đầu tư", "investment", 2).also { p ->
+            child(inc, p, "Đầu tư", "investment", 0)
+            child(inc, p, "Lãi suất", "interest", 1)
         }
-        parent(inc, "Other income", "other_income", 3).also { p ->
-            child(inc, p, "Freelance", "freelance", 0)
-            child(inc, p, "Other", "other_income", 1)
+        parent(inc, "Thu nhập khác", "other_income", 3).also { p ->
+            child(inc, p, "Làm thêm", "freelance", 0)
+            child(inc, p, "Khác", "other_income", 1)
         }
     }
 }
