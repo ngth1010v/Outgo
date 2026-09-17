@@ -42,7 +42,8 @@ fun StackedDivergingBarChart(
     modifier: Modifier = Modifier,
     showMonthLabels: Boolean = true,
     showLegend: Boolean = true,
-    chartHeight: androidx.compose.ui.unit.Dp = 160.dp,
+    /** Fixed chart height, or null to fill whatever vertical space the parent gives it (e.g. a Row sized by IntrinsicSize.Min). */
+    chartHeight: androidx.compose.ui.unit.Dp? = 160.dp,
 ) {
     val byMonth = remember(totals, months) { totals.groupBy { it.monthKey } }
 
@@ -63,9 +64,10 @@ fun StackedDivergingBarChart(
     val onSurfaceVariant = MaterialTheme.colorScheme.outlineVariant
 
     Column(modifier = modifier.fillMaxWidth()) {
+        val chartAreaModifier = if (chartHeight != null) Modifier.height(chartHeight) else Modifier.weight(1f)
         if (maxIncome == 0L && maxExpense == 0L) {
             androidx.compose.foundation.layout.Box(
-                modifier = Modifier.fillMaxWidth().height(chartHeight),
+                modifier = Modifier.fillMaxWidth().then(chartAreaModifier),
                 contentAlignment = androidx.compose.ui.Alignment.Center,
             ) {
                 if (showMonthLabels || showLegend) {
@@ -77,7 +79,7 @@ fun StackedDivergingBarChart(
                 }
             }
         } else {
-            Canvas(modifier = Modifier.fillMaxWidth().height(chartHeight).padding(horizontal = 4.dp)) {
+            Canvas(modifier = Modifier.fillMaxWidth().then(chartAreaModifier).padding(horizontal = 4.dp)) {
                 val barWidthTotal = size.width / months.size
                 val barPad = barWidthTotal * 0.18f
                 val total = (maxIncome + maxExpense).coerceAtLeast(1)
