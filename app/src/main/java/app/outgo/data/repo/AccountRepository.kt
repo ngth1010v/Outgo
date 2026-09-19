@@ -24,7 +24,6 @@ class AccountRepository(
     fun observeActive(): Flow<List<AccountEntity>> = accountDao.observeActive()
     fun observeActiveWithProgress(monthKey: Int): Flow<List<AccountWithProgress>> = accountDao.observeActiveWithProgress(monthKey)
     fun observeAll(): Flow<List<AccountEntity>> = accountDao.observeAll()
-    fun observeTotalBalance(): Flow<Long> = accountDao.observeTotalBalance()
 
     suspend fun findById(id: Long): AccountEntity? = withContext(Dispatchers.IO) { accountDao.findById(id) }
 

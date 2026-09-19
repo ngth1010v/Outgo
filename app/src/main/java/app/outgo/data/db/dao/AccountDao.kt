@@ -40,9 +40,6 @@ interface AccountDao {
     @Query("SELECT * FROM account WHERE id = :id")
     suspend fun findById(id: Long): AccountEntity?
 
-    @Query("SELECT COALESCE(SUM(balance), 0) FROM account WHERE archived = 0")
-    fun observeTotalBalance(): Flow<Long>
-
     @Query("SELECT COUNT(*) FROM trade WHERE account_id = :accountId")
     suspend fun countTrades(accountId: Long): Int
 

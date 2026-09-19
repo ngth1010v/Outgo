@@ -1,12 +1,12 @@
 package app.outgo.ui.home
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -44,7 +44,7 @@ fun HomeScreen(onOpenHistory: (HistoryType) -> Unit) {
     val container = LocalAppContainer.current
     val viewModel: HomeViewModel = viewModel(
         factory = viewModelFactory {
-            initializer { HomeViewModel(container.accountRepository, container.budgetRepository, container.statDao) }
+            initializer { HomeViewModel(container.accountRepository, container.budgetRepository) }
         },
     )
     val state by viewModel.state.collectAsState()
@@ -56,13 +56,12 @@ fun HomeScreen(onOpenHistory: (HistoryType) -> Unit) {
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             item {
-                Column {
-                    Text(
-                        stringResource(R.string.home_total_balance),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(Money.format(state.totalBalance), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                Column(verticalArrangement = Arrangement.spacedBy(4.3.dp)) {
+                    BalanceBlock(R.string.home_available_balance, state.availableBalance, primary = true)
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        BalanceBlock(R.string.home_savings_balance, state.savingsBalance, primary = false)
+                        BalanceBlock(R.string.home_total_balance, state.totalBalance, primary = false)
+                    }
                 }
             }
 
@@ -99,14 +98,6 @@ fun HomeScreen(onOpenHistory: (HistoryType) -> Unit) {
             }
 
             item {
-                Column {
-                    Text(stringResource(R.string.home_last_5_months), style = MaterialTheme.typography.titleMedium)
-                    Spacer(Modifier.height(8.dp))
-                    StackedDivergingBarChart(totals = state.monthlyTotals, months = state.months)
-                }
-            }
-
-            item {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(stringResource(R.string.home_history_section), style = MaterialTheme.typography.titleMedium)
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
@@ -123,6 +114,32 @@ fun HomeScreen(onOpenHistory: (HistoryType) -> Unit) {
                 }
             }
         }
+    }
+}
+
+/**
+ * Balance label + amount. Primary amount is 1.2x headlineMedium; secondary label is 80% of the
+ * primary label and secondary amount 60% of the primary amount, muted.
+ */
+@Composable
+private fun BalanceBlock(@StringRes label: Int, amount: Long, primary: Boolean) {
+    val labelBase = MaterialTheme.typography.labelLarge
+    val labelScale = if (primary) 1f else 0.8f
+    val base = MaterialTheme.typography.headlineMedium
+    val scale = if (primary) 1.2f else 1.2f * 0.6f
+    // Negative gap pulls the primary amount up to tighten label-amount spacing.
+    Column(verticalArrangement = Arrangement.spacedBy(if (primary) (-3.1).dp else 0.dp)) {
+        Text(
+            stringResource(label),
+            style = labelBase.copy(fontSize = labelBase.fontSize * labelScale, lineHeight = labelBase.lineHeight * labelScale),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            Money.format(amount),
+            style = base.copy(fontSize = base.fontSize * scale, lineHeight = base.lineHeight * scale),
+            fontWeight = if (primary) FontWeight.Bold else FontWeight.Normal,
+            color = if (primary) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
