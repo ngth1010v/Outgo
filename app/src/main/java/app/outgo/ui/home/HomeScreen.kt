@@ -35,6 +35,7 @@ import app.outgo.ui.component.BudgetProgressBlock
 import app.outgo.ui.component.IconView
 import app.outgo.ui.component.budgetRemainingColor
 import app.outgo.ui.component.budgetRemainingText
+import app.outgo.ui.component.savingsProgressColor
 import app.outgo.ui.component.savingsProgressText
 import app.outgo.ui.nav.HistoryType
 import app.outgo.util.Money
@@ -185,7 +186,7 @@ private fun SavingsAccountRow(row: AccountWithProgress, modifier: Modifier = Mod
                     Money.groupThousands(target),
                 ),
                 progress = row.monthlyIncome.toFloat() / target.toFloat(),
-                color = Color(account.color),
+                color = savingsProgressColor(row.monthlyIncome, target, Color(account.color)),
             )
         }
     }

@@ -71,6 +71,7 @@
     <string name="balance_savings_of_target">%1$s/%2$s</string>
     <string name="balance_savings_to_go">Còn %1$s nữa</string>
     <string name="balance_savings_ahead">Vượt %1$s</string>
+    <string name="balance_savings_done">Hoàn thành</string>
 
     <string name="category_expense_tab">Chi</string>
     <string name="category_income_tab">Thu</string>

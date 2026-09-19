@@ -76,6 +76,7 @@
     <string name="balance_savings_of_target">%1$s/%2$s</string>
     <string name="balance_savings_to_go">%1$s to go</string>
     <string name="balance_savings_ahead">%1$s ahead</string>
+    <string name="balance_savings_done">Done</string>
 
     <!-- Category screen -->
     <string name="category_expense_tab">Expense</string>

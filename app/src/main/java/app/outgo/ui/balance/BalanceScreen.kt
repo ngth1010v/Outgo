@@ -57,6 +57,7 @@ import app.outgo.ui.component.ConfirmDialog
 import app.outgo.ui.component.IconPickerSheet
 import app.outgo.ui.component.IconView
 import app.outgo.ui.component.PlusRow
+import app.outgo.ui.component.savingsProgressColor
 import app.outgo.ui.component.savingsProgressText
 import app.outgo.util.Money
 import androidx.compose.ui.graphics.Color
@@ -79,6 +80,7 @@ fun BalanceScreen() {
         ) {
             items(accounts, key = { it.account.id }) { row ->
                 val account = row.account
+                val target = account.savingsTarget?.takeIf { it > 0 && account.accountType == AccountType.SAVINGS }
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -107,8 +109,7 @@ fun BalanceScreen() {
                         }
                         Text(Money.format(account.balance), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
                     }
-                    val target = account.savingsTarget
-                    if (account.accountType == AccountType.SAVINGS && target != null && target > 0) {
+                    if (target != null) {
                         BudgetProgressBlock(
                             remainingText = savingsProgressText(row.monthlyIncome, target),
                             spentOfTotalText = stringResource(
@@ -117,7 +118,7 @@ fun BalanceScreen() {
                                 Money.groupThousands(target),
                             ),
                             progress = row.monthlyIncome.toFloat() / target.toFloat(),
-                            color = Color(account.color),
+                            color = savingsProgressColor(row.monthlyIncome, target, Color(account.color)),
                         )
                     }
                 }

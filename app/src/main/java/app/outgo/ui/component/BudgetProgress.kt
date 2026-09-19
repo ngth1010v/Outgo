@@ -20,6 +20,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.outgo.R
 import app.outgo.ui.theme.ExpenseRed
+import app.outgo.ui.theme.IncomeGreen
 import app.outgo.util.Money
 
 /** Shared "remaining / spent-of-total + progress bar" block used by Home, Category and Balance rows. */
@@ -71,13 +72,18 @@ fun budgetRemainingText(spent: Long, limit: Long): String {
 fun budgetRemainingColor(spent: Long, limit: Long, categoryColor: Color): Color =
     if (spent > limit) ExpenseRed else categoryColor
 
-/** "<left> to go" while under target, else "<over> ahead". */
+/** "<left> to go" while under target, "Done" on target, "Done - <over> ahead" past it. */
 @Composable
 fun savingsProgressText(saved: Long, target: Long): String {
     val remaining = target - saved
-    return if (remaining >= 0) {
-        stringResource(R.string.balance_savings_to_go, Money.groupThousands(remaining))
-    } else {
-        stringResource(R.string.balance_savings_ahead, Money.groupThousands(-remaining))
+    val done = stringResource(R.string.balance_savings_done)
+    return when {
+        remaining > 0 -> stringResource(R.string.balance_savings_to_go, Money.groupThousands(remaining))
+        remaining == 0L -> done
+        else -> "$done - " + stringResource(R.string.balance_savings_ahead, Money.groupThousands(-remaining))
     }
 }
+
+/** Label + bar color for a savings row: green once the target is hit, else the account's own color. */
+fun savingsProgressColor(saved: Long, target: Long, accountColor: Color): Color =
+    if (saved >= target) IncomeGreen else accountColor
