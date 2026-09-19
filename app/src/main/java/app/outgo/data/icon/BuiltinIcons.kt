@@ -14,6 +14,17 @@ object BuiltinIcons {
         "salary", "bonus", "investment", "interest", "freelance", "other_income",
         "wallet", "bank", "card", "ewallet",
         "target", "flag",
+        // Phosphor Icons (fill weight, MIT) + Claude mark from Simple Icons (CC0), rendered to 128px PNGs.
+        "egg", "meat", "milk", "tea", "bread", "pizza", "hamburger", "fish", "carrot", "orange",
+        "avocado", "cookie", "ice_cream", "cake", "wine", "martini", "popcorn", "cigarette",
+        "bicycle", "motorcycle", "scooter", "taxi", "train", "suitcase", "tent", "ticket",
+        "exercise", "soccer_ball", "swimming_pool",
+        "baby", "baby_carriage", "dog", "cat", "plant", "flower",
+        "couch", "television", "game_controller", "music_notes", "headphones", "newspaper",
+        "broom", "toilet_paper", "washing_machine", "bathtub", "scissors", "sneaker", "dress",
+        "tooth", "hospital", "emergency", "shield_check", "umbrella",
+        "tax", "hand_heart", "confetti", "church", "storefront",
+        "lightbulb", "fire", "sim_card", "claude", "aws",
         "default",
     )
 
