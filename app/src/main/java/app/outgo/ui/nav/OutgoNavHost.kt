@@ -33,7 +33,7 @@ fun OutgoRoot() {
                 TradeScreen(editingTradeId = null, onClose = {})
             }
             composable(Routes.HOME) {
-                HomeScreen(onOpenHistory = { type -> navController.navigate(Routes.history(type)) })
+                HomeScreen(onOpenTrade = { tradeId -> navController.navigate(Routes.tradeEdit(tradeId)) })
             }
             composable(Routes.BALANCE) { BalanceScreen() }
             composable(Routes.CATEGORY) { CategoryScreen() }

@@ -10,14 +10,22 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -37,13 +45,18 @@ import app.outgo.ui.component.budgetRemainingColor
 import app.outgo.ui.component.budgetRemainingText
 import app.outgo.ui.component.savingsProgressColor
 import app.outgo.ui.component.savingsProgressText
+import app.outgo.ui.history.HistoryViewModel
+import app.outgo.ui.history.LoadMoreOnScrollEnd
+import app.outgo.ui.history.buildHistoryItems
+import app.outgo.ui.history.historyItems
 import app.outgo.ui.nav.HistoryType
 import app.outgo.ui.theme.ExpenseRed
 import app.outgo.ui.theme.IncomeGreen
 import app.outgo.util.Money
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(onOpenHistory: (HistoryType) -> Unit) {
+fun HomeScreen(onOpenTrade: (Long) -> Unit) {
     val container = LocalAppContainer.current
     val viewModel: HomeViewModel = viewModel(
         factory = viewModelFactory {
@@ -52,14 +65,33 @@ fun HomeScreen(onOpenHistory: (HistoryType) -> Unit) {
     )
     val state by viewModel.state.collectAsState()
 
+    var historyType by rememberSaveable { mutableStateOf(HistoryType.EXPENSE) }
+    // One ViewModel per tab, keyed so switching tabs keeps each tab's already-loaded pages.
+    val historyViewModel: HistoryViewModel = viewModel(
+        key = "home-history-${historyType.arg}",
+        factory = viewModelFactory {
+            initializer {
+                HistoryViewModel(container.tradeRepository, container.accountRepository, container.categoryRepository, historyType)
+            }
+        },
+    )
+    val historyState by historyViewModel.state.collectAsState()
+    // The list is a one-shot fetch, not a Flow: re-read it when we come back from editing a trade.
+    LaunchedEffect(historyViewModel) { historyViewModel.refresh() }
+    val historyRows = remember(historyState.trades) { buildHistoryItems(historyState.trades) }
+
+    val listState = rememberLazyListState()
+    LoadMoreOnScrollEnd(listState, historyState.canLoadMore, historyViewModel::loadMore)
+
     Scaffold { padding ->
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 8.dp, bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(4.3.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.3.dp), modifier = Modifier.padding(bottom = 10.dp)) {
                     BalanceBlock(R.string.home_available_balance, state.availableBalance, primary = true)
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         BalanceBlock(R.string.home_savings_balance, state.savingsBalance, primary = false)
@@ -69,7 +101,7 @@ fun HomeScreen(onOpenHistory: (HistoryType) -> Unit) {
             }
 
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(bottom = 10.dp)) {
                     Text(stringResource(R.string.home_budgets), style = MaterialTheme.typography.titleMedium)
                     if (state.budgets.isEmpty()) {
                         Text(
@@ -89,7 +121,7 @@ fun HomeScreen(onOpenHistory: (HistoryType) -> Unit) {
 
             if (state.savingsAccounts.isNotEmpty()) {
                 item {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(bottom = 10.dp)) {
                         Text(stringResource(R.string.home_savings), style = MaterialTheme.typography.titleMedium)
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             state.savingsAccounts.forEach { account ->
@@ -101,20 +133,42 @@ fun HomeScreen(onOpenHistory: (HistoryType) -> Unit) {
             }
 
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text(stringResource(R.string.home_history_section), style = MaterialTheme.typography.titleMedium)
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                        OutlinedButton(onClick = { onOpenHistory(HistoryType.EXPENSE) }, modifier = Modifier.weight(1f)) {
-                            Text(stringResource(R.string.trade_expense))
-                        }
-                        OutlinedButton(onClick = { onOpenHistory(HistoryType.INCOME) }, modifier = Modifier.weight(1f)) {
-                            Text(stringResource(R.string.trade_income))
-                        }
-                        OutlinedButton(onClick = { onOpenHistory(HistoryType.TRANSFER) }, modifier = Modifier.weight(1f)) {
-                            Text(stringResource(R.string.trade_transfer))
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        HistoryType.entries.forEachIndexed { index, type ->
+                            SegmentedButton(
+                                selected = type == historyType,
+                                onClick = { historyType = type },
+                                shape = SegmentedButtonDefaults.itemShape(index, HistoryType.entries.size),
+                            ) {
+                                Text(
+                                    stringResource(
+                                        when (type) {
+                                            HistoryType.EXPENSE -> R.string.trade_expense
+                                            HistoryType.INCOME -> R.string.trade_income
+                                            HistoryType.TRANSFER -> R.string.trade_transfer
+                                        },
+                                    ),
+                                )
+                            }
                         }
                     }
                 }
+            }
+
+            if (historyRows.isEmpty()) {
+                if (!historyState.isLoading) {
+                    item {
+                        Text(
+                            stringResource(R.string.history_empty),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            } else {
+                historyItems(historyRows, historyState, onOpenTrade)
             }
         }
     }
