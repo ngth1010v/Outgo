@@ -73,9 +73,6 @@ fun StackedDivergingBarChart(
         stringResource(R.string.unit_million),
         stringResource(R.string.unit_billion),
     )
-    // Both halves share one pixels-per-unit scale, so one step keeps every gap the same height.
-    val axisStep = remember(maxIncome, maxExpense) { niceStep(maxOf(maxIncome, maxExpense), 3) }
-
     Column(modifier = modifier.fillMaxWidth()) {
         val chartAreaModifier = if (chartHeight != null) Modifier.height(chartHeight) else Modifier.weight(1f)
         if (maxIncome == 0L && maxExpense == 0L) {
@@ -111,9 +108,26 @@ fun StackedDivergingBarChart(
                     strokeWidth = 1.5f,
                 )
 
-                if (showYAxis && axisStep > 0) {
-                    val ticks = ticksUpTo(maxIncome, axisStep).map { it to baselineY - it * pxPerUnitAbove } +
-                        ticksUpTo(maxExpense, axisStep).map { it to baselineY + it * pxPerUnitBelow }
+                if (showYAxis) {
+                    // Both halves share one pixels-per-unit scale, so one step keeps every gap
+                    // the same height whichever side of the baseline it falls on.
+                    val minPadding = MinTickPadding.toPx()
+                    val step = niceStep(maxOf(pxPerUnitAbove, pxPerUnitBelow), minPadding)
+                    // 0 (the baseline), the income peak and the expense peak are always labelled;
+                    // nice-step ticks fill the gaps, minus any that would crowd a peak label.
+                    val ticks = buildList {
+                        add(0L to baselineY)
+                        if (maxIncome > 0) add(maxIncome to baselineY - maxIncome * pxPerUnitAbove)
+                        if (maxExpense > 0) add(maxExpense to baselineY + maxExpense * pxPerUnitBelow)
+                        if (step > 0) {
+                            ticksUpTo(maxIncome, step)
+                                .filter { (maxIncome - it) * pxPerUnitAbove >= minPadding }
+                                .forEach { add(it to baselineY - it * pxPerUnitAbove) }
+                            ticksUpTo(maxExpense, step)
+                                .filter { (maxExpense - it) * pxPerUnitBelow >= minPadding }
+                                .forEach { add(it to baselineY + it * pxPerUnitBelow) }
+                        }
+                    }
                     for ((value, y) in ticks) {
                         val layout = textMeasurer.measure(compactAmount(value, units), axisStyle)
                         drawText(
@@ -212,24 +226,40 @@ fun StackedDivergingBarChart(
 /** Width of the value-axis gutter on the chart's right: five labelSmall characters plus a 4dp gap. */
 private val YAxisWidth = 34.dp
 
-/** step, 2*step, ... up to [max]. The zero tick sits on the shared baseline and is skipped. */
+/** Smallest vertical gap between two axis labels, so they never overlap. */
+private val MinTickPadding = 48.dp
+
+/** step, 2*step, ... up to [max]. The zero tick sits on the shared baseline and is added separately. */
 private fun ticksUpTo(max: Long, step: Long): List<Long> =
     generateSequence(step) { it + step }.takeWhile { it <= max }.toList()
 
-/** Smallest of 1/2/2.5/5 x 10^k that keeps [max] within [maxTicks] ticks, or 0 when there is no data. */
-private fun niceStep(max: Long, maxTicks: Int): Long {
-    if (max <= 0) return 0
-    val raw = max.toDouble() / maxTicks
-    val magnitude = Math.pow(10.0, Math.floor(Math.log10(raw)))
-    val normalized = raw / magnitude
-    val multiplier = when {
-        normalized <= 1.0 -> 1.0
-        normalized <= 2.0 -> 2.0
-        normalized <= 2.5 -> 2.5
-        normalized <= 5.0 -> 5.0
-        else -> 10.0
+/**
+ * Walks the 1/2/5 x 10^k ladder and returns the first step whose on-screen height
+ * ([pxPerUnit] pixels per money unit) is at least [minPaddingPx]. 0 when there is no scale.
+ */
+private fun niceStep(pxPerUnit: Float, minPaddingPx: Float): Long {
+    if (pxPerUnit <= 0f) return 0
+    val base = longArrayOf(1, 2, 5)
+    var step = 1L
+    var index = 0
+    var power = 0
+    while (step * pxPerUnit < minPaddingPx) {
+        index++
+        if (index == base.size) {
+            index = 0
+            power++
+        }
+        // Long overflows past ~9.2e18; no real amount reaches it, but stop rather than wrap.
+        if (power > 18) return step
+        step = base[index] * pow10(power)
     }
-    return Math.round(multiplier * magnitude).coerceAtLeast(1L)
+    return step
+}
+
+private fun pow10(power: Int): Long {
+    var out = 1L
+    repeat(power) { out *= 10 }
+    return out
 }
 
 /** "950", "2.5M", "12M" — never more than 5 characters, always a '.' decimal point, no currency. */
