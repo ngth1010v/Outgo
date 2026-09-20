@@ -1,5 +1,8 @@
 package app.outgo.util
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 
@@ -11,13 +14,22 @@ import java.util.Locale
 object Money {
     private val groupingSeparator = DecimalFormatSymbols(Locale.US).groupingSeparator
 
-    /** "1234567" -> "1.234.567 ₫" */
-    fun format(amount: Long): String = "${groupThousands(amount)} ₫"
+    const val DEFAULT_SYMBOL = "$"
 
-    /** Same as [format] but with an explicit sign for positive amounts, e.g. "+50.000 ₫". */
+    /**
+     * Currency symbol appended to every formatted amount. Snapshot state, so changing it
+     * recomposes every screen showing an amount without threading it through their state.
+     * Loaded from the `setting` table at startup; see SettingRepository.observeCurrency.
+     */
+    var symbol: String by mutableStateOf(DEFAULT_SYMBOL)
+
+    /** "1234567" -> "1.234.567 $" */
+    fun format(amount: Long): String = "${groupThousands(amount)} $symbol"
+
+    /** Same as [format] but with an explicit sign for positive amounts, e.g. "+50.000 $". */
     fun formatSigned(amount: Long): String {
         val sign = if (amount > 0) "+" else if (amount < 0) "-" else ""
-        return "$sign${groupThousands(kotlin.math.abs(amount))} ₫"
+        return "$sign${groupThousands(kotlin.math.abs(amount))} $symbol"
     }
 
     /** Same as [formatSigned] but without the currency symbol, e.g. "+50.000". */

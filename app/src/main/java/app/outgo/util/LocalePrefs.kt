@@ -11,7 +11,7 @@ import java.util.Locale
  * renders in the right language. See CLAUDE.md's "why things are lazy" / SharedPreferences note.
  */
 object LocalePrefs {
-    private const val PREFS_NAME = "outgo_prefs"
+    internal const val PREFS_NAME = "outgo_prefs"
     private const val KEY_LOCALE = "locale"
 
     /** BCP-47 language tag ("en", "vi"), or "" to follow the system locale. */

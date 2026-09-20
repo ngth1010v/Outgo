@@ -65,7 +65,7 @@ fun AmountField(
                 )
             }
             Spacer(Modifier.width(4.dp))
-            Text("đ", style = style.copy(color = if (text.isEmpty()) placeholderColor else color))
+            Text(Money.symbol, style = style.copy(color = if (text.isEmpty()) placeholderColor else color))
         }
     }
 }

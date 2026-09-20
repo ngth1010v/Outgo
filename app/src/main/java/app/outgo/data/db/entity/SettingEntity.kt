@@ -24,4 +24,7 @@ object SettingKeys {
 
     /** BCP-47 language tag ("en", "vi"), or absent/empty to follow the system locale. */
     const val LOCALE = "locale"
+
+    /** Currency symbol shown next to every amount, e.g. "$". Absent in pre-currency backups — see [app.outgo.util.Money.DEFAULT_SYMBOL]. */
+    const val CURRENCY = "currency"
 }
