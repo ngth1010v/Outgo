@@ -38,6 +38,8 @@ import app.outgo.ui.component.budgetRemainingText
 import app.outgo.ui.component.savingsProgressColor
 import app.outgo.ui.component.savingsProgressText
 import app.outgo.ui.nav.HistoryType
+import app.outgo.ui.theme.ExpenseRed
+import app.outgo.ui.theme.IncomeGreen
 import app.outgo.util.Money
 
 @Composable
@@ -151,6 +153,7 @@ private fun BudgetRow(budget: BudgetWithProgress, modifier: Modifier = Modifier)
             IconView(iconId = budget.displayIconId, size = 32.dp, color = budget.categoryColor)
             Spacer(Modifier.width(12.dp))
             Text(budget.displayName, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            MonthAmountBlock(budget.spent, budget.prevSpent, greenWhenLower = true)
         }
         val limit = budget.limitAmount ?: 0L
         BudgetProgressBlock(
@@ -166,6 +169,39 @@ private fun BudgetRow(budget: BudgetWithProgress, modifier: Modifier = Modifier)
     }
 }
 
+/**
+ * This month's amount with its deviation from last month underneath. Gray when unchanged,
+ * otherwise green/red per [greenWhenLower] —
+ * spending less is good for a budget, saving less is not.
+ */
+@Composable
+private fun MonthAmountBlock(current: Long, previous: Long, greenWhenLower: Boolean) {
+    // Negative gap pulls the ratio up against the amount, same trick as BalanceBlock.
+    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy((-4).dp)) {
+        Text(Money.format(current), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
+        // No previous month to divide by: any amount at all counts as a full 100% swing.
+        val percent = when {
+            previous != 0L -> Math.round((current - previous) * 100.0 / previous)
+            current > 0L -> 100L
+            current < 0L -> -100L
+            else -> 0L
+        }
+        Text(
+            text = when {
+                percent == 0L -> "~0%"
+                percent > 0 -> "+$percent%"
+                else -> "$percent%"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = when {
+                percent == 0L -> MaterialTheme.colorScheme.onSurfaceVariant
+                (percent < 0) == greenWhenLower -> IncomeGreen
+                else -> ExpenseRed
+            },
+        )
+    }
+}
+
 @Composable
 private fun SavingsAccountRow(row: AccountWithProgress, modifier: Modifier = Modifier) {
     val account = row.account
@@ -174,7 +210,7 @@ private fun SavingsAccountRow(row: AccountWithProgress, modifier: Modifier = Mod
             IconView(iconId = account.iconId, size = 32.dp, color = account.color)
             Spacer(Modifier.width(12.dp))
             Text(account.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-            Text(Money.format(account.balance), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
+            MonthAmountBlock(row.monthlyIncome, row.prevMonthlyIncome, greenWhenLower = false)
         }
         val target = account.savingsTarget
         if (target != null && target > 0) {

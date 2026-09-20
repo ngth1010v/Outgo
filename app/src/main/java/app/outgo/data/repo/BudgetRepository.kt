@@ -4,6 +4,7 @@ import app.outgo.data.db.dao.BudgetDao
 import app.outgo.data.db.dao.BudgetWithProgress
 import app.outgo.data.db.entity.BudgetEntity
 import app.outgo.domain.BudgetKind
+import app.outgo.util.MonthKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -11,7 +12,7 @@ import kotlinx.coroutines.withContext
 class BudgetRepository(private val budgetDao: BudgetDao) {
 
     fun observeWithProgress(monthKey: Int): Flow<List<BudgetWithProgress>> =
-        budgetDao.observeBudgetsWithProgress(monthKey)
+        budgetDao.observeBudgetsWithProgress(monthKey, MonthKey.minus(monthKey, 1))
 
     suspend fun findByCategory(categoryId: Long): BudgetEntity? =
         withContext(Dispatchers.IO) { budgetDao.findByCategory(categoryId) }

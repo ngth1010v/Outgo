@@ -17,11 +17,16 @@ interface AccountDao {
             SELECT SUM(t.amount) FROM trade t
              WHERE t.month_key = :monthKey
                AND ((t.account_id = a.id AND t.type = 1) OR (t.to_account_id = a.id AND t.type = 4))
-        ), 0) AS monthlyIncome
+        ), 0) AS monthlyIncome,
+        COALESCE((
+            SELECT SUM(t.amount) FROM trade t
+             WHERE t.month_key = :prevMonthKey
+               AND ((t.account_id = a.id AND t.type = 1) OR (t.to_account_id = a.id AND t.type = 4))
+        ), 0) AS prevMonthlyIncome
         FROM account a WHERE a.archived = 0 ORDER BY a.sort_order, a.id
         """,
     )
-    fun observeActiveWithProgress(monthKey: Int): Flow<List<AccountWithProgress>>
+    fun observeActiveWithProgress(monthKey: Int, prevMonthKey: Int): Flow<List<AccountWithProgress>>
     @Insert
     suspend fun insert(account: AccountEntity): Long
 

@@ -39,6 +39,10 @@ interface BudgetDao {
                    SELECT SUM(s.total) FROM category_month_stat s JOIN category c ON c.id = s.category_id
                    WHERE s.month_key = :monthKey AND (c.id = b.category_id OR c.parent_id = b.category_id)
                ), 0) AS spent,
+               COALESCE((
+                   SELECT SUM(s.total) FROM category_month_stat s JOIN category c ON c.id = s.category_id
+                   WHERE s.month_key = :prevMonthKey AND (c.id = b.category_id OR c.parent_id = b.category_id)
+               ), 0) AS prevSpent,
                cat.name AS categoryName,
                cat.icon_id AS categoryIconId,
                cat.color AS categoryColor
@@ -48,7 +52,7 @@ interface BudgetDao {
         ORDER BY b.sort_order, b.id
         """,
     )
-    fun observeBudgetsWithProgress(monthKey: Int): Flow<List<BudgetWithProgress>>
+    fun observeBudgetsWithProgress(monthKey: Int, prevMonthKey: Int): Flow<List<BudgetWithProgress>>
 
     @Query("SELECT COALESCE(MAX(sort_order), -1) FROM budget WHERE kind = :kind")
     suspend fun maxSortOrder(kind: Int): Int

@@ -6,6 +6,7 @@ import app.outgo.data.db.dao.AccountDao
 import app.outgo.data.db.dao.AccountWithProgress
 import app.outgo.data.db.entity.AccountEntity
 import app.outgo.domain.AccountType
+import app.outgo.util.MonthKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -22,7 +23,7 @@ class AccountRepository(
     private val tradeRepository: TradeRepository,
 ) {
     fun observeActive(): Flow<List<AccountEntity>> = accountDao.observeActive()
-    fun observeActiveWithProgress(monthKey: Int): Flow<List<AccountWithProgress>> = accountDao.observeActiveWithProgress(monthKey)
+    fun observeActiveWithProgress(monthKey: Int): Flow<List<AccountWithProgress>> = accountDao.observeActiveWithProgress(monthKey, MonthKey.minus(monthKey, 1))
     fun observeAll(): Flow<List<AccountEntity>> = accountDao.observeAll()
 
     suspend fun findById(id: Long): AccountEntity? = withContext(Dispatchers.IO) { accountDao.findById(id) }

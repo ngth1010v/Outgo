@@ -7,6 +7,7 @@ import app.outgo.data.db.entity.AccountEntity
 data class AccountWithProgress(
     @Embedded val account: AccountEntity,
     val monthlyIncome: Long,
+    val prevMonthlyIncome: Long,
 )
 
 /** One (month, parent category) bar segment for the Home stacked chart. */
@@ -30,6 +31,7 @@ data class BudgetWithProgress(
     val limitAmount: Long?,
     val sortOrder: Int,
     val spent: Long,
+    val prevSpent: Long,
     val categoryName: String?,
     val categoryIconId: Long?,
     val categoryColor: Int?,
