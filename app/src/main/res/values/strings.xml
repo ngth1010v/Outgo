@@ -152,4 +152,7 @@
     <string name="validation_amount_required">Enter an amount</string>
     <string name="validation_category_required">Choose a category</string>
     <string name="validation_account_required">Choose an account</string>
+    <string name="unit_thousand">K</string>
+    <string name="unit_million">M</string>
+    <string name="unit_billion">B</string>
 </resources>

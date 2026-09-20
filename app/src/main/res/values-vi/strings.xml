@@ -139,4 +139,7 @@
     <string name="validation_amount_required">Nhập số tiền</string>
     <string name="validation_category_required">Chọn danh mục</string>
     <string name="validation_account_required">Chọn tài khoản</string>
+    <string name="unit_thousand">K</string>
+    <string name="unit_million">Tr</string>
+    <string name="unit_billion">T</string>
 </resources>

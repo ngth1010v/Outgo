@@ -75,10 +75,13 @@ fun AnalysisScreen(onOpenSub: (AnalysisKind) -> Unit) {
                         showMonthLabels = true,
                         showLegend = false,
                         chartHeight = null,
-                        modifier = Modifier.weight(0.3f).fillMaxHeight(),
+                        showYAxis = true,
+                        // Wider than the 0.3/0.7 split elsewhere: the axis gutter takes its width
+                        // from the chart's own share plus half as much again from the stats column.
+                        modifier = Modifier.weight(0.36f).fillMaxHeight(),
                     )
-                    Spacer(Modifier.width(16.dp))
-                    Column(modifier = Modifier.weight(0.7f), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                    Spacer(Modifier.width(8.dp))
+                    Column(modifier = Modifier.weight(0.64f), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                         CategoryStatSection(
                             title = stringResource(R.string.analysis_most_income),
                             stats = state.topIncome,

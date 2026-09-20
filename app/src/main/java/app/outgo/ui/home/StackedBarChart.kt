@@ -19,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -44,6 +45,8 @@ fun StackedDivergingBarChart(
     showLegend: Boolean = true,
     /** Fixed chart height, or null to fill whatever vertical space the parent gives it (e.g. a Row sized by IntrinsicSize.Min). */
     chartHeight: androidx.compose.ui.unit.Dp? = 160.dp,
+    /** Draws a compact value axis in a left gutter, eating [YAxisWidth] of the chart's width. */
+    showYAxis: Boolean = false,
 ) {
     val byMonth = remember(totals, months) { totals.groupBy { it.monthKey } }
 
@@ -62,6 +65,16 @@ fun StackedDivergingBarChart(
     }
 
     val onSurfaceVariant = MaterialTheme.colorScheme.outlineVariant
+    val axisColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val axisStyle = MaterialTheme.typography.labelSmall
+    val textMeasurer = androidx.compose.ui.text.rememberTextMeasurer()
+    val units = Triple(
+        stringResource(R.string.unit_thousand),
+        stringResource(R.string.unit_million),
+        stringResource(R.string.unit_billion),
+    )
+    // Both halves share one pixels-per-unit scale, so one step keeps every gap the same height.
+    val axisStep = remember(maxIncome, maxExpense) { niceStep(maxOf(maxIncome, maxExpense), 3) }
 
     Column(modifier = modifier.fillMaxWidth()) {
         val chartAreaModifier = if (chartHeight != null) Modifier.height(chartHeight) else Modifier.weight(1f)
@@ -80,7 +93,9 @@ fun StackedDivergingBarChart(
             }
         } else {
             Canvas(modifier = Modifier.fillMaxWidth().then(chartAreaModifier).padding(horizontal = 4.dp)) {
-                val barWidthTotal = size.width / months.size
+                val axisWidth = if (showYAxis) YAxisWidth.toPx() else 0f
+                val plotWidth = size.width - axisWidth
+                val barWidthTotal = plotWidth / months.size
                 val barPad = barWidthTotal * 0.18f
                 val total = (maxIncome + maxExpense).coerceAtLeast(1)
                 val baselineY = size.height * (maxIncome.toFloat() / total.toFloat())
@@ -92,9 +107,28 @@ fun StackedDivergingBarChart(
                 drawLine(
                     color = onSurfaceVariant,
                     start = Offset(0f, baselineY),
-                    end = Offset(size.width, baselineY),
+                    end = Offset(plotWidth, baselineY),
                     strokeWidth = 1.5f,
                 )
+
+                if (showYAxis && axisStep > 0) {
+                    val ticks = ticksUpTo(maxIncome, axisStep).map { it to baselineY - it * pxPerUnitAbove } +
+                        ticksUpTo(maxExpense, axisStep).map { it to baselineY + it * pxPerUnitBelow }
+                    for ((value, y) in ticks) {
+                        val layout = textMeasurer.measure(compactAmount(value, units), axisStyle)
+                        drawText(
+                            textLayoutResult = layout,
+                            color = axisColor,
+                            topLeft = Offset(plotWidth + 4.dp.toPx(), y - layout.size.height / 2f),
+                        )
+                        drawLine(
+                            color = onSurfaceVariant,
+                            start = Offset(0f, y),
+                            end = Offset(plotWidth, y),
+                            strokeWidth = 1f,
+                        )
+                    }
+                }
 
                 months.forEachIndexed { index, month ->
                     val colStart = index * barWidthTotal + barPad
@@ -132,7 +166,7 @@ fun StackedDivergingBarChart(
 
         if (showMonthLabels) {
             val monthAbbrev = stringArrayResource(R.array.month_abbrev)
-            Row(modifier = Modifier.fillMaxWidth()) {
+            Row(modifier = Modifier.fillMaxWidth().padding(end = if (showYAxis) YAxisWidth else 0.dp)) {
                 months.forEach { month ->
                     Text(
                         monthAbbrev.getOrElse((month % 100) - 1) { MonthKey.label(month) },
@@ -173,4 +207,45 @@ fun StackedDivergingBarChart(
             }
         }
     }
+}
+
+/** Width of the value-axis gutter on the chart's right: five labelSmall characters plus a 4dp gap. */
+private val YAxisWidth = 34.dp
+
+/** step, 2*step, ... up to [max]. The zero tick sits on the shared baseline and is skipped. */
+private fun ticksUpTo(max: Long, step: Long): List<Long> =
+    generateSequence(step) { it + step }.takeWhile { it <= max }.toList()
+
+/** Smallest of 1/2/2.5/5 x 10^k that keeps [max] within [maxTicks] ticks, or 0 when there is no data. */
+private fun niceStep(max: Long, maxTicks: Int): Long {
+    if (max <= 0) return 0
+    val raw = max.toDouble() / maxTicks
+    val magnitude = Math.pow(10.0, Math.floor(Math.log10(raw)))
+    val normalized = raw / magnitude
+    val multiplier = when {
+        normalized <= 1.0 -> 1.0
+        normalized <= 2.0 -> 2.0
+        normalized <= 2.5 -> 2.5
+        normalized <= 5.0 -> 5.0
+        else -> 10.0
+    }
+    return Math.round(multiplier * magnitude).coerceAtLeast(1L)
+}
+
+/** "950", "2.5M", "12M" — never more than 5 characters, always a '.' decimal point, no currency. */
+private fun compactAmount(value: Long, units: Triple<String, String, String>): String {
+    val (divisor, suffix) = when {
+        value >= 1_000_000_000L -> 1_000_000_000.0 to units.third
+        value >= 1_000_000L -> 1_000_000.0 to units.second
+        value >= 1_000L -> 1_000.0 to units.first
+        else -> 1.0 to ""
+    }
+    val scaled = value / divisor
+    // One decimal only while it still fits: "2.5M" is fine, "12.5M" would round to "13M".
+    val number = if (scaled < 10.0 && scaled % 1.0 != 0.0) {
+        String.format(java.util.Locale.US, "%.1f", scaled)
+    } else {
+        Math.round(scaled).toString()
+    }
+    return number + suffix
 }
