@@ -66,12 +66,23 @@ internal fun LazyListScope.historyItems(
     state: HistoryUiState,
     onOpenTrade: (Long) -> Unit,
 ) {
-    items(items, key = { item ->
-        when (item) {
-            is HistoryListItem.Header -> "h_${item.dayLabel}"
-            is HistoryListItem.Row -> "r_${item.trade.id}"
-        }
-    }) { item ->
+    items(
+        items = items,
+        key = { item ->
+            when (item) {
+                is HistoryListItem.Header -> "h_${item.dayLabel}"
+                is HistoryListItem.Row -> "r_${item.trade.id}"
+            }
+        },
+        // Without this every item is its own type, so Compose cannot reuse a scrolled-off row's
+        // composition for the row scrolling in and rebuilds each one from scratch.
+        contentType = { item ->
+            when (item) {
+                is HistoryListItem.Header -> "history_header"
+                is HistoryListItem.Row -> "history_row"
+            }
+        },
+    ) { item ->
         when (item) {
             is HistoryListItem.Header -> Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp),
