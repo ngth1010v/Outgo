@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.CompositionLocalProvider
+import app.outgo.data.backup.BackupManager
 import app.outgo.ui.LocalAppContainer
 import app.outgo.ui.nav.OutgoRoot
 import app.outgo.ui.theme.OutgoTheme
@@ -24,11 +25,14 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         val container = (application as OutgoApp).container
+        // Only on a fresh launch, so rotating later doesn't yank the user back to Setting.
+        val openSetting = savedInstanceState == null &&
+            intent.getBooleanExtra(BackupManager.EXTRA_RESTORED, false)
 
         setContent {
             CompositionLocalProvider(LocalAppContainer provides container) {
                 OutgoTheme {
-                    OutgoRoot()
+                    OutgoRoot(openSetting = openSetting)
                 }
             }
         }

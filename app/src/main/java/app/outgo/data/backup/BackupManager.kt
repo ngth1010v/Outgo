@@ -1,8 +1,7 @@
 package app.outgo.data.backup
 
-import android.app.AlarmManager
-import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import app.outgo.data.db.OutgoDatabase
@@ -119,16 +118,19 @@ class BackupManager(
         "VACUUM INTO '${target.path.replace("'", "''")}'"
 
     private fun restartProcess() {
-        val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-        val pending = PendingIntent.getActivity(
-            context,
-            0,
-            launchIntent,
-            PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        alarmManager.set(AlarmManager.RTC, System.currentTimeMillis() + 300, pending)
+        // Start the new task directly while we're still in the foreground: an alarm-fired
+        // PendingIntent is inexact and blocked by background-activity-launch rules on newer
+        // Android, which left the user on the launcher after a restore.
+        val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)!!
+        val restartIntent = Intent.makeRestartActivityTask(launchIntent.component)
+            .putExtra(EXTRA_RESTORED, true)
+        context.startActivity(restartIntent)
         Runtime.getRuntime().exit(0)
+    }
+
+    companion object {
+        /** Set on the relaunch intent after a restore so MainActivity reopens the Setting screen. */
+        const val EXTRA_RESTORED = "app.outgo.extra.RESTORED"
     }
 }
 

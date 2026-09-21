@@ -8,9 +8,11 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.IntOffset
 import androidx.navigation.NavBackStackEntry
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -28,8 +30,18 @@ import app.outgo.ui.setting.SettingScreen
 import app.outgo.ui.trade.TradeScreen
 
 @Composable
-fun OutgoRoot() {
+fun OutgoRoot(openSetting: Boolean = false) {
     val navController = rememberNavController()
+    if (openSetting) {
+        // Relaunched after a backup restore: land back on Setting, keeping Trade as the start
+        // destination underneath (same back stack the bottom bar would build).
+        LaunchedEffect(Unit) {
+            navController.navigate(Routes.SETTING) {
+                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                launchSingleTop = true
+            }
+        }
+    }
 
     Scaffold(bottomBar = { OutgoBottomBar(navController) }) { padding ->
         NavHost(
