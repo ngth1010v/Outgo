@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -31,7 +32,8 @@ import app.outgo.ui.analysis.AnalysisScreen
 import app.outgo.ui.analysis.AnalysisSubScreen
 import app.outgo.ui.balance.BalanceScreen
 import app.outgo.ui.category.CategoryScreen
-import app.outgo.ui.component.rememberSwipeOffset
+import app.outgo.ui.component.LocalSwipeParent
+import app.outgo.ui.component.rememberSwipeLevel
 import app.outgo.ui.component.swipeShift
 import app.outgo.ui.component.swipeStep
 import app.outgo.ui.history.HistoryScreen
@@ -54,9 +56,6 @@ fun OutgoRoot(openSetting: Boolean = false) {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val onTabs = backStackEntry?.destination?.route.let { it == null || it == Routes.TABS }
     val focusManager = LocalFocusManager.current
-    // Shared by all tabs: after a swipe switch the incoming tab slides in from where the old one left.
-    val swipeOffset = rememberSwipeOffset()
-
     fun selectTab(route: String) {
         focusManager.clearFocus() // a focused field in a hidden tab would keep the keyboard up
         if (route !in composedTabs) composedTabs += route
@@ -65,6 +64,17 @@ fun OutgoRoot(openSetting: Boolean = false) {
     }
 
     BackHandler(enabled = onTabs && tab != Routes.TRADE) { selectTab(Routes.TRADE) }
+
+    val tabIndex = bottomItems.indexOfFirst { it.route == tab }
+    // Wraps around: Home's left neighbor is Setting and the reverse.
+    fun tabAt(page: Int) = bottomItems[(tabIndex + page).mod(bottomItems.size)].route
+    // Shared by all tabs and relative to the current one, whichever tab's box gets the touch.
+    val tabSwipe = rememberSwipeLevel { next, _ -> tabAt(if (next) 1 else -1).let { route -> { selectTab(route) } } }
+    val moving = tabSwipe.moving
+    // A swipe before the prewarm below reached a neighbor composes it now.
+    LaunchedEffect(moving) {
+        if (moving) listOf(tabAt(-1), tabAt(1)).forEach { if (it !in composedTabs) composedTabs += it }
+    }
 
     LaunchedEffect(Unit) {
         delay(PREWARM_DELAY_MS)
@@ -82,12 +92,19 @@ fun OutgoRoot(openSetting: Boolean = false) {
             composedTabs.forEach { route ->
                 key(route) {
                     val shown = onTabs && route == tab
+                    // Neighbors are placed beside the current tab while it is dragged or settling.
+                    val page = when (route) {
+                        tab -> 0
+                        tabAt(-1) -> -1
+                        tabAt(1) -> 1
+                        else -> null
+                    }?.takeIf { it == 0 || moving }
                     Box(
-                        Modifier.fillMaxSize().placedIf(shown).swipeStep(swipeOffset) { next, _ ->
-                            val index = bottomItems.indexOfFirst { it.route == route } + if (next) 1 else -1
-                            bottomItems.getOrNull(index)?.let { item -> { selectTab(item.route) } }
-                        }.swipeShift(swipeOffset),
-                    ) { TabContent(route, shown, navController) }
+                        Modifier.fillMaxSize().placedIf(onTabs && page != null).swipeStep(tabSwipe)
+                            .swipeShift(tabSwipe, page ?: 0),
+                    ) {
+                        CompositionLocalProvider(LocalSwipeParent provides tabSwipe) { TabContent(route, shown, navController) }
+                    }
                 }
             }
 

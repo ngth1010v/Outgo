@@ -28,13 +28,15 @@ data class TradeUiState(
     val selectedToAccountId: Long? = null,
     val occurredAt: Long = System.currentTimeMillis(),
     val note: String = "",
-    val picker: CategoryPicker = CategoryPicker(emptyList(), emptyList()),
+    /** Per [CategoryKind], both loaded so a swipe can draw the other type's picker too. */
+    val pickers: Map<Int, CategoryPicker> = emptyMap(),
     val accounts: List<AccountEntity> = emptyList(),
     val isLoading: Boolean = true,
     val isSaving: Boolean = false,
     val editingTradeId: Long? = null,
 ) {
     val isEditing: Boolean get() = editingTradeId != null
+    val picker: CategoryPicker get() = pickers[type] ?: CategoryPicker(emptyList(), emptyList())
     val isTransfer: Boolean get() = type == TradeType.TRANSFER
     val isValid: Boolean
         get() = amount > 0 && selectedAccountId != null && if (isTransfer) {
@@ -83,7 +85,7 @@ class TradeViewModel(
                 val defaultAccount = accountRepository.defaultAccountId()
                 _state.update { it.copy(selectedAccountId = it.selectedAccountId ?: defaultAccount) }
             }
-            loadPicker(_state.value.type)
+            loadPickers()
             _state.update { it.copy(isLoading = false) }
         }
     }
@@ -108,7 +110,12 @@ class TradeViewModel(
 
     private suspend fun loadPicker(type: Int) {
         val picker = categoryRepository.getPicker(type)
-        _state.update { it.copy(picker = picker) }
+        _state.update { it.copy(pickers = it.pickers + (type to picker)) }
+    }
+
+    private suspend fun loadPickers() {
+        loadPicker(CategoryKind.EXPENSE)
+        loadPicker(CategoryKind.INCOME)
     }
 
     fun onTypeChange(type: Int) {
@@ -215,6 +222,6 @@ class TradeViewModel(
                 type = CategoryKind.EXPENSE,
             )
         }
-        viewModelScope.launch { loadPicker(CategoryKind.EXPENSE) }
+        viewModelScope.launch { loadPickers() }
     }
 }

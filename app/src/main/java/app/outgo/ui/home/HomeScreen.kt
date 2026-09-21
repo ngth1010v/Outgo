@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -37,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -52,13 +54,15 @@ import app.outgo.ui.component.BudgetProgressBlock
 import app.outgo.ui.component.IconView
 import app.outgo.ui.component.budgetRemainingColor
 import app.outgo.ui.component.budgetRemainingText
-import app.outgo.ui.component.rememberSwipeOffset
+import app.outgo.ui.component.rememberSwipeLevel
 import app.outgo.ui.component.savingsProgressColor
 import app.outgo.ui.component.savingsProgressText
 import app.outgo.ui.component.swipeShift
 import app.outgo.ui.component.swipeStep
 import app.outgo.ui.history.HistoryViewModel
 import app.outgo.ui.history.LoadMoreOnScrollEnd
+import app.outgo.ui.history.HistoryListItem
+import app.outgo.ui.history.historyItemKey
 import app.outgo.ui.history.historyItems
 import app.outgo.ui.nav.HistoryType
 import app.outgo.ui.theme.ExpenseRed
@@ -79,15 +83,19 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
     var historyType by rememberSaveable { mutableStateOf(HistoryType.EXPENSE) }
-    // One ViewModel per tab, keyed so switching tabs keeps each tab's already-loaded pages.
-    val historyViewModel: HistoryViewModel = viewModel(
-        key = "home-history-${historyType.arg}",
-        factory = viewModelFactory {
-            initializer {
-                HistoryViewModel(container.tradeRepository, container.accountRepository, container.categoryRepository, historyType)
-            }
-        },
-    )
+    // One ViewModel per tab, keyed so switching tabs keeps each tab's already-loaded pages. All
+    // three exist and load, so a history swipe draws the neighbor tab's rows at once.
+    val historyViewModels = HistoryType.entries.associateWith { type ->
+        viewModel<HistoryViewModel>(
+            key = "home-history-${type.arg}",
+            factory = viewModelFactory {
+                initializer {
+                    HistoryViewModel(container.tradeRepository, container.accountRepository, container.categoryRepository, type)
+                }
+            },
+        )
+    }
+    val historyViewModel = historyViewModels.getValue(historyType)
     // Collected only to recompose on change; the value is read from the flow itself because
     // collectAsState's holder outlives a ViewModel swap and would show the previous tab's rows
     // for a frame after a switch.
@@ -95,12 +103,10 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
     val historyState = historyViewModel.state.value
     // The list is a one-shot fetch, not a Flow: re-read it whenever Home is shown again (it
     // stays composed while hidden), e.g. after adding or editing a trade.
-    LaunchedEffect(historyViewModel, visible) { historyViewModel.refresh() }
+    historyViewModels.values.forEach { vm -> LaunchedEffect(vm, visible) { vm.refresh() } }
     val historyRows = historyState.items
 
     val listState = rememberLazyListState()
-    // Moves only the history rows: the header and its type tabs stay put, like tabs over a pager.
-    val historySwipe = rememberSwipeOffset()
     LoadMoreOnScrollEnd(listState, historyState.canLoadMore, historyViewModel::loadMore)
 
     // Switching history tabs swaps the rows instantly. A shorter new tab would shrink the list
@@ -112,6 +118,14 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
         if (type == historyType) return
         historyType = type
         holdScroll = true
+    }
+    // Moves only the history rows: the header and its type tabs stay put, like tabs over a pager.
+    val historySwipe = rememberSwipeLevel { next, down ->
+        // Only in the history section (its header and below): Expense <-> Income <-> Transfer.
+        // Above it, or past either end, the tab level takes the swipe.
+        if (!listState.isInHistory(down)) return@rememberSwipeLevel null
+        val type = HistoryType.entries.getOrNull(historyType.ordinal + if (next) 1 else -1)
+        type?.let { { switchHistory(it) } }
     }
     // Restarts on every switch (new ViewModel) and once a first-time tab finishes loading, so it
     // only measures the new tab's real rows. Measuring earlier would aim at the wrong place.
@@ -142,15 +156,9 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
         Box(Modifier.fillMaxSize().padding(padding)) {
             LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize().swipeStep(historySwipe) { next, down ->
-                    // Only in the history section (its header and below): Expense <-> Income <->
-                    // Transfer. Above it, or past either end, the tab switches instead.
-                    if (!listState.isInHistory(down)) return@swipeStep null
-                    val type = HistoryType.entries.getOrNull(historyType.ordinal + if (next) 1 else -1)
-                    type?.let { { switchHistory(it) } }
-                }.padding(horizontal = 16.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 48.dp, bottom = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxSize().swipeStep(historySwipe).padding(horizontal = 16.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(top = HISTORY_TOP_PADDING, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(HISTORY_SPACING),
             ) {
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(4.3.dp), modifier = Modifier.padding(bottom = 10.dp)) {
@@ -241,6 +249,23 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
                     item(key = HOLD_SCROLL_KEY) { Spacer(Modifier.height(HOLD_SCROLL_HEIGHT)) }
                 }
             }
+            // The neighbor tabs' rows, lined up with the current ones.
+            if (historySwipe.moving) {
+                listOf(-1, 1).forEach { page ->
+                    HistoryType.entries.getOrNull(historyType.ordinal + page)?.let { type ->
+                        key(type) {
+                            NeighborHistory(
+                                viewModel = historyViewModels.getValue(type),
+                                listState = listState,
+                                currentRows = historyRows,
+                                currentKeyPrefix = historyKeyPrefix,
+                                onOpenTrade = onOpenTrade,
+                                modifier = Modifier.swipeShift(historySwipe, page),
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -259,6 +284,60 @@ private fun LazyListState.isInHistory(down: Offset): Boolean {
         ?: return info.visibleItemsInfo.firstOrNull()?.key is String
     return down.y >= header.offset - info.viewportStartOffset
 }
+
+/**
+ * Another history tab's rows over Home's list, where a switch to it would put them: under the
+ * header while it shows, else at the current rows' scroll position (which the switch keeps).
+ */
+@Composable
+private fun NeighborHistory(
+    viewModel: HistoryViewModel,
+    listState: LazyListState,
+    currentRows: List<HistoryListItem>,
+    currentKeyPrefix: String,
+    onOpenTrade: (Long) -> Unit,
+    modifier: Modifier,
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val density = LocalDensity.current
+    // Read once: the list does not scroll during a horizontal swipe.
+    val (topPadding, rowsState) = remember {
+        val info = listState.layoutInfo
+        val header = info.visibleItemsInfo.firstOrNull { it.key == HISTORY_HEADER_KEY }
+        if (header != null) {
+            val top = with(density) { (header.offset + header.size - info.viewportStartOffset).toDp() } + HISTORY_SPACING
+            top to LazyListState()
+        } else {
+            val firstKey = info.visibleItemsInfo.firstOrNull()?.key
+            val index = currentRows.indexOfFirst { currentKeyPrefix + historyItemKey(it) == firstKey }.coerceAtLeast(0)
+            HISTORY_TOP_PADDING to LazyListState(index, listState.firstVisibleItemScrollOffset)
+        }
+    }
+    LazyColumn(
+        state = rowsState,
+        userScrollEnabled = false,
+        modifier = modifier.fillMaxSize().padding(horizontal = 16.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(top = topPadding, bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(HISTORY_SPACING),
+    ) {
+        if (state.items.isEmpty()) {
+            if (!state.isLoading) {
+                item {
+                    Text(
+                        stringResource(R.string.history_empty),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        } else {
+            historyItems(state.items, state.categoriesById, state.accountsById, onOpenTrade)
+        }
+    }
+}
+
+private val HISTORY_TOP_PADDING = 48.dp
+private val HISTORY_SPACING = 10.dp
 
 /** Duration of the ease back up over the hold-scroll filler after a history tab switch. */
 private const val HOLD_SCROLL_MS = 500

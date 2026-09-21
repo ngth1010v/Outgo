@@ -67,7 +67,8 @@ import app.outgo.ui.LocalAppContainer
 import app.outgo.ui.component.AmountField
 import app.outgo.ui.component.ConfirmDialog
 import app.outgo.ui.component.IconView
-import app.outgo.ui.component.rememberSwipeOffset
+import app.outgo.ui.component.rememberSwipeLevel
+import app.outgo.ui.component.swipeNeighbor
 import app.outgo.ui.component.swipeShift
 import app.outgo.ui.component.swipeStep
 import app.outgo.util.formatDate
@@ -93,7 +94,11 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit) {
     val scope = rememberCoroutineScope()
     var showAllCategories by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
-    val swipeOffset = rememberSwipeOffset()
+    // Expense <-> Income <-> Transfer; past either end the tab level takes the swipe.
+    val typeSwipe = rememberSwipeLevel { next, _ ->
+        val type = TRADE_TYPES.getOrNull(TRADE_TYPES.indexOf(state.type) + if (next) 1 else -1)
+        if (state.isEditing || type == null) null else { { viewModel.onTypeChange(type) } }
+    }
     val savedLabel = stringResource(R.string.trade_saved)
     val undoLabel = stringResource(R.string.trade_undo)
 
@@ -116,108 +121,35 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .swipeStep(swipeOffset) { next, _ ->
-                    // Expense <-> Income <-> Transfer; past either end the tab switches instead.
-                    val order = listOf(CategoryKind.EXPENSE, CategoryKind.INCOME, TradeType.TRANSFER)
-                    val type = order.getOrNull(order.indexOf(state.type) + if (next) 1 else -1)
-                    if (state.isEditing || type == null) null else { { viewModel.onTypeChange(type) } }
-                }
+                .swipeStep(typeSwipe)
                 .padding(padding)
                 .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(start = 16.dp, top = 36.dp, end = 16.dp, bottom = 16.dp),
         ) {
             ExpenseIncomeToggle(type = state.type, onTypeChange = viewModel::onTypeChange, enabled = !state.isEditing)
-            Column(Modifier.swipeShift(swipeOffset)) {
-                Spacer(Modifier.height(16.dp))
-
-                AmountField(
-                    amount = state.amount,
-                    onAmountChange = viewModel::onAmountChange,
-                    isIncome = state.type == CategoryKind.INCOME,
-                    isTransfer = state.isTransfer,
-                    modifier = Modifier.padding(vertical = 8.dp),
+            Box {
+                @Composable
+                fun form(shown: TradeUiState, modifier: Modifier) = TradeForm(
+                    state = shown,
+                    viewModel = viewModel,
+                    onSeeAll = { showAllCategories = true },
+                    onClose = onClose,
+                    onDelete = { showDeleteConfirm = true },
+                    modifier = modifier,
                 )
-
-                if (!state.isTransfer) {
-                    SelectedCategoryChip(state.selectedParentCategory, state.selectedCategory)
-                    Spacer(Modifier.height(8.dp))
-
-                    CategoryPickerSection(
-                        title = stringResource(R.string.trade_recent),
-                        categories = state.picker.recent,
-                        selectedId = state.selectedCategory?.id,
-                        onSelect = viewModel::onCategorySelected,
-                        onSeeAll = { showAllCategories = true },
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    CategoryPickerSection(
-                        title = stringResource(R.string.trade_top_used),
-                        categories = state.picker.top,
-                        selectedId = state.selectedCategory?.id,
-                        onSelect = viewModel::onCategorySelected,
-                    )
-                    Spacer(Modifier.height(16.dp))
-                }
-
-                AccountDropdown(
-                    label = if (state.isTransfer) stringResource(R.string.trade_from_account_label) else stringResource(R.string.trade_account_label),
-                    accounts = state.accounts,
-                    selectedAccount = state.selectedAccount,
-                    onSelect = { viewModel.onAccountSelected(it.id) },
-                )
-                Spacer(Modifier.height(16.dp))
-
-                if (state.isTransfer) {
-                    AccountDropdown(
-                        label = stringResource(R.string.trade_to_account_label),
-                        accounts = state.accounts,
-                        selectedAccount = state.selectedToAccount,
-                        onSelect = { viewModel.onToAccountSelected(it.id) },
-                    )
-                    Spacer(Modifier.height(16.dp))
-                }
-
-                DateTimeRow(
-                    occurredAt = state.occurredAt,
-                    onDateChange = viewModel::onDateChange,
-                    onTimeChange = viewModel::onTimeChange,
-                )
-                Spacer(Modifier.height(16.dp))
-
-                OutlinedTextField(
-                    value = state.note,
-                    onValueChange = viewModel::onNoteChange,
-                    label = { Text(stringResource(R.string.trade_note_hint)) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(16.dp))
-
-                if (state.isEditing) {
-                    TextButton(onClick = onClose, modifier = Modifier.fillMaxWidth()) {
-                        Text(stringResource(R.string.common_cancel))
+                form(state, Modifier.swipeShift(typeSwipe))
+                // The neighbor types' forms, as the type switch would show them.
+                if (typeSwipe.moving) {
+                    listOf(-1, 1).forEach { page ->
+                        TRADE_TYPES.getOrNull(TRADE_TYPES.indexOf(state.type) + page)?.let { type ->
+                            form(
+                                state.copy(type = type, selectedCategory = null, selectedParentCategory = null),
+                                Modifier.swipeNeighbor().swipeShift(typeSwipe, page),
+                            )
+                        }
                     }
-                    TextButton(
-                        onClick = { showDeleteConfirm = true },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, MaterialTheme.colorScheme.error, RoundedCornerShape(20.dp)),
-                    ) {
-                        Icon(painterResource(R.drawable.ph_trash), contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                        Text("  " + stringResource(R.string.common_delete), color = MaterialTheme.colorScheme.error)
-                    }
-                    Spacer(Modifier.height(16.dp))
                 }
-            }
-
-            androidx.compose.material3.Button(
-                onClick = viewModel::save,
-                enabled = state.isValid && !state.isSaving,
-                modifier = Modifier.swipeShift(swipeOffset).fillMaxWidth().height(52.dp),
-            ) {
-                Text(stringResource(R.string.trade_save), fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -243,6 +175,111 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit) {
             },
             onDismiss = { showDeleteConfirm = false },
         )
+    }
+}
+
+private val TRADE_TYPES = listOf(CategoryKind.EXPENSE, CategoryKind.INCOME, TradeType.TRANSFER)
+
+/** Everything below the type toggle; drawn once per type while a type swipe moves. */
+@Composable
+private fun TradeForm(
+    state: TradeUiState,
+    viewModel: TradeViewModel,
+    onSeeAll: () -> Unit,
+    onClose: () -> Unit,
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier) {
+        Spacer(Modifier.height(16.dp))
+
+        AmountField(
+            amount = state.amount,
+            onAmountChange = viewModel::onAmountChange,
+            isIncome = state.type == CategoryKind.INCOME,
+            isTransfer = state.isTransfer,
+            modifier = Modifier.padding(vertical = 8.dp),
+        )
+
+        if (!state.isTransfer) {
+            SelectedCategoryChip(state.selectedParentCategory, state.selectedCategory)
+            Spacer(Modifier.height(8.dp))
+
+            CategoryPickerSection(
+                title = stringResource(R.string.trade_recent),
+                categories = state.picker.recent,
+                selectedId = state.selectedCategory?.id,
+                onSelect = viewModel::onCategorySelected,
+                onSeeAll = onSeeAll,
+            )
+            Spacer(Modifier.height(16.dp))
+            CategoryPickerSection(
+                title = stringResource(R.string.trade_top_used),
+                categories = state.picker.top,
+                selectedId = state.selectedCategory?.id,
+                onSelect = viewModel::onCategorySelected,
+            )
+            Spacer(Modifier.height(16.dp))
+        }
+
+        AccountDropdown(
+            label = if (state.isTransfer) stringResource(R.string.trade_from_account_label) else stringResource(R.string.trade_account_label),
+            accounts = state.accounts,
+            selectedAccount = state.selectedAccount,
+            onSelect = { viewModel.onAccountSelected(it.id) },
+        )
+        Spacer(Modifier.height(16.dp))
+
+        if (state.isTransfer) {
+            AccountDropdown(
+                label = stringResource(R.string.trade_to_account_label),
+                accounts = state.accounts,
+                selectedAccount = state.selectedToAccount,
+                onSelect = { viewModel.onToAccountSelected(it.id) },
+            )
+            Spacer(Modifier.height(16.dp))
+        }
+
+        DateTimeRow(
+            occurredAt = state.occurredAt,
+            onDateChange = viewModel::onDateChange,
+            onTimeChange = viewModel::onTimeChange,
+        )
+        Spacer(Modifier.height(16.dp))
+
+        OutlinedTextField(
+            value = state.note,
+            onValueChange = viewModel::onNoteChange,
+            label = { Text(stringResource(R.string.trade_note_hint)) },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(16.dp))
+
+        if (state.isEditing) {
+            TextButton(onClick = onClose, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.common_cancel))
+            }
+            TextButton(
+                onClick = onDelete,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, MaterialTheme.colorScheme.error, RoundedCornerShape(20.dp)),
+            ) {
+                Icon(painterResource(R.drawable.ph_trash), contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                Text("  " + stringResource(R.string.common_delete), color = MaterialTheme.colorScheme.error)
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+
+        androidx.compose.material3.Button(
+            onClick = viewModel::save,
+            enabled = state.isValid && !state.isSaving,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+        ) {
+            Text(stringResource(R.string.trade_save), fontWeight = FontWeight.Bold)
+        }
     }
 }
 

@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,6 +16,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -62,7 +65,7 @@ import app.outgo.ui.component.IconView
 import app.outgo.ui.component.PlusRow
 import app.outgo.ui.component.budgetRemainingColor
 import app.outgo.ui.component.budgetRemainingText
-import app.outgo.ui.component.rememberSwipeOffset
+import app.outgo.ui.component.rememberSwipeLevel
 import app.outgo.ui.component.swipeShift
 import app.outgo.ui.component.swipeStep
 import app.outgo.util.Money
@@ -83,15 +86,16 @@ fun CategoryScreen() {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var expanded by remember { mutableStateOf(setOf<Long>()) }
     var editTarget by remember { mutableStateOf<EditTarget?>(null) }
-    val swipeOffset = rememberSwipeOffset()
+    // Expense <-> Income; past either end the tab level takes the swipe.
+    val typeSwipe = rememberSwipeLevel { next, _ ->
+        val type = if (next) CategoryKind.INCOME else CategoryKind.EXPENSE
+        if (type == state.type) null else { { viewModel.setType(type) } }
+    }
+    val listState = rememberLazyListState()
 
     Scaffold(topBar = { CenterAlignedTopAppBar(title = { Text(stringResource(R.string.nav_category)) }) }) { padding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).swipeStep(swipeOffset) { next, _ ->
-                // Expense <-> Income; past either end the tab switches instead.
-                val type = if (next) CategoryKind.INCOME else CategoryKind.EXPENSE
-                if (type == state.type) null else { { viewModel.setType(type) } }
-            },
+            modifier = Modifier.fillMaxSize().padding(padding).swipeStep(typeSwipe),
         ) {
             SingleChoiceSegmentedButtonRow(
                 modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 4.dp, end = 16.dp, bottom = 16.dp),
@@ -108,50 +112,23 @@ fun CategoryScreen() {
                 ) { Text(stringResource(R.string.category_income_tab)) }
             }
 
-            LazyColumn(
-                modifier = Modifier.swipeShift(swipeOffset).fillMaxWidth().padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(state.parents, key = { it.id }) { parent ->
-                    val isExpanded = expanded.contains(parent.id)
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        CategoryRow(
-                            category = parent,
-                            budget = state.budgetsByCategory[parent.id],
-                            onRowClick = { editTarget = EditTarget.Edit(parent) },
-                            trailing = {
-                                Icon(
-                                    painter = painterResource(if (isExpanded) R.drawable.ph_caret_down else R.drawable.ph_caret_right),
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .clickable { expanded = if (isExpanded) expanded - parent.id else expanded + parent.id }
-                                        .padding(8.dp),
-                                )
-                            },
-                        )
-                        if (isExpanded) {
-                            state.childrenByParent[parent.id].orEmpty().forEach { child ->
-                                CategoryRow(
-                                    category = child,
-                                    budget = state.budgetsByCategory[child.id],
-                                    onRowClick = { editTarget = EditTarget.Edit(child) },
-                                    modifier = Modifier.padding(start = 20.dp),
-                                )
-                            }
-                            PlusRow(
-                                onClick = { editTarget = EditTarget.NewChild(parent.id, parent.color) },
-                                modifier = Modifier
-                                    .padding(start = 20.dp)
-                                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
-                            )
-                        }
-                    }
-                }
-                item {
-                    PlusRow(
-                        onClick = { editTarget = EditTarget.NewParent },
-                        modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
-                    )
+            Box(Modifier.weight(1f)) {
+                @Composable
+                fun list(shown: CategoryUiState, shownListState: LazyListState, modifier: Modifier) = CategoryList(
+                    state = shown,
+                    listState = shownListState,
+                    expanded = expanded,
+                    onToggle = { id -> expanded = if (id in expanded) expanded - id else expanded + id },
+                    onEdit = { editTarget = it },
+                    modifier = modifier,
+                )
+                list(state, listState, Modifier.swipeShift(typeSwipe))
+                val other = state.other
+                if (typeSwipe.moving && other != null) {
+                    // At the scroll position the type switch would keep.
+                    val otherListState = rememberLazyListState(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset)
+                    val page = if (other.type == CategoryKind.INCOME) 1 else -1
+                    list(other, otherListState, Modifier.swipeShift(typeSwipe, page))
                 }
             }
         }
@@ -164,6 +141,65 @@ fun CategoryScreen() {
             viewModel = viewModel,
             onDismiss = { editTarget = null },
         )
+    }
+}
+
+/** One type's categories; drawn for both types while a type swipe moves. */
+@Composable
+private fun CategoryList(
+    state: CategoryUiState,
+    listState: LazyListState,
+    expanded: Set<Long>,
+    onToggle: (Long) -> Unit,
+    onEdit: (EditTarget) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        state = listState,
+        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        items(state.parents, key = { it.id }) { parent ->
+            val isExpanded = parent.id in expanded
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                CategoryRow(
+                    category = parent,
+                    budget = state.budgetsByCategory[parent.id],
+                    onRowClick = { onEdit(EditTarget.Edit(parent)) },
+                    trailing = {
+                        Icon(
+                            painter = painterResource(if (isExpanded) R.drawable.ph_caret_down else R.drawable.ph_caret_right),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .clickable { onToggle(parent.id) }
+                                .padding(8.dp),
+                        )
+                    },
+                )
+                if (isExpanded) {
+                    state.childrenByParent[parent.id].orEmpty().forEach { child ->
+                        CategoryRow(
+                            category = child,
+                            budget = state.budgetsByCategory[child.id],
+                            onRowClick = { onEdit(EditTarget.Edit(child)) },
+                            modifier = Modifier.padding(start = 20.dp),
+                        )
+                    }
+                    PlusRow(
+                        onClick = { onEdit(EditTarget.NewChild(parent.id, parent.color)) },
+                        modifier = Modifier
+                            .padding(start = 20.dp)
+                            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
+                    )
+                }
+            }
+        }
+        item {
+            PlusRow(
+                onClick = { onEdit(EditTarget.NewParent) },
+                modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
+            )
+        }
     }
 }
 
