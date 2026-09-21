@@ -67,6 +67,9 @@ import app.outgo.ui.LocalAppContainer
 import app.outgo.ui.component.AmountField
 import app.outgo.ui.component.ConfirmDialog
 import app.outgo.ui.component.IconView
+import app.outgo.ui.component.rememberSwipeOffset
+import app.outgo.ui.component.swipeShift
+import app.outgo.ui.component.swipeStep
 import app.outgo.util.formatDate
 import app.outgo.util.formatTime
 import kotlinx.coroutines.flow.collectLatest
@@ -90,6 +93,7 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit) {
     val scope = rememberCoroutineScope()
     var showAllCategories by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    val swipeOffset = rememberSwipeOffset()
     val savedLabel = stringResource(R.string.trade_saved)
     val undoLabel = stringResource(R.string.trade_undo)
 
@@ -112,13 +116,19 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .swipeStep(swipeOffset) { next, _ ->
+                    // Expense <-> Income <-> Transfer; past either end the tab switches instead.
+                    val order = listOf(CategoryKind.EXPENSE, CategoryKind.INCOME, TradeType.TRANSFER)
+                    val type = order.getOrNull(order.indexOf(state.type) + if (next) 1 else -1)
+                    if (state.isEditing || type == null) null else { { viewModel.onTypeChange(type) } }
+                }
                 .padding(padding)
                 .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(start = 16.dp, top = 36.dp, end = 16.dp, bottom = 16.dp),
         ) {
             ExpenseIncomeToggle(type = state.type, onTypeChange = viewModel::onTypeChange, enabled = !state.isEditing)
-            Column {
+            Column(Modifier.swipeShift(swipeOffset)) {
                 Spacer(Modifier.height(16.dp))
 
                 AmountField(
@@ -205,7 +215,7 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit) {
             androidx.compose.material3.Button(
                 onClick = viewModel::save,
                 enabled = state.isValid && !state.isSaving,
-                modifier = Modifier.fillMaxWidth().height(52.dp),
+                modifier = Modifier.swipeShift(swipeOffset).fillMaxWidth().height(52.dp),
             ) {
                 Text(stringResource(R.string.trade_save), fontWeight = FontWeight.Bold)
             }

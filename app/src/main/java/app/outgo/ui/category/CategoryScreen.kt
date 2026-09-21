@@ -62,6 +62,9 @@ import app.outgo.ui.component.IconView
 import app.outgo.ui.component.PlusRow
 import app.outgo.ui.component.budgetRemainingColor
 import app.outgo.ui.component.budgetRemainingText
+import app.outgo.ui.component.rememberSwipeOffset
+import app.outgo.ui.component.swipeShift
+import app.outgo.ui.component.swipeStep
 import app.outgo.util.Money
 
 private sealed interface EditTarget {
@@ -80,9 +83,16 @@ fun CategoryScreen() {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var expanded by remember { mutableStateOf(setOf<Long>()) }
     var editTarget by remember { mutableStateOf<EditTarget?>(null) }
+    val swipeOffset = rememberSwipeOffset()
 
     Scaffold(topBar = { CenterAlignedTopAppBar(title = { Text(stringResource(R.string.nav_category)) }) }) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(padding).swipeStep(swipeOffset) { next, _ ->
+                // Expense <-> Income; past either end the tab switches instead.
+                val type = if (next) CategoryKind.INCOME else CategoryKind.EXPENSE
+                if (type == state.type) null else { { viewModel.setType(type) } }
+            },
+        ) {
             SingleChoiceSegmentedButtonRow(
                 modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 4.dp, end = 16.dp, bottom = 16.dp),
             ) {
@@ -99,7 +109,7 @@ fun CategoryScreen() {
             }
 
             LazyColumn(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                modifier = Modifier.swipeShift(swipeOffset).fillMaxWidth().padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(state.parents, key = { it.id }) { parent ->

@@ -31,6 +31,9 @@ import app.outgo.ui.analysis.AnalysisScreen
 import app.outgo.ui.analysis.AnalysisSubScreen
 import app.outgo.ui.balance.BalanceScreen
 import app.outgo.ui.category.CategoryScreen
+import app.outgo.ui.component.rememberSwipeOffset
+import app.outgo.ui.component.swipeShift
+import app.outgo.ui.component.swipeStep
 import app.outgo.ui.history.HistoryScreen
 import app.outgo.ui.home.HomeScreen
 import app.outgo.ui.setting.SettingScreen
@@ -51,6 +54,8 @@ fun OutgoRoot(openSetting: Boolean = false) {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val onTabs = backStackEntry?.destination?.route.let { it == null || it == Routes.TABS }
     val focusManager = LocalFocusManager.current
+    // Shared by all tabs: after a swipe switch the incoming tab slides in from where the old one left.
+    val swipeOffset = rememberSwipeOffset()
 
     fun selectTab(route: String) {
         focusManager.clearFocus() // a focused field in a hidden tab would keep the keyboard up
@@ -77,7 +82,12 @@ fun OutgoRoot(openSetting: Boolean = false) {
             composedTabs.forEach { route ->
                 key(route) {
                     val shown = onTabs && route == tab
-                    Box(Modifier.fillMaxSize().placedIf(shown)) { TabContent(route, shown, navController) }
+                    Box(
+                        Modifier.fillMaxSize().placedIf(shown).swipeStep(swipeOffset) { next, _ ->
+                            val index = bottomItems.indexOfFirst { it.route == route } + if (next) 1 else -1
+                            bottomItems.getOrNull(index)?.let { item -> { selectTab(item.route) } }
+                        }.swipeShift(swipeOffset),
+                    ) { TabContent(route, shown, navController) }
                 }
             }
 

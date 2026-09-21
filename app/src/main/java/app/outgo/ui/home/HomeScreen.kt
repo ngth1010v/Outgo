@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
@@ -34,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -50,8 +52,11 @@ import app.outgo.ui.component.BudgetProgressBlock
 import app.outgo.ui.component.IconView
 import app.outgo.ui.component.budgetRemainingColor
 import app.outgo.ui.component.budgetRemainingText
+import app.outgo.ui.component.rememberSwipeOffset
 import app.outgo.ui.component.savingsProgressColor
 import app.outgo.ui.component.savingsProgressText
+import app.outgo.ui.component.swipeShift
+import app.outgo.ui.component.swipeStep
 import app.outgo.ui.history.HistoryViewModel
 import app.outgo.ui.history.LoadMoreOnScrollEnd
 import app.outgo.ui.history.historyItems
@@ -94,6 +99,8 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
     val historyRows = historyState.items
 
     val listState = rememberLazyListState()
+    // Moves only the history rows: the header and its type tabs stay put, like tabs over a pager.
+    val historySwipe = rememberSwipeOffset()
     LoadMoreOnScrollEnd(listState, historyState.canLoadMore, historyViewModel::loadMore)
 
     // Switching history tabs swaps the rows instantly. A shorter new tab would shrink the list
@@ -135,7 +142,13 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
         Box(Modifier.fillMaxSize().padding(padding)) {
             LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                modifier = Modifier.fillMaxSize().swipeStep(historySwipe) { next, down ->
+                    // Only in the history section (its header and below): Expense <-> Income <->
+                    // Transfer. Above it, or past either end, the tab switches instead.
+                    if (!listState.isInHistory(down)) return@swipeStep null
+                    val type = HistoryType.entries.getOrNull(historyType.ordinal + if (next) 1 else -1)
+                    type?.let { { switchHistory(it) } }
+                }.padding(horizontal = 16.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 48.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
@@ -181,7 +194,7 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
                     }
                 }
 
-                item {
+                item(key = HISTORY_HEADER_KEY) {
                     Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                         Text(stringResource(R.string.home_history_section), style = MaterialTheme.typography.titleMedium)
                         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
@@ -211,6 +224,7 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
                         item {
                             Text(
                                 stringResource(R.string.history_empty),
+                                modifier = Modifier.swipeShift(historySwipe),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -219,6 +233,7 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
                 } else {
                     historyItems(
                         historyRows, historyState.categoriesById, historyState.accountsById, onOpenTrade,
+                        rowModifier = Modifier.swipeShift(historySwipe),
                         keyPrefix = historyKeyPrefix,
                     )
                 }
@@ -231,6 +246,19 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
 }
 
 private const val HOLD_SCROLL_KEY = "history_hold_scroll"
+private const val HISTORY_HEADER_KEY = "history_header"
+
+/**
+ * Whether [down] (in list coordinates) lands in the history section. With the header scrolled
+ * out of view, the section fills the list iff the top row is a history row: those rows have String
+ * keys, the unkeyed ones above the header do not.
+ */
+private fun LazyListState.isInHistory(down: Offset): Boolean {
+    val info = layoutInfo
+    val header = info.visibleItemsInfo.firstOrNull { it.key == HISTORY_HEADER_KEY }
+        ?: return info.visibleItemsInfo.firstOrNull()?.key is String
+    return down.y >= header.offset - info.viewportStartOffset
+}
 
 /** Duration of the ease back up over the hold-scroll filler after a history tab switch. */
 private const val HOLD_SCROLL_MS = 500
