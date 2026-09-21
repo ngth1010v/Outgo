@@ -1,5 +1,7 @@
 package app.outgo.ui.category
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.KeyboardOptions
@@ -16,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -60,6 +63,7 @@ import app.outgo.ui.component.IconView
 import app.outgo.ui.component.PlusRow
 import app.outgo.ui.component.budgetRemainingColor
 import app.outgo.ui.component.budgetRemainingText
+import app.outgo.ui.component.tabSlide
 import app.outgo.util.Money
 
 private sealed interface EditTarget {
@@ -96,50 +100,59 @@ fun CategoryScreen() {
                 ) { Text(stringResource(R.string.category_income_tab)) }
             }
 
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(state.parents, key = { it.id }) { parent ->
-                    val isExpanded = expanded.contains(parent.id)
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        CategoryRow(
-                            category = parent,
-                            budget = state.budgetsByCategory[parent.id],
-                            onRowClick = { editTarget = EditTarget.Edit(parent) },
-                            trailing = {
-                                Icon(
-                                    painter = painterResource(if (isExpanded) R.drawable.ph_caret_down else R.drawable.ph_caret_right),
-                                    contentDescription = null,
+            // Keyed by type: the old tab keeps its last list while sliding out.
+            AnimatedContent(
+                targetState = state,
+                modifier = Modifier.fillMaxSize(),
+                contentKey = { it.type },
+                transitionSpec = { tabSlide { it.type } },
+                label = "categoryTab",
+            ) { s ->
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(s.parents, key = { it.id }) { parent ->
+                        val isExpanded = expanded.contains(parent.id)
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            CategoryRow(
+                                category = parent,
+                                budget = s.budgetsByCategory[parent.id],
+                                onRowClick = { editTarget = EditTarget.Edit(parent) },
+                                trailing = {
+                                    Icon(
+                                        painter = painterResource(if (isExpanded) R.drawable.ph_caret_down else R.drawable.ph_caret_right),
+                                        contentDescription = null,
+                                        modifier = Modifier
+                                            .clickable { expanded = if (isExpanded) expanded - parent.id else expanded + parent.id }
+                                            .padding(8.dp),
+                                    )
+                                },
+                            )
+                            if (isExpanded) {
+                                s.childrenByParent[parent.id].orEmpty().forEach { child ->
+                                    CategoryRow(
+                                        category = child,
+                                        budget = s.budgetsByCategory[child.id],
+                                        onRowClick = { editTarget = EditTarget.Edit(child) },
+                                        modifier = Modifier.padding(start = 20.dp),
+                                    )
+                                }
+                                PlusRow(
+                                    onClick = { editTarget = EditTarget.NewChild(parent.id, parent.color) },
                                     modifier = Modifier
-                                        .clickable { expanded = if (isExpanded) expanded - parent.id else expanded + parent.id }
-                                        .padding(8.dp),
-                                )
-                            },
-                        )
-                        if (isExpanded) {
-                            state.childrenByParent[parent.id].orEmpty().forEach { child ->
-                                CategoryRow(
-                                    category = child,
-                                    budget = state.budgetsByCategory[child.id],
-                                    onRowClick = { editTarget = EditTarget.Edit(child) },
-                                    modifier = Modifier.padding(start = 20.dp),
+                                        .padding(start = 20.dp)
+                                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
                                 )
                             }
-                            PlusRow(
-                                onClick = { editTarget = EditTarget.NewChild(parent.id, parent.color) },
-                                modifier = Modifier
-                                    .padding(start = 20.dp)
-                                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
-                            )
                         }
                     }
-                }
-                item {
-                    PlusRow(
-                        onClick = { editTarget = EditTarget.NewParent },
-                        modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
-                    )
+                    item {
+                        PlusRow(
+                            onClick = { editTarget = EditTarget.NewParent },
+                            modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
+                        )
+                    }
                 }
             }
         }
@@ -231,7 +244,8 @@ private fun EditCategorySheet(
     }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        // Scrollable so a field stays reachable above the keyboard when the sheet is taller than the space left.
+        Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(12.dp))
 

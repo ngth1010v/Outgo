@@ -17,14 +17,14 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import app.outgo.R
 
-private data class BottomItem(
+internal data class BottomItem(
     val route: String,
     val labelRes: Int,
     val icon: Int,
     val iconSelected: Int,
 )
 
-private val items = listOf(
+internal val bottomItems = listOf(
     BottomItem(Routes.HOME, R.string.nav_home, R.drawable.ph_house, R.drawable.ph_house_fill),
     BottomItem(Routes.TRADE, R.string.nav_trade, R.drawable.ph_plus_circle, R.drawable.ph_plus_circle_fill),
     BottomItem(Routes.BALANCE, R.string.nav_balance, R.drawable.ph_wallet, R.drawable.ph_wallet_fill),
@@ -39,7 +39,7 @@ fun OutgoBottomBar(navController: NavHostController) {
     val currentDestination = backStackEntry?.destination
 
     NavigationBar(modifier = Modifier.height(64.dp)) {
-        items.forEach { item ->
+        bottomItems.forEach { item ->
             val selected = currentDestination?.hierarchy?.any { it.route == item.route } == true
             NavigationBarItem(
                 selected = selected,

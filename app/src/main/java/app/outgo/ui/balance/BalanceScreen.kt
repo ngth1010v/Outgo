@@ -1,5 +1,6 @@
 package app.outgo.ui.balance
 
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -163,7 +165,8 @@ private fun EditAccountSheet(account: AccountEntity?, onDismiss: () -> Unit, vie
     }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        // Scrollable so a field stays reachable above the keyboard when the sheet is taller than the space left.
+        Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
             Text(
                 if (account == null) stringResource(R.string.balance_create_title) else stringResource(R.string.balance_edit_title),
                 style = MaterialTheme.typography.titleMedium,

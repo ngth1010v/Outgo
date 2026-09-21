@@ -1,5 +1,6 @@
 package app.outgo.ui.setting
 
+import androidx.compose.foundation.rememberScrollState
 import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -62,7 +64,8 @@ internal fun CurrencyPickerSheet(selected: String, onSelect: (String) -> Unit, o
     var custom by remember { mutableStateOf(if (DefaultCurrencies.none { it.symbol == selected }) selected else "") }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+        // Scrollable so the custom field stays reachable above the keyboard.
+        Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
             Text(stringResource(R.string.setting_currency), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(12.dp))
 

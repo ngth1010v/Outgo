@@ -1,12 +1,17 @@
 package app.outgo.ui.home
 
 import androidx.annotation.StringRes
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.EaseInOut
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,15 +27,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
@@ -49,10 +59,18 @@ import app.outgo.ui.history.HistoryViewModel
 import app.outgo.ui.history.LoadMoreOnScrollEnd
 import app.outgo.ui.history.buildHistoryItems
 import app.outgo.ui.history.historyItems
+import app.outgo.ui.component.SLIDE_MS
+import app.outgo.ui.history.HistoryItem
+import app.outgo.ui.history.HistoryListItem
+import app.outgo.ui.history.HistoryUiState
+import app.outgo.ui.history.historyItemKey
 import app.outgo.ui.nav.HistoryType
 import app.outgo.ui.theme.ExpenseRed
 import app.outgo.ui.theme.IncomeGreen
 import app.outgo.util.Money
+import kotlin.math.abs
+import kotlin.math.sign
+import kotlinx.coroutines.launch
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -83,96 +101,159 @@ fun HomeScreen(onOpenTrade: (Long) -> Unit) {
     val listState = rememberLazyListState()
     LoadMoreOnScrollEnd(listState, historyState.canLoadMore, historyViewModel::loadMore)
 
-    Scaffold { padding ->
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 8.dp, bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(4.3.dp), modifier = Modifier.padding(bottom = 10.dp)) {
-                    BalanceBlock(R.string.home_available_balance, state.availableBalance, primary = true)
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        BalanceBlock(R.string.home_savings_balance, state.savingsBalance, primary = false)
-                        BalanceBlock(R.string.home_total_balance, state.totalBalance, primary = false)
-                    }
-                }
-            }
+    // Switching history tabs: the new rows slide in as normal lazy items, while the rows that were
+    // on screen are frozen into [outgoing] and slide out over them (the lazy list can't keep the
+    // old tab's items alive, and composing the whole old list would defeat its windowing).
+    val historySlide = remember { Animatable(0f) }
+    var outgoing by remember { mutableStateOf<OutgoingHistory?>(null) }
+    val scope = rememberCoroutineScope()
+    // Remembered so the history rows see a stable modifier and don't recompose with the screen.
+    val historySlideModifier = remember(historySlide) {
+        Modifier.graphicsLayer {
+            translationX = historySlide.value * size.width
+            alpha = 1f - abs(historySlide.value)
+        }
+    }
+    fun switchHistory(type: HistoryType) {
+        if (type == historyType) return
+        val direction = sign((type.ordinal - historyType.ordinal).toFloat())
+        val info = listState.layoutInfo
+        val rowsByKey = historyRows.associateBy(::historyItemKey)
+        outgoing = OutgoingHistory(
+            rows = info.visibleItemsInfo.mapNotNull { v -> rowsByKey[v.key]?.let { it to v.offset - info.viewportStartOffset } },
+            state = historyState,
+            direction = direction,
+        )
+        historyType = type
+        scope.launch {
+            historySlide.snapTo(direction)
+            historySlide.animateTo(0f, tween(SLIDE_MS, easing = EaseInOut))
+            outgoing = null
+        }
+    }
 
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(bottom = 10.dp)) {
-                    Text(stringResource(R.string.home_budgets), style = MaterialTheme.typography.titleMedium)
-                    if (state.budgets.isEmpty()) {
-                        Text(
-                            stringResource(R.string.home_no_budgets),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    } else {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            state.budgets.forEach { budget ->
-                                Card { BudgetRow(budget, modifier = Modifier.padding(12.dp)) }
-                            }
+    Scaffold { padding ->
+        Box(Modifier.fillMaxSize().padding(padding)) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 8.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.3.dp), modifier = Modifier.padding(bottom = 10.dp)) {
+                        BalanceBlock(R.string.home_available_balance, state.availableBalance, primary = true)
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            BalanceBlock(R.string.home_savings_balance, state.savingsBalance, primary = false)
+                            BalanceBlock(R.string.home_total_balance, state.totalBalance, primary = false)
                         }
                     }
                 }
-            }
 
-            if (state.savingsAccounts.isNotEmpty()) {
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(bottom = 10.dp)) {
-                        Text(stringResource(R.string.home_savings), style = MaterialTheme.typography.titleMedium)
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            state.savingsAccounts.forEach { account ->
-                                Card { SavingsAccountRow(account, modifier = Modifier.padding(12.dp)) }
+                        Text(stringResource(R.string.home_budgets), style = MaterialTheme.typography.titleMedium)
+                        if (state.budgets.isEmpty()) {
+                            Text(
+                                stringResource(R.string.home_no_budgets),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                state.budgets.forEach { budget ->
+                                    Card { BudgetRow(budget, modifier = Modifier.padding(12.dp)) }
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Text(stringResource(R.string.home_history_section), style = MaterialTheme.typography.titleMedium)
-                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                        HistoryType.entries.forEachIndexed { index, type ->
-                            SegmentedButton(
-                                selected = type == historyType,
-                                onClick = { historyType = type },
-                                shape = SegmentedButtonDefaults.itemShape(index, HistoryType.entries.size),
-                            ) {
-                                Text(
-                                    stringResource(
-                                        when (type) {
-                                            HistoryType.EXPENSE -> R.string.trade_expense
-                                            HistoryType.INCOME -> R.string.trade_income
-                                            HistoryType.TRANSFER -> R.string.trade_transfer
-                                        },
-                                    ),
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (historyRows.isEmpty()) {
-                if (!historyState.isLoading) {
+                if (state.savingsAccounts.isNotEmpty()) {
                     item {
-                        Text(
-                            stringResource(R.string.history_empty),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(bottom = 10.dp)) {
+                            Text(stringResource(R.string.home_savings), style = MaterialTheme.typography.titleMedium)
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                state.savingsAccounts.forEach { account ->
+                                    Card { SavingsAccountRow(account, modifier = Modifier.padding(12.dp)) }
+                                }
+                            }
+                        }
                     }
                 }
-            } else {
-                historyItems(historyRows, historyState, onOpenTrade)
+
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text(stringResource(R.string.home_history_section), style = MaterialTheme.typography.titleMedium)
+                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                            HistoryType.entries.forEachIndexed { index, type ->
+                                SegmentedButton(
+                                    selected = type == historyType,
+                                    onClick = { switchHistory(type) },
+                                    shape = SegmentedButtonDefaults.itemShape(index, HistoryType.entries.size),
+                                ) {
+                                    Text(
+                                        stringResource(
+                                            when (type) {
+                                                HistoryType.EXPENSE -> R.string.trade_expense
+                                                HistoryType.INCOME -> R.string.trade_income
+                                                HistoryType.TRANSFER -> R.string.trade_transfer
+                                            },
+                                        ),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (historyRows.isEmpty()) {
+                    if (!historyState.isLoading) {
+                        item {
+                            Text(
+                                stringResource(R.string.history_empty),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = historySlideModifier,
+                            )
+                        }
+                    }
+                } else {
+                    historyItems(historyRows, historyState, onOpenTrade, historySlideModifier)
+                }
+            }
+
+            outgoing?.let { old ->
+                // Same horizontal inset and clipping as the LazyColumn, so both halves slide identically.
+                Box(Modifier.matchParentSize().padding(horizontal = 16.dp).clipToBounds()) {
+                    old.rows.forEach { (item, y) ->
+                        key(historyItemKey(item)) {
+                            HistoryItem(
+                                item = item,
+                                state = old.state,
+                                onOpenTrade = {},
+                                modifier = Modifier
+                                    .offset { IntOffset(0, y) }
+                                    .graphicsLayer {
+                                        val p = historySlide.value - old.direction
+                                        translationX = p * size.width
+                                        alpha = 1f - abs(p)
+                                    },
+                            )
+                        }
+                    }
+                }
             }
         }
     }
 }
+
+/** Snapshot of the history rows on screen when the tab switched, with their y offset in the list viewport. */
+private class OutgoingHistory(
+    val rows: List<Pair<HistoryListItem, Int>>,
+    val state: HistoryUiState,
+    val direction: Float,
+)
 
 /**
  * Balance label + amount. Primary amount is 1.2x headlineMedium; secondary label is 80% of the

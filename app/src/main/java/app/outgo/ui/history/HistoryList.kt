@@ -65,15 +65,11 @@ internal fun LazyListScope.historyItems(
     items: List<HistoryListItem>,
     state: HistoryUiState,
     onOpenTrade: (Long) -> Unit,
+    rowModifier: Modifier = Modifier,
 ) {
     items(
         items = items,
-        key = { item ->
-            when (item) {
-                is HistoryListItem.Header -> "h_${item.dayLabel}"
-                is HistoryListItem.Row -> "r_${item.trade.id}"
-            }
-        },
+        key = ::historyItemKey,
         // Without this every item is its own type, so Compose cannot reuse a scrolled-off row's
         // composition for the row scrolling in and rebuilds each one from scratch.
         contentType = { item ->
@@ -82,40 +78,55 @@ internal fun LazyListScope.historyItems(
                 is HistoryListItem.Row -> "history_row"
             }
         },
-    ) { item ->
-        when (item) {
-            is HistoryListItem.Header -> Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    item.dayLabel,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                )
-                val labelStyle = MaterialTheme.typography.labelLarge
-                Text(
-                    text = "(" + when (item.type) {
-                        TradeType.TRANSFER -> Money.format(item.total)
-                        else -> (if (TradeType.isCredit(item.type)) "+" else "-") + Money.format(item.total)
-                    } + ")",
-                    style = labelStyle.copy(fontSize = labelStyle.fontSize * 0.8f, lineHeight = labelStyle.lineHeight * 0.8f),
-                    color = when {
-                        item.type == TradeType.TRANSFER -> app.outgo.ui.theme.TransferBlue
-                        TradeType.isCredit(item.type) -> app.outgo.ui.theme.IncomeGreen
-                        else -> app.outgo.ui.theme.ExpenseRed
-                    },
-                )
-            }
-            is HistoryListItem.Row -> TradeRow(
-                trade = item.trade,
-                category = state.categoriesById[item.trade.categoryId],
-                fromAccount = state.accountsById[item.trade.accountId],
-                toAccount = state.accountsById[item.trade.toAccountId],
-                onClick = { onOpenTrade(item.trade.id) },
+    ) { item -> HistoryItem(item, state, onOpenTrade, rowModifier) }
+}
+
+internal fun historyItemKey(item: HistoryListItem): String = when (item) {
+    is HistoryListItem.Header -> "h_${item.dayLabel}"
+    is HistoryListItem.Row -> "r_${item.trade.id}"
+}
+
+/** One day header or trade row; also drawn outside the list by Home's outgoing-tab overlay. */
+@Composable
+internal fun HistoryItem(
+    item: HistoryListItem,
+    state: HistoryUiState,
+    onOpenTrade: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    when (item) {
+        is HistoryListItem.Header -> Row(
+            modifier = modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                item.dayLabel,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            val labelStyle = MaterialTheme.typography.labelLarge
+            Text(
+                text = "(" + when (item.type) {
+                    TradeType.TRANSFER -> Money.format(item.total)
+                    else -> (if (TradeType.isCredit(item.type)) "+" else "-") + Money.format(item.total)
+                } + ")",
+                style = labelStyle.copy(fontSize = labelStyle.fontSize * 0.8f, lineHeight = labelStyle.lineHeight * 0.8f),
+                color = when {
+                    item.type == TradeType.TRANSFER -> app.outgo.ui.theme.TransferBlue
+                    TradeType.isCredit(item.type) -> app.outgo.ui.theme.IncomeGreen
+                    else -> app.outgo.ui.theme.ExpenseRed
+                },
             )
         }
+        is HistoryListItem.Row -> TradeRow(
+            trade = item.trade,
+            category = state.categoriesById[item.trade.categoryId],
+            fromAccount = state.accountsById[item.trade.accountId],
+            toAccount = state.accountsById[item.trade.toAccountId],
+            onClick = { onOpenTrade(item.trade.id) },
+            modifier = modifier,
+        )
     }
 }
 
@@ -126,10 +137,11 @@ private fun TradeRow(
     fromAccount: AccountEntity?,
     toAccount: AccountEntity?,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val isTransfer = trade.type == TradeType.TRANSFER
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 5.dp),
+        modifier = modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (isTransfer) {
