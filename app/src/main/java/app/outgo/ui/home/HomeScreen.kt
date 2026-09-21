@@ -162,7 +162,7 @@ fun HomeScreen(onOpenTrade: (Long) -> Unit) {
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 16.dp, bottom = 16.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 48.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 item {
