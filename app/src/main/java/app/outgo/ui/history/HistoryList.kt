@@ -67,10 +67,12 @@ internal fun LazyListScope.historyItems(
     accountsById: Map<Long, AccountEntity>,
     onOpenTrade: (Long) -> Unit,
     rowModifier: Modifier = Modifier,
+    /** Keeps keys unique per list: two tabs share day-header keys otherwise. */
+    keyPrefix: String = "",
 ) {
     items(
         items = items,
-        key = ::historyItemKey,
+        key = { keyPrefix + historyItemKey(it) },
         // Without this every item is its own type, so Compose cannot reuse a scrolled-off row's
         // composition for the row scrolling in and rebuilds each one from scratch.
         contentType = { item ->

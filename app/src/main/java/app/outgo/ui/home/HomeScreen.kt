@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -28,7 +29,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -59,9 +59,8 @@ import app.outgo.ui.nav.HistoryType
 import app.outgo.ui.theme.ExpenseRed
 import app.outgo.ui.theme.IncomeGreen
 import app.outgo.util.Money
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.job
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.isActive
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -84,7 +83,11 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
             }
         },
     )
-    val historyState by historyViewModel.state.collectAsStateWithLifecycle()
+    // Collected only to recompose on change; the value is read from the flow itself because
+    // collectAsState's holder outlives a ViewModel swap and would show the previous tab's rows
+    // for a frame after a switch.
+    historyViewModel.state.collectAsStateWithLifecycle().value
+    val historyState = historyViewModel.state.value
     // The list is a one-shot fetch, not a Flow: re-read it whenever Home is shown again (it
     // stays composed while hidden), e.g. after adding or editing a trade.
     LaunchedEffect(historyViewModel, visible) { historyViewModel.refresh() }
@@ -94,34 +97,39 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
     LoadMoreOnScrollEnd(listState, historyState.canLoadMore, historyViewModel::loadMore)
 
     // Switching history tabs swaps the rows instantly. A shorter new tab would shrink the list
-    // under the current scroll position and LazyColumn would snap up; a viewport-tall filler
-    // keeps the position for a frame, then the list eases back up over it before it's removed.
+    // under the current scroll position and LazyColumn would snap up; a tall filler after the
+    // rows keeps the position, then the list eases up until the filler's top reaches the
+    // viewport bottom, and the filler is removed with nothing left to jump.
     var holdScroll by remember { mutableStateOf(false) }
-    var switchJob by remember { mutableStateOf<Job?>(null) }
-    val scope = rememberCoroutineScope()
     fun switchHistory(type: HistoryType) {
         if (type == historyType) return
         historyType = type
         holdScroll = true
-        switchJob?.cancel()
-        switchJob = scope.launch {
+    }
+    // Restarts on every switch (new ViewModel) and once a first-time tab finishes loading, so it
+    // only measures the new tab's real rows. Measuring earlier would aim at the wrong place.
+    LaunchedEffect(historyViewModel, historyState.isLoading, holdScroll) {
+        if (!holdScroll || historyState.isLoading) return@LaunchedEffect
+        withFrameNanos { } // effects start once the composition is applied; this waits out its layout
+        val layout = listState.layoutInfo
+        layout.visibleItemsInfo.firstOrNull { it.key == HOLD_SCROLL_KEY }?.let { filler ->
             try {
-                withFrameNanos { } // let the new tab and the filler lay out first
-                val layout = listState.layoutInfo
-                layout.visibleItemsInfo.firstOrNull { it.key == HOLD_SCROLL_KEY }?.let { filler ->
-                    listState.animateScrollBy(
-                        (filler.offset - layout.viewportEndOffset).toFloat(),
-                        tween(HOLD_SCROLL_MS, easing = EaseInOut),
-                    )
-                }
-            } finally {
-                // A newer switch owns the state now; only the latest one cleans up.
-                if (switchJob == coroutineContext.job) {
-                    holdScroll = false
-                }
+                listState.animateScrollBy(
+                    (filler.offset - layout.viewportEndOffset).toFloat(),
+                    tween(HOLD_SCROLL_MS, easing = EaseInOut),
+                )
+            } catch (e: CancellationException) {
+                // A newer switch restarted this effect: it owns the filler now.
+                if (!isActive) throw e
+                // Otherwise a finger stopped the scroll; drop the filler all the same.
             }
         }
+        holdScroll = false
     }
+
+    // Read here, not inside the LazyColumn lambda: that lambda runs lazily and would pick up a
+    // new tab's prefix before the rows it goes with.
+    val historyKeyPrefix = historyType.arg
 
     Scaffold { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
@@ -209,10 +217,13 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
                         }
                     }
                 } else {
-                    historyItems(historyRows, historyState.categoriesById, historyState.accountsById, onOpenTrade)
+                    historyItems(
+                        historyRows, historyState.categoriesById, historyState.accountsById, onOpenTrade,
+                        keyPrefix = historyKeyPrefix,
+                    )
                 }
                 if (holdScroll) {
-                    item(key = HOLD_SCROLL_KEY) { Spacer(Modifier.fillParentMaxHeight()) }
+                    item(key = HOLD_SCROLL_KEY) { Spacer(Modifier.height(HOLD_SCROLL_HEIGHT)) }
                 }
             }
         }
@@ -222,7 +233,11 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
 private const val HOLD_SCROLL_KEY = "history_hold_scroll"
 
 /** Duration of the ease back up over the hold-scroll filler after a history tab switch. */
-private const val HOLD_SCROLL_MS = 300
+private const val HOLD_SCROLL_MS = 500
+
+// ponytail: fixed height, a switch scrolled deeper than this into the history still snaps
+// partway; size it from the scrolled distance if lists ever get that long.
+private val HOLD_SCROLL_HEIGHT = 30_000.dp
 
 /**
  * Balance label + amount. Primary amount is 1.2x headlineMedium; secondary label is 80% of the
