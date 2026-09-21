@@ -21,9 +21,6 @@ interface IconDao {
     @Query("SELECT * FROM icon WHERE id = :id")
     suspend fun findById(id: Long): IconEntity?
 
-    @Query("SELECT * FROM icon WHERE kind = 1 ORDER BY created_at DESC")
-    fun observeUserIcons(): Flow<List<IconEntity>>
-
     /** User-imported icons not referenced by any account, category or budget — safe to delete. */
     @Query(
         """
@@ -36,6 +33,20 @@ interface IconDao {
         """,
     )
     suspend fun findUnusedUserIcons(): List<IconEntity>
+
+    /** Every icon an account, category or budget currently shows — what screens will ask for. */
+    @Query(
+        """
+        SELECT icon_id FROM account WHERE archived = 0 AND icon_id IS NOT NULL
+        UNION SELECT icon_id FROM category WHERE archived = 0 AND icon_id IS NOT NULL
+        UNION SELECT icon_id FROM budget WHERE icon_id IS NOT NULL
+        """,
+    )
+    suspend fun referencedIconIds(): List<Long>
+
+    /** Ids only: the picker never needs the PNG BLOBs, which a SELECT * would load. */
+    @Query("SELECT id FROM icon WHERE kind = 1 ORDER BY created_at DESC")
+    fun observeUserIconIds(): Flow<List<Long>>
 
     @Delete
     suspend fun delete(icon: IconEntity)

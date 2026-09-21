@@ -5,12 +5,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 Outgo — a lightweight, fast-starting Android expense tracker (Kotlin + Jetpack Compose, Material 3).
-Single Gradle module (`:app`). The full design (data model, triggers, screens, navigation, backup
+App module `:app`, plus `:baselineprofile` (Baseline Profile generator + macrobenchmarks,
+never shipped). The full design (data model, triggers, screens, navigation, backup
 format, perf budget) lives in `architecture.md` (written in Vietnamese, uses Mermaid diagrams
 heavily) — read it before making non-trivial changes, especially to the DB schema or cold-start path.
 `README.md` has the build instructions and a section listing what's implemented vs. `architecture.md`
-(a few deferred items: baseline profile module, "manage imported icons" screen, per-account history
-entry point).
+(a few deferred items: "manage imported icons" screen, per-account history entry point).
 
 ## Build
 
@@ -30,7 +30,25 @@ gradlew.bat assembleRelease
 gradlew.bat lint                  # Android Lint
 gradlew.bat test                  # JVM unit tests (none exist yet — module has no src/test)
 gradlew.bat connectedAndroidTest  # instrumented tests (none exist yet — module has no src/androidTest)
+gradlew.bat :app:installBenchmarkRelease   # release-like build signed with the debug key, for local perf testing
 ```
+
+### Baseline Profile (why the first animations are smooth)
+
+`app/src/main/generated/baselineProfiles/{baseline,startup}-prof.txt` are generated, committed, and
+AOT-compile the startup path and every animated transition. Without them Compose runs interpreted/JIT
+on the first launches and the first screen switches, sheets and scrolls stutter. **Regenerate after UI changes** that add
+screens or transitions, with an API 33+ emulator (English UI) connected:
+
+```bash
+gradlew.bat :app:generateBaselineProfile -Pandroid.testInstrumentationRunnerArguments.class=app.outgo.baselineprofile.BaselineProfileGenerator
+```
+
+The user journey lives in `baselineprofile/.../BaselineProfileGenerator.kt` (`animationJourney`), and
+it finds views by their English text and content descriptions, so update it if those labels change.
+`StartupBenchmark` and `FrameBenchmark` in the same module measure cold start and first-pass frame
+times, with and without the profile (`connectedBenchmarkReleaseAndroidTest`). Never judge animation
+smoothness on the debug build: it is debuggable, which makes Compose much slower.
 
 There is currently no test source set in `app/`. If you add tests, they'll need `src/test/` (JVM/Robolectric) or `src/androidTest/` (instrumented) directories created first.
 
@@ -91,10 +109,14 @@ synchronous DB/IO work to `OutgoApp.onCreate`, `MainActivity.onCreate`, or the f
 ### Navigation
 
 Plain string routes (`ui/nav/Routes.kt`) — no Safe Args/type-safe nav library, deliberately, since the
-route set is small and fixed. `startDestination = Routes.TRADE` (opening the app goes straight to
+route set is small and fixed. The initial tab is `Routes.TRADE` (opening the app goes straight to
 "add expense", not Home — this is a hard requirement, not a default that can be casually changed).
-Six bottom-nav destinations (Home, Trade, Balance, Category, Analysis, Setting) plus three
-parameterized routes for history/trade-edit pushed on top.
+Six bottom-nav tabs (Home, Trade, Balance, Category, Analysis, Setting) live *outside* the NavHost
+in `OutgoRoot`: each stays composed once visited (the rest are prewarmed ~1s after launch) and a tab
+switch only changes which one is placed, so no screen is rebuilt on tap. The NavHost holds only an
+empty `Routes.TABS` start destination plus the parameterized history/trade-edit/analysis-sub routes
+pushed on top. Tab screens therefore never leave composition: re-read one-shot data when a tab is
+shown again (see `HomeScreen(visible)`), not in a plain `LaunchedEffect(Unit)`.
 
 ### Icons
 

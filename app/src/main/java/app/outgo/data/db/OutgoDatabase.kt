@@ -44,7 +44,7 @@ import app.outgo.domain.IconKind
         BudgetEntity::class,
         SettingEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class OutgoDatabase : RoomDatabase() {
@@ -58,7 +58,7 @@ abstract class OutgoDatabase : RoomDatabase() {
 
     companion object {
         const val FILE_NAME = "outgo.sqlite"
-        const val SCHEMA_VERSION = 4
+        const val SCHEMA_VERSION = 5
 
         // "OUTO" packed into 4 bytes, stamped once via PRAGMA application_id so a
         // restore can reject a file that isn't an Outgo backup before touching real data.
@@ -93,11 +93,18 @@ abstract class OutgoDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Name and columns must match what Room derives from TradeEntity's @Index.
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_trade_month_key_type` ON `trade` (`month_key`, `type`)")
+            }
+        }
+
         fun build(context: Context): OutgoDatabase =
             Room.databaseBuilder(context.applicationContext, OutgoDatabase::class.java, FILE_NAME)
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
                 .addCallback(OutgoCallback)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build()
     }
 }

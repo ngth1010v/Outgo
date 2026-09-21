@@ -11,14 +11,18 @@ import app.outgo.data.repo.TradeRepository
 import app.outgo.domain.CategoryKind
 import app.outgo.domain.TradeType
 import app.outgo.ui.nav.HistoryType
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class HistoryUiState(
     val trades: List<TradeEntity> = emptyList(),
+    /** [trades] grouped into day headers + rows, built off the main thread. */
+    val items: List<HistoryListItem> = emptyList(),
     val categoriesById: Map<Long, CategoryEntity> = emptyMap(),
     val accountsById: Map<Long, AccountEntity> = emptyMap(),
     val isLoading: Boolean = true,
@@ -56,14 +60,16 @@ class HistoryViewModel(
                 _state.update { it.copy(categoriesById = list.associateBy { c -> c.id }) }
             }
         }
-        refresh()
+        // No refresh() here: both screens call it when they enter composition, which is also
+        // what re-reads the list after an edit. Calling it here too ran the first page twice.
     }
 
     /** Re-runs the first page query. Call when the screen re-enters composition — the trade list is a one-shot fetch, not a Flow, so an edit made elsewhere (e.g. the trade-edit screen) isn't seen until this runs again. */
     fun refresh() {
         viewModelScope.launch {
             val first = tradeRepository.firstPage(tradeType, PAGE_SIZE)
-            _state.update { it.copy(trades = first, isLoading = false, canLoadMore = first.size == PAGE_SIZE) }
+            val items = withContext(Dispatchers.Default) { buildHistoryItems(first) }
+            _state.update { it.copy(trades = first, items = items, isLoading = false, canLoadMore = first.size == PAGE_SIZE) }
         }
     }
 
@@ -73,8 +79,10 @@ class HistoryViewModel(
         viewModelScope.launch {
             _state.update { it.copy(isLoadingMore = true) }
             val next = tradeRepository.nextPage(tradeType, s.trades.last(), PAGE_SIZE)
+            val trades = s.trades + next
+            val items = withContext(Dispatchers.Default) { buildHistoryItems(trades) }
             _state.update {
-                it.copy(trades = it.trades + next, isLoadingMore = false, canLoadMore = next.size == PAGE_SIZE)
+                it.copy(trades = trades, items = items, isLoadingMore = false, canLoadMore = next.size == PAGE_SIZE)
             }
         }
     }

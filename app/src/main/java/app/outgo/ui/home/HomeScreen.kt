@@ -1,7 +1,6 @@
 package app.outgo.ui.home
 
 import androidx.annotation.StringRes
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.EaseInOut
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.animateScrollBy
@@ -26,23 +25,20 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -58,33 +54,25 @@ import app.outgo.ui.component.savingsProgressColor
 import app.outgo.ui.component.savingsProgressText
 import app.outgo.ui.history.HistoryViewModel
 import app.outgo.ui.history.LoadMoreOnScrollEnd
-import app.outgo.ui.history.buildHistoryItems
 import app.outgo.ui.history.historyItems
-import app.outgo.ui.component.SLIDE_MS
-import app.outgo.ui.history.HistoryItem
-import app.outgo.ui.history.HistoryListItem
-import app.outgo.ui.history.HistoryUiState
-import app.outgo.ui.history.historyItemKey
 import app.outgo.ui.nav.HistoryType
 import app.outgo.ui.theme.ExpenseRed
 import app.outgo.ui.theme.IncomeGreen
 import app.outgo.util.Money
-import kotlin.math.abs
-import kotlin.math.sign
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(onOpenTrade: (Long) -> Unit) {
+fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
     val container = LocalAppContainer.current
     val viewModel: HomeViewModel = viewModel(
         factory = viewModelFactory {
             initializer { HomeViewModel(container.accountRepository, container.budgetRepository) }
         },
     )
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
 
     var historyType by rememberSaveable { mutableStateOf(HistoryType.EXPENSE) }
     // One ViewModel per tab, keyed so switching tabs keeps each tab's already-loaded pages.
@@ -96,61 +84,39 @@ fun HomeScreen(onOpenTrade: (Long) -> Unit) {
             }
         },
     )
-    val historyState by historyViewModel.state.collectAsState()
-    // The list is a one-shot fetch, not a Flow: re-read it when we come back from editing a trade.
-    LaunchedEffect(historyViewModel) { historyViewModel.refresh() }
-    val historyRows = remember(historyState.trades) { buildHistoryItems(historyState.trades) }
+    val historyState by historyViewModel.state.collectAsStateWithLifecycle()
+    // The list is a one-shot fetch, not a Flow: re-read it whenever Home is shown again (it
+    // stays composed while hidden), e.g. after adding or editing a trade.
+    LaunchedEffect(historyViewModel, visible) { historyViewModel.refresh() }
+    val historyRows = historyState.items
 
     val listState = rememberLazyListState()
     LoadMoreOnScrollEnd(listState, historyState.canLoadMore, historyViewModel::loadMore)
 
-    // Switching history tabs: the new rows slide in as normal lazy items, while the rows that were
-    // on screen are frozen into [outgoing] and slide out over them (the lazy list can't keep the
-    // old tab's items alive, and composing the whole old list would defeat its windowing).
-    val historySlide = remember { Animatable(0f) }
-    var outgoing by remember { mutableStateOf<OutgoingHistory?>(null) }
-    // A shorter new tab would shrink the list under the current scroll position and LazyColumn
-    // would snap up instantly. A viewport-tall filler keeps the position during the slide; then
-    // the list eases back up over the filler before it's removed.
+    // Switching history tabs swaps the rows instantly. A shorter new tab would shrink the list
+    // under the current scroll position and LazyColumn would snap up; a viewport-tall filler
+    // keeps the position for a frame, then the list eases back up over it before it's removed.
     var holdScroll by remember { mutableStateOf(false) }
     var switchJob by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
-    // Remembered so the history rows see a stable modifier and don't recompose with the screen.
-    val historySlideModifier = remember(historySlide) {
-        Modifier.graphicsLayer {
-            translationX = historySlide.value * size.width
-            alpha = 1f - abs(historySlide.value)
-        }
-    }
     fun switchHistory(type: HistoryType) {
         if (type == historyType) return
-        val direction = sign((type.ordinal - historyType.ordinal).toFloat())
-        val info = listState.layoutInfo
-        val rowsByKey = historyRows.associateBy(::historyItemKey)
-        outgoing = OutgoingHistory(
-            rows = info.visibleItemsInfo.mapNotNull { v -> rowsByKey[v.key]?.let { it to v.offset - info.viewportStartOffset } },
-            state = historyState,
-            direction = direction,
-        )
         historyType = type
         holdScroll = true
         switchJob?.cancel()
         switchJob = scope.launch {
             try {
-                historySlide.snapTo(direction)
-                historySlide.animateTo(0f, tween(SLIDE_MS, easing = EaseInOut))
-                outgoing = null
+                withFrameNanos { } // let the new tab and the filler lay out first
                 val layout = listState.layoutInfo
                 layout.visibleItemsInfo.firstOrNull { it.key == HOLD_SCROLL_KEY }?.let { filler ->
                     listState.animateScrollBy(
                         (filler.offset - layout.viewportEndOffset).toFloat(),
-                        tween(SLIDE_MS, easing = EaseInOut),
+                        tween(HOLD_SCROLL_MS, easing = EaseInOut),
                     )
                 }
             } finally {
                 // A newer switch owns the state now; only the latest one cleans up.
                 if (switchJob == coroutineContext.job) {
-                    outgoing = null
                     holdScroll = false
                 }
             }
@@ -239,37 +205,14 @@ fun HomeScreen(onOpenTrade: (Long) -> Unit) {
                                 stringResource(R.string.history_empty),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = historySlideModifier,
                             )
                         }
                     }
                 } else {
-                    historyItems(historyRows, historyState, onOpenTrade, historySlideModifier)
+                    historyItems(historyRows, historyState.categoriesById, historyState.accountsById, onOpenTrade)
                 }
                 if (holdScroll) {
                     item(key = HOLD_SCROLL_KEY) { Spacer(Modifier.fillParentMaxHeight()) }
-                }
-            }
-
-            outgoing?.let { old ->
-                // Same horizontal inset and clipping as the LazyColumn, so both halves slide identically.
-                Box(Modifier.matchParentSize().padding(horizontal = 16.dp).clipToBounds()) {
-                    old.rows.forEach { (item, y) ->
-                        key(historyItemKey(item)) {
-                            HistoryItem(
-                                item = item,
-                                state = old.state,
-                                onOpenTrade = {},
-                                modifier = Modifier
-                                    .offset { IntOffset(0, y) }
-                                    .graphicsLayer {
-                                        val p = historySlide.value - old.direction
-                                        translationX = p * size.width
-                                        alpha = 1f - abs(p)
-                                    },
-                            )
-                        }
-                    }
                 }
             }
         }
@@ -278,12 +221,8 @@ fun HomeScreen(onOpenTrade: (Long) -> Unit) {
 
 private const val HOLD_SCROLL_KEY = "history_hold_scroll"
 
-/** Snapshot of the history rows on screen when the tab switched, with their y offset in the list viewport. */
-private class OutgoingHistory(
-    val rows: List<Pair<HistoryListItem, Int>>,
-    val state: HistoryUiState,
-    val direction: Float,
-)
+/** Duration of the ease back up over the hold-scroll filler after a history tab switch. */
+private const val HOLD_SCROLL_MS = 300
 
 /**
  * Balance label + amount. Primary amount is 1.2x headlineMedium; secondary label is 80% of the

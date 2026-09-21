@@ -2,6 +2,8 @@ package app.outgo.ui.nav
 
 /** Plain string routes — small enough app that a NavType-safe-args library would be pure overhead. */
 object Routes {
+    /** Empty NavHost start destination: the bottom-bar tabs live outside the NavHost. */
+    const val TABS = "tabs"
     const val HOME = "home"
     const val TRADE = "trade"
     const val BALANCE = "balance"

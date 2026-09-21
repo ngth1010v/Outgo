@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.baselineprofile)
 }
 
 android {
@@ -55,6 +56,14 @@ android {
     }
 }
 
+baselineProfile {
+    // The committed profile in src/main/generated is the source of truth; regenerate it by hand
+    // with `gradlew :app:generateBaselineProfile` (needs an API 33+ emulator/device).
+    saveInSrc = true
+    automaticGenerationDuringBuild = false
+    mergeIntoMain = true
+}
+
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
     arg("room.incremental", "true")
@@ -82,4 +91,8 @@ dependencies {
     ksp(libs.androidx.room.compiler)
 
     implementation(libs.kotlinx.coroutines.android)
+
+    // Installs the baseline profile on sideloaded installs too, not just Play Store ones.
+    implementation(libs.androidx.profileinstaller)
+    "baselineProfile"(project(":baselineprofile"))
 }

@@ -2,7 +2,6 @@ package app.outgo.ui.trade
 
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -42,7 +41,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,6 +54,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -68,7 +67,6 @@ import app.outgo.ui.LocalAppContainer
 import app.outgo.ui.component.AmountField
 import app.outgo.ui.component.ConfirmDialog
 import app.outgo.ui.component.IconView
-import app.outgo.ui.component.tabSlide
 import app.outgo.util.formatDate
 import app.outgo.util.formatTime
 import kotlinx.coroutines.flow.collectLatest
@@ -87,7 +85,7 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit) {
             }
         },
     )
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var showAllCategories by remember { mutableStateOf(false) }
@@ -120,96 +118,87 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit) {
                 .padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 16.dp),
         ) {
             ExpenseIncomeToggle(type = state.type, onTypeChange = viewModel::onTypeChange, enabled = !state.isEditing)
-            // Keyed by type: the old tab keeps its last state while sliding out. Editing locks the
-            // type, so the trade loading in doesn't slide.
-            AnimatedContent(
-                targetState = state,
-                contentKey = { it.tabKey },
-                transitionSpec = { tabSlide { it.tabKey } },
-                label = "tradeTab",
-            ) { s ->
-                Column {
-                    Spacer(Modifier.height(16.dp))
+            Column {
+                Spacer(Modifier.height(16.dp))
 
-                    AmountField(
-                        amount = s.amount,
-                        onAmountChange = viewModel::onAmountChange,
-                        isIncome = s.type == CategoryKind.INCOME,
-                        isTransfer = s.isTransfer,
-                        modifier = Modifier.padding(vertical = 8.dp),
+                AmountField(
+                    amount = state.amount,
+                    onAmountChange = viewModel::onAmountChange,
+                    isIncome = state.type == CategoryKind.INCOME,
+                    isTransfer = state.isTransfer,
+                    modifier = Modifier.padding(vertical = 8.dp),
+                )
+
+                if (!state.isTransfer) {
+                    SelectedCategoryChip(state.selectedParentCategory, state.selectedCategory)
+                    Spacer(Modifier.height(8.dp))
+
+                    CategoryPickerSection(
+                        title = stringResource(R.string.trade_recent),
+                        categories = state.picker.recent,
+                        selectedId = state.selectedCategory?.id,
+                        onSelect = viewModel::onCategorySelected,
+                        onSeeAll = { showAllCategories = true },
                     )
+                    Spacer(Modifier.height(16.dp))
+                    CategoryPickerSection(
+                        title = stringResource(R.string.trade_top_used),
+                        categories = state.picker.top,
+                        selectedId = state.selectedCategory?.id,
+                        onSelect = viewModel::onCategorySelected,
+                    )
+                    Spacer(Modifier.height(16.dp))
+                }
 
-                    if (!s.isTransfer) {
-                        SelectedCategoryChip(s.selectedParentCategory, s.selectedCategory)
-                        Spacer(Modifier.height(8.dp))
+                AccountDropdown(
+                    label = if (state.isTransfer) stringResource(R.string.trade_from_account_label) else stringResource(R.string.trade_account_label),
+                    accounts = state.accounts,
+                    selectedAccount = state.selectedAccount,
+                    onSelect = { viewModel.onAccountSelected(it.id) },
+                )
+                Spacer(Modifier.height(16.dp))
 
-                        CategoryPickerSection(
-                            title = stringResource(R.string.trade_recent),
-                            categories = s.picker.recent,
-                            selectedId = s.selectedCategory?.id,
-                            onSelect = viewModel::onCategorySelected,
-                            onSeeAll = { showAllCategories = true },
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        CategoryPickerSection(
-                            title = stringResource(R.string.trade_top_used),
-                            categories = s.picker.top,
-                            selectedId = s.selectedCategory?.id,
-                            onSelect = viewModel::onCategorySelected,
-                        )
-                        Spacer(Modifier.height(16.dp))
-                    }
-
+                if (state.isTransfer) {
                     AccountDropdown(
-                        label = if (s.isTransfer) stringResource(R.string.trade_from_account_label) else stringResource(R.string.trade_account_label),
-                        accounts = s.accounts,
-                        selectedAccount = s.selectedAccount,
-                        onSelect = { viewModel.onAccountSelected(it.id) },
+                        label = stringResource(R.string.trade_to_account_label),
+                        accounts = state.accounts,
+                        selectedAccount = state.selectedToAccount,
+                        onSelect = { viewModel.onToAccountSelected(it.id) },
                     )
                     Spacer(Modifier.height(16.dp))
+                }
 
-                    if (s.isTransfer) {
-                        AccountDropdown(
-                            label = stringResource(R.string.trade_to_account_label),
-                            accounts = s.accounts,
-                            selectedAccount = s.selectedToAccount,
-                            onSelect = { viewModel.onToAccountSelected(it.id) },
-                        )
-                        Spacer(Modifier.height(16.dp))
+                DateTimeRow(
+                    occurredAt = state.occurredAt,
+                    onDateChange = viewModel::onDateChange,
+                    onTimeChange = viewModel::onTimeChange,
+                )
+                Spacer(Modifier.height(16.dp))
+
+                OutlinedTextField(
+                    value = state.note,
+                    onValueChange = viewModel::onNoteChange,
+                    label = { Text(stringResource(R.string.trade_note_hint)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(16.dp))
+
+                if (state.isEditing) {
+                    TextButton(onClick = onClose, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.common_cancel))
                     }
-
-                    DateTimeRow(
-                        occurredAt = s.occurredAt,
-                        onDateChange = viewModel::onDateChange,
-                        onTimeChange = viewModel::onTimeChange,
-                    )
-                    Spacer(Modifier.height(16.dp))
-
-                    OutlinedTextField(
-                        value = s.note,
-                        onValueChange = viewModel::onNoteChange,
-                        label = { Text(stringResource(R.string.trade_note_hint)) },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Spacer(Modifier.height(16.dp))
-
-                    if (s.isEditing) {
-                        TextButton(onClick = onClose, modifier = Modifier.fillMaxWidth()) {
-                            Text(stringResource(R.string.common_cancel))
-                        }
-                        TextButton(
-                            onClick = { showDeleteConfirm = true },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .border(1.dp, MaterialTheme.colorScheme.error, RoundedCornerShape(20.dp)),
-                        ) {
-                            Icon(painterResource(R.drawable.ph_trash), contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                            Text("  " + stringResource(R.string.common_delete), color = MaterialTheme.colorScheme.error)
-                        }
-                        Spacer(Modifier.height(16.dp))
+                    TextButton(
+                        onClick = { showDeleteConfirm = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, MaterialTheme.colorScheme.error, RoundedCornerShape(20.dp)),
+                    ) {
+                        Icon(painterResource(R.drawable.ph_trash), contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                        Text("  " + stringResource(R.string.common_delete), color = MaterialTheme.colorScheme.error)
                     }
+                    Spacer(Modifier.height(16.dp))
                 }
             }
 
@@ -246,8 +235,6 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit) {
         )
     }
 }
-
-private val TradeUiState.tabKey: Int get() = if (isEditing) 0 else type
 
 @Composable
 private fun ExpenseIncomeToggle(type: Int, onTypeChange: (Int) -> Unit, enabled: Boolean = true) {
@@ -462,7 +449,8 @@ private fun OutlineBox(text: String, icon: Int, modifier: Modifier = Modifier, o
 @Composable
 private fun AllCategoriesSheet(type: Int, onSelect: (CategoryEntity) -> Unit, onDismiss: () -> Unit) {
     val container = LocalAppContainer.current
-    val all by container.categoryRepository.observeAllOfType(type).collectAsState(initial = emptyList())
+    // Remembered: a fresh Flow per recomposition (each search keystroke) would re-run the query.
+    val all by remember(type) { container.categoryRepository.observeAllOfType(type) }.collectAsStateWithLifecycle(initialValue = emptyList())
     var query by remember { mutableStateOf("") }
     val parents = remember(all) { all.filter { it.parentId == null } }
     val childrenByParent = remember(all) { all.filter { it.parentId != null }.groupBy { it.parentId!! } }

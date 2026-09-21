@@ -19,3 +19,6 @@ app/schemas/
 # OS
 .DS_Store
 Thumbs.db
+
+# Kotlin 2.x compiler session data
+.kotlin/

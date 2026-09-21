@@ -35,6 +35,8 @@ class OutgoApp : Application() {
         // never block the very first Compose frame on it (see architecture.md §4).
         appScope.launch(Dispatchers.IO) {
             container.database.openHelper.writableDatabase
+            // Decode icons in the background so no screen has to swap placeholders in mid-slide.
+            launch { container.iconStore.warmUp() }
             // Keeps the currency symbol every screen formats with in sync with the setting
             // row. Money.symbol is snapshot state, so this also covers changing it at runtime.
             container.settingRepository.observeCurrency().collect { Money.symbol = it }

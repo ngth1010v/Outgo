@@ -6,9 +6,10 @@ rem  Outgo build script
 rem
 rem  Usage:
 rem    build.bat            -> debug APK  (fast, unsigned, installable as-is)
-rem    build.bat release     -> release APK (minified, needs a signing config
-rem                             for the Play Store, but installs fine unsigned
-rem                             on a device with "install unknown apps" on)
+rem    build.bat release     -> release APK (minified, unsigned: add a signing
+rem                             config before installing it; Android refuses
+rem                             unsigned APKs. For local testing use
+rem                             gradlew :app:installBenchmarkRelease)
 rem    build.bat clean       -> clean + debug APK
 rem ============================================================
 

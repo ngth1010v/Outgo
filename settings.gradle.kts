@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Outgo"
 include(":app")
+include(":baselineprofile")

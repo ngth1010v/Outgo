@@ -32,6 +32,8 @@ import androidx.room.PrimaryKey
         Index(value = ["type", "occurred_at", "id"]),
         Index(value = ["account_id", "occurred_at"]),
         Index(value = ["category_id", "created_at"]),
+        // Monthly sums (account income, budget spend) filter by month first.
+        Index(value = ["month_key", "type"]),
     ],
 )
 data class TradeEntity(

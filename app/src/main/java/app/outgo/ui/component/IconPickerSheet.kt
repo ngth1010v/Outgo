@@ -22,7 +22,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,6 +32,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.outgo.R
 import app.outgo.data.icon.BuiltinIcons
 import app.outgo.data.icon.IconStore
@@ -50,7 +50,8 @@ fun IconPickerSheet(
     val container = LocalAppContainer.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val userIcons by container.database.iconDao().observeUserIcons().collectAsState(initial = emptyList())
+    // Remembered: a fresh Flow per recomposition would restart the query every time.
+    val userIconIds by remember { container.database.iconDao().observeUserIconIds() }.collectAsStateWithLifecycle(initialValue = emptyList())
     var importError by remember { mutableStateOf(false) }
 
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -90,9 +91,9 @@ fun IconPickerSheet(
                 )
             }
 
-            if (userIcons.isNotEmpty()) {
+            if (userIconIds.isNotEmpty()) {
                 Text(stringResource(R.string.setting_section_icons), style = MaterialTheme.typography.labelLarge)
-                IconGrid(userIcons.map { it.id }, onClick = onIconSelected) { id -> IconView(iconId = id, size = 44.dp) }
+                IconGrid(userIconIds, onClick = onIconSelected) { id -> IconView(iconId = id, size = 44.dp) }
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             }
 

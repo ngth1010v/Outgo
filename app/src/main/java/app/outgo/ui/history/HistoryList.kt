@@ -32,7 +32,7 @@ import app.outgo.util.formatDayHeader
 import app.outgo.util.formatTime
 
 /** Day-grouped history list, shared by the History screen and the Home screen's inline section. */
-internal sealed interface HistoryListItem {
+sealed interface HistoryListItem {
     data class Header(val dayLabel: String, val total: Long, val type: Int) : HistoryListItem
     data class Row(val trade: TradeEntity) : HistoryListItem
 }
@@ -63,7 +63,8 @@ internal fun buildHistoryItems(trades: List<TradeEntity>): List<HistoryListItem>
  */
 internal fun LazyListScope.historyItems(
     items: List<HistoryListItem>,
-    state: HistoryUiState,
+    categoriesById: Map<Long, CategoryEntity>,
+    accountsById: Map<Long, AccountEntity>,
     onOpenTrade: (Long) -> Unit,
     rowModifier: Modifier = Modifier,
 ) {
@@ -78,7 +79,7 @@ internal fun LazyListScope.historyItems(
                 is HistoryListItem.Row -> "history_row"
             }
         },
-    ) { item -> HistoryItem(item, state, onOpenTrade, rowModifier) }
+    ) { item -> HistoryItem(item, categoriesById, accountsById, onOpenTrade, rowModifier) }
 }
 
 internal fun historyItemKey(item: HistoryListItem): String = when (item) {
@@ -86,11 +87,16 @@ internal fun historyItemKey(item: HistoryListItem): String = when (item) {
     is HistoryListItem.Row -> "r_${item.trade.id}"
 }
 
-/** One day header or trade row; also drawn outside the list by Home's outgoing-tab overlay. */
+/**
+ * One day header or trade row; also drawn outside the list by Home's outgoing-tab overlay.
+ * Takes the two lookup maps rather than the whole [HistoryUiState]: they keep their identity
+ * across unrelated state updates (e.g. isLoadingMore), so visible rows skip recomposition.
+ */
 @Composable
 internal fun HistoryItem(
     item: HistoryListItem,
-    state: HistoryUiState,
+    categoriesById: Map<Long, CategoryEntity>,
+    accountsById: Map<Long, AccountEntity>,
     onOpenTrade: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -121,9 +127,9 @@ internal fun HistoryItem(
         }
         is HistoryListItem.Row -> TradeRow(
             trade = item.trade,
-            category = state.categoriesById[item.trade.categoryId],
-            fromAccount = state.accountsById[item.trade.accountId],
-            toAccount = state.accountsById[item.trade.toAccountId],
+            category = categoriesById[item.trade.categoryId],
+            fromAccount = accountsById[item.trade.accountId],
+            toAccount = accountsById[item.trade.toAccountId],
             onClick = { onOpenTrade(item.trade.id) },
             modifier = modifier,
         )

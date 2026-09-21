@@ -8,6 +8,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import app.outgo.data.db.dao.IconDao
 import app.outgo.data.db.entity.IconEntity
 import app.outgo.domain.IconKind
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -24,7 +25,8 @@ class IconStore(
     private val iconDao: IconDao,
 ) {
     private val cache = IconCache(maxBytes = 8 * 1024 * 1024)
-    private val assetCache = HashMap<String, ImageBitmap>()
+    // Filled from IO threads by the warm-up preload while the UI reads it, hence concurrent.
+    private val assetCache = ConcurrentHashMap<String, ImageBitmap>()
 
     /** Gets-or-creates the `icon` row for a builtin asset, returning its id. */
     suspend fun ensureBuiltin(assetKey: String): Long = withContext(Dispatchers.IO) {
@@ -41,6 +43,12 @@ class IconStore(
         )
     }
 
+    /** Already-decoded bitmap, if any — lets a composable paint it in its very first frame. */
+    fun cached(iconId: Long?): ImageBitmap? = iconId?.let { cache.get(it) }
+
+    /** Same as [cached], for the icon-picker gallery's asset keys. */
+    fun cachedAsset(assetKey: String): ImageBitmap? = assetCache[assetKey]
+
     suspend fun bitmapFor(iconId: Long?): ImageBitmap? {
         if (iconId == null) return null
         cache.get(iconId)?.let { return it }
@@ -52,11 +60,27 @@ class IconStore(
     /** For the icon-picker gallery, which shows every builtin asset before any of them has a DB row. */
     suspend fun bitmapForAsset(assetKey: String): ImageBitmap? {
         assetCache[assetKey]?.let { return it }
-        val decoded = withContext(Dispatchers.IO) {
-            context.assets.open(BuiltinIcons.assetPath(assetKey)).use { BitmapFactory.decodeStream(it) }
-        }?.asImageBitmap() ?: return null
+        val decoded = withContext(Dispatchers.IO) { decodeAsset(assetKey) } ?: return null
         assetCache[assetKey] = decoded
         return decoded
+    }
+
+    /**
+     * Called once the database is open: decodes every icon a screen can show, so screens (and
+     * the icon picker) paint real icons from their first frame instead of swapping them in.
+     */
+    suspend fun warmUp() {
+        preload(iconDao.referencedIconIds())
+        preloadAssets(BuiltinIcons.ALL)
+    }
+
+    /** Decodes every builtin asset up front so the icon picker opens with no async swaps. */
+    suspend fun preloadAssets(assetKeys: Collection<String>) {
+        withContext(Dispatchers.IO) {
+            for (key in assetKeys) {
+                if (!assetCache.containsKey(key)) decodeAsset(key)?.let { assetCache[key] = it }
+            }
+        }
     }
 
     /** Preloads a batch of icon ids in one go (e.g. all 10 Trade-screen picker icons at once). */
@@ -70,12 +94,19 @@ class IconStore(
 
     private suspend fun decode(iconId: Long): ImageBitmap? {
         val entity = iconDao.findById(iconId) ?: return null
-        val bitmap: Bitmap? = if (entity.kind == IconKind.BUILTIN && entity.assetKey != null) {
-            context.assets.open(BuiltinIcons.assetPath(entity.assetKey)).use { BitmapFactory.decodeStream(it) }
-        } else {
-            entity.png?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+        if (entity.kind == IconKind.BUILTIN && entity.assetKey != null) {
+            return assetCache[entity.assetKey] ?: decodeAsset(entity.assetKey)?.also { assetCache[entity.assetKey] = it }
         }
-        return bitmap?.asImageBitmap()
+        return entity.png?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }?.ready()
+    }
+
+    private fun decodeAsset(assetKey: String): ImageBitmap? =
+        context.assets.open(BuiltinIcons.assetPath(assetKey)).use { BitmapFactory.decodeStream(it) }?.ready()
+
+    /** Starts the GPU texture upload now, off the UI thread, instead of in the first frame drawing it. */
+    private fun Bitmap.ready(): ImageBitmap {
+        prepareToDraw()
+        return asImageBitmap()
     }
 
     companion object {

@@ -18,7 +18,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
@@ -39,10 +38,12 @@ import app.outgo.ui.LocalAppContainer
 @Composable
 fun IconView(iconId: Long?, modifier: Modifier = Modifier, size: Dp = 28.dp, color: Int? = null) {
     val container = LocalAppContainer.current
-    var bitmap by remember(iconId) { mutableStateOf<ImageBitmap?>(null) }
+    // Seeded from the cache so an already-decoded icon paints in the first frame, instead of a
+    // placeholder frame then a swap in the middle of a screen's slide-in.
+    var bitmap by remember(iconId) { mutableStateOf(container.iconStore.cached(iconId)) }
 
     LaunchedEffect(iconId) {
-        bitmap = container.iconStore.bitmapFor(iconId)
+        if (bitmap == null) bitmap = container.iconStore.bitmapFor(iconId)
     }
 
     val tint = color?.let { Color(it) }
@@ -80,10 +81,10 @@ private fun Color.lighten(fraction: Float = 0.75f): Color = lerp(this, Color.Whi
 @Composable
 fun BuiltinIconImage(assetKey: String, modifier: Modifier = Modifier, size: Dp = 40.dp) {
     val container = LocalAppContainer.current
-    var bitmap by remember(assetKey) { mutableStateOf<ImageBitmap?>(null) }
+    var bitmap by remember(assetKey) { mutableStateOf(container.iconStore.cachedAsset(assetKey)) }
 
     LaunchedEffect(assetKey) {
-        bitmap = container.iconStore.bitmapForAsset(assetKey)
+        if (bitmap == null) bitmap = container.iconStore.bitmapForAsset(assetKey)
     }
 
     Box(

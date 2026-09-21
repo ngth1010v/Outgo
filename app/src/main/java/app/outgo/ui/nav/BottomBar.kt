@@ -6,15 +6,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavDestination.Companion.hierarchy
-import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.NavHostController
-import androidx.navigation.compose.currentBackStackEntryAsState
 import app.outgo.R
 
 internal data class BottomItem(
@@ -34,22 +29,13 @@ internal val bottomItems = listOf(
 )
 
 @Composable
-fun OutgoBottomBar(navController: NavHostController) {
-    val backStackEntry by navController.currentBackStackEntryAsState()
-    val currentDestination = backStackEntry?.destination
-
+fun OutgoBottomBar(selectedRoute: String?, onSelect: (String) -> Unit) {
     NavigationBar(modifier = Modifier.height(64.dp)) {
         bottomItems.forEach { item ->
-            val selected = currentDestination?.hierarchy?.any { it.route == item.route } == true
+            val selected = item.route == selectedRoute
             NavigationBarItem(
                 selected = selected,
-                onClick = {
-                    navController.navigate(item.route) {
-                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                },
+                onClick = { onSelect(item.route) },
                 icon = {
                     Icon(
                         painter = painterResource(if (selected) item.iconSelected else item.icon),

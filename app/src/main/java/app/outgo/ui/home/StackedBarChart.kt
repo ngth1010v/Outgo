@@ -57,6 +57,15 @@ fun StackedDivergingBarChart(
             .map { it.key }
     }
 
+    // Per-month segments in stacking order, sorted once here instead of on every draw pass.
+    val stacks = remember(byMonth, rootOrder) {
+        val rank = rootOrder.withIndex().associate { (i, id) -> id to i }
+        byMonth.mapValues { (_, rows) ->
+            val sorted = rows.sortedBy { rank[it.rootId] ?: Int.MAX_VALUE }
+            sorted.filter { it.type == CategoryKind.INCOME } to sorted.filter { it.type == CategoryKind.EXPENSE }
+        }
+    }
+
     val maxIncome = remember(byMonth, months) {
         months.maxOfOrNull { m -> byMonth[m].orEmpty().filter { it.type == CategoryKind.INCOME }.sumOf { it.total } } ?: 0L
     }
@@ -148,10 +157,7 @@ fun StackedDivergingBarChart(
                 months.forEachIndexed { index, month ->
                     val colStart = index * barWidthTotal + barPad
                     val colEnd = (index + 1) * barWidthTotal - barPad
-                    val entries = byMonth[month].orEmpty()
-
-                    val income = entries.filter { it.type == CategoryKind.INCOME }
-                        .sortedBy { rootOrder.indexOf(it.rootId) }
+                    val (income, expense) = stacks[month] ?: (emptyList<MonthCategoryTotal>() to emptyList())
                     var top = baselineY
                     for (e in income) {
                         val h = e.total * pxPerUnitAbove
@@ -163,8 +169,6 @@ fun StackedDivergingBarChart(
                         top -= h
                     }
 
-                    val expense = entries.filter { it.type == CategoryKind.EXPENSE }
-                        .sortedBy { rootOrder.indexOf(it.rootId) }
                     var bottom = baselineY
                     for (e in expense) {
                         val h = e.total * pxPerUnitBelow

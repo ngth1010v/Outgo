@@ -12,6 +12,9 @@
         android:theme="@style/Theme.Outgo"
         tools:targetApi="34">
 
+        <!-- Lets macrobenchmark/Perfetto profile non-debuggable builds; no user-visible effect. -->
+        <profileable android:shell="true" tools:targetApi="29" />
+
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|keyboardHidden|uiMode"
