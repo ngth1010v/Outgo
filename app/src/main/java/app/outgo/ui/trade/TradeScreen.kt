@@ -117,7 +117,7 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit) {
                 .padding(padding)
                 .imePadding()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 16.dp, top = 4.dp, end = 16.dp, bottom = 16.dp),
+                .padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 16.dp),
         ) {
             ExpenseIncomeToggle(type = state.type, onTypeChange = viewModel::onTypeChange, enabled = !state.isEditing)
             // Keyed by type: the old tab keeps its last state while sliding out. Editing locks the

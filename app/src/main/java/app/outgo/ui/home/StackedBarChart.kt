@@ -115,17 +115,18 @@ fun StackedDivergingBarChart(
                     val step = niceStep(maxOf(pxPerUnitAbove, pxPerUnitBelow), minPadding)
                     // 0 (the baseline), the income peak and the expense peak are always labelled;
                     // nice-step ticks fill the gaps, minus any that would crowd a peak label.
+                    // Expense ticks are stored negative so their labels read "-50K".
                     val ticks = buildList {
                         add(0L to baselineY)
                         if (maxIncome > 0) add(maxIncome to baselineY - maxIncome * pxPerUnitAbove)
-                        if (maxExpense > 0) add(maxExpense to baselineY + maxExpense * pxPerUnitBelow)
+                        if (maxExpense > 0) add(-maxExpense to baselineY + maxExpense * pxPerUnitBelow)
                         if (step > 0) {
                             ticksUpTo(maxIncome, step)
                                 .filter { (maxIncome - it) * pxPerUnitAbove >= minPadding }
                                 .forEach { add(it to baselineY - it * pxPerUnitAbove) }
                             ticksUpTo(maxExpense, step)
                                 .filter { (maxExpense - it) * pxPerUnitBelow >= minPadding }
-                                .forEach { add(it to baselineY + it * pxPerUnitBelow) }
+                                .forEach { add(-it to baselineY + it * pxPerUnitBelow) }
                         }
                     }
                     for ((value, y) in ticks) {
@@ -262,8 +263,9 @@ private fun pow10(power: Int): Long {
     return out
 }
 
-/** "950", "2.5M", "12M" — never more than 5 characters, always a '.' decimal point, no currency. */
+/** "950", "2.5M", "-12M" — never more than 5 characters, always a '.' decimal point, no currency. */
 private fun compactAmount(value: Long, units: Triple<String, String, String>): String {
+    if (value < 0) return "-" + compactAmount(-value, units)
     val (divisor, suffix) = when {
         value >= 1_000_000_000L -> 1_000_000_000.0 to units.third
         value >= 1_000_000L -> 1_000_000.0 to units.second

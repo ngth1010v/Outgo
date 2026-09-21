@@ -4,6 +4,7 @@ import androidx.annotation.StringRes
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.EaseInOut
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -70,6 +71,8 @@ import app.outgo.ui.theme.IncomeGreen
 import app.outgo.util.Money
 import kotlin.math.abs
 import kotlin.math.sign
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
@@ -106,6 +109,11 @@ fun HomeScreen(onOpenTrade: (Long) -> Unit) {
     // old tab's items alive, and composing the whole old list would defeat its windowing).
     val historySlide = remember { Animatable(0f) }
     var outgoing by remember { mutableStateOf<OutgoingHistory?>(null) }
+    // A shorter new tab would shrink the list under the current scroll position and LazyColumn
+    // would snap up instantly. A viewport-tall filler keeps the position during the slide; then
+    // the list eases back up over the filler before it's removed.
+    var holdScroll by remember { mutableStateOf(false) }
+    var switchJob by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
     // Remembered so the history rows see a stable modifier and don't recompose with the screen.
     val historySlideModifier = remember(historySlide) {
@@ -125,10 +133,27 @@ fun HomeScreen(onOpenTrade: (Long) -> Unit) {
             direction = direction,
         )
         historyType = type
-        scope.launch {
-            historySlide.snapTo(direction)
-            historySlide.animateTo(0f, tween(SLIDE_MS, easing = EaseInOut))
-            outgoing = null
+        holdScroll = true
+        switchJob?.cancel()
+        switchJob = scope.launch {
+            try {
+                historySlide.snapTo(direction)
+                historySlide.animateTo(0f, tween(SLIDE_MS, easing = EaseInOut))
+                outgoing = null
+                val layout = listState.layoutInfo
+                layout.visibleItemsInfo.firstOrNull { it.key == HOLD_SCROLL_KEY }?.let { filler ->
+                    listState.animateScrollBy(
+                        (filler.offset - layout.viewportEndOffset).toFloat(),
+                        tween(SLIDE_MS, easing = EaseInOut),
+                    )
+                }
+            } finally {
+                // A newer switch owns the state now; only the latest one cleans up.
+                if (switchJob == coroutineContext.job) {
+                    outgoing = null
+                    holdScroll = false
+                }
+            }
         }
     }
 
@@ -137,7 +162,7 @@ fun HomeScreen(onOpenTrade: (Long) -> Unit) {
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 8.dp, bottom = 16.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 16.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 item {
@@ -221,6 +246,9 @@ fun HomeScreen(onOpenTrade: (Long) -> Unit) {
                 } else {
                     historyItems(historyRows, historyState, onOpenTrade, historySlideModifier)
                 }
+                if (holdScroll) {
+                    item(key = HOLD_SCROLL_KEY) { Spacer(Modifier.fillParentMaxHeight()) }
+                }
             }
 
             outgoing?.let { old ->
@@ -247,6 +275,8 @@ fun HomeScreen(onOpenTrade: (Long) -> Unit) {
         }
     }
 }
+
+private const val HOLD_SCROLL_KEY = "history_hold_scroll"
 
 /** Snapshot of the history rows on screen when the tab switched, with their y offset in the list viewport. */
 private class OutgoingHistory(
