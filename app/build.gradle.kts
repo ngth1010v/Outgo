@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -5,6 +7,15 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.baselineprofile)
 }
+
+// Release signing credentials live in keystore.properties (gitignored, alongside the keystore
+// itself which sits outside the repo). Absent it — a fresh clone, CI — the release build stays
+// unsigned rather than failing, exactly as it behaved before signing was set up.
+val keystorePropsFile = rootProject.file("keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) keystorePropsFile.inputStream().use { load(it) }
+}
+val hasSigningConfig = keystorePropsFile.exists()
 
 android {
     namespace = "app.outgo"
@@ -22,6 +33,17 @@ android {
         resourceConfigurations += listOf("en", "vi")
     }
 
+    signingConfigs {
+        if (hasSigningConfig) {
+            create("release") {
+                storeFile = file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -30,6 +52,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (hasSigningConfig) signingConfig = signingConfigs.getByName("release")
         }
         debug {
             isMinifyEnabled = false

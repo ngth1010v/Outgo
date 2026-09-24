@@ -9,6 +9,11 @@ build/
 *.apk
 *.aab
 
+# Release signing: credentials and keystores never go in version control
+/keystore.properties
+*.jks
+*.keystore
+
 # Android Studio / IntelliJ
 .idea/
 *.hprof

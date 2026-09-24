@@ -6,10 +6,11 @@ rem  Outgo build script
 rem
 rem  Usage:
 rem    build.bat            -> debug APK  (fast, unsigned, installable as-is)
-rem    build.bat release     -> release APK (minified, unsigned: add a signing
-rem                             config before installing it; Android refuses
-rem                             unsigned APKs. For local testing use
-rem                             gradlew :app:installBenchmarkRelease)
+rem    build.bat release     -> release APK (minified, signed with the keystore
+rem                             from keystore.properties, which needs the keys
+rem                             storeFile/storePassword/keyAlias/keyPassword.
+rem                             Without that file the APK comes out unsigned
+rem                             and Android refuses to install it.)
 rem    build.bat clean       -> clean + debug APK
 rem ============================================================
 
@@ -52,7 +53,7 @@ set BUILD_RESULT=%ERRORLEVEL%
 
 if not "%BUILD_RESULT%"=="0" (
     echo.
-    echo === Build FAILED (exit code %BUILD_RESULT%) ===
+    echo === Build FAILED ^(exit code %BUILD_RESULT%^) ===
     exit /b %BUILD_RESULT%
 )
 
@@ -71,10 +72,16 @@ if defined FOUND_APK (
     echo Install on a connected device/emulator with:
     echo   adb install -r "!FOUND_APK!"
     if /I "%VARIANT%"=="release" (
-        echo.
-        echo [NOTE] Release builds are unsigned unless you add a signing config
-        echo        in app\build.gradle.kts. Unsigned APKs still install fine on
-        echo        a device with "Install unknown apps" allowed, via adb.
+        if exist "keystore.properties" (
+            echo.
+            echo [NOTE] Signed with the keystore from keystore.properties.
+            echo        Verify with: apksigner verify --verbose "!FOUND_APK!"
+        ) else (
+            echo.
+            echo [WARN] No keystore.properties found, so this APK is UNSIGNED and
+            echo        Android will reject it with "invalid package" or "app not
+            echo        installed". Add a signing config before installing it.
+        )
     )
     echo.
 )
