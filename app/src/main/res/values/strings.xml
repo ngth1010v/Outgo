@@ -50,6 +50,10 @@
     <string name="home_savings">Savings</string>
     <string name="home_available_balance">Available balance</string>
     <string name="home_savings_balance">Savings balance</string>
+    <string name="home_show_available_balance">Show available balance</string>
+    <string name="home_hide_available_balance">Hide available balance</string>
+    <string name="home_show_savings_and_total_balance">Show savings and total balance</string>
+    <string name="home_hide_savings_and_total_balance">Hide savings and total balance</string>
     <string name="home_income">Income</string>
     <string name="home_expense">Expense</string>
     <string name="home_expense_history">Expense history</string>

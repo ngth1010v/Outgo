@@ -14,11 +14,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -39,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -77,7 +82,9 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
     val container = LocalAppContainer.current
     val viewModel: HomeViewModel = viewModel(
         factory = viewModelFactory {
-            initializer { HomeViewModel(container.accountRepository, container.budgetRepository) }
+            initializer {
+                HomeViewModel(container.accountRepository, container.budgetRepository, container.settingRepository)
+            }
         },
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -162,10 +169,32 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
             ) {
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(4.3.dp), modifier = Modifier.padding(bottom = 10.dp)) {
-                        BalanceBlock(R.string.home_available_balance, state.availableBalance, primary = true)
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            BalanceBlock(R.string.home_savings_balance, state.savingsBalance, primary = false)
-                            BalanceBlock(R.string.home_total_balance, state.totalBalance, primary = false)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            BalanceBlock(
+                                R.string.home_available_balance,
+                                state.availableBalance,
+                                primary = true,
+                                visible = !state.availableBalanceHidden,
+                                modifier = Modifier.weight(1f),
+                            )
+                            RevealToggle(
+                                hidden = state.availableBalanceHidden,
+                                showLabel = R.string.home_show_available_balance,
+                                hideLabel = R.string.home_hide_available_balance,
+                                onClick = viewModel::toggleAvailableBalance,
+                            )
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.weight(1f)) {
+                                BalanceBlock(R.string.home_savings_balance, state.savingsBalance, primary = false, visible = !state.otherBalancesHidden)
+                                BalanceBlock(R.string.home_total_balance, state.totalBalance, primary = false, visible = !state.otherBalancesHidden)
+                            }
+                            RevealToggle(
+                                hidden = state.otherBalancesHidden,
+                                showLabel = R.string.home_show_savings_and_total_balance,
+                                hideLabel = R.string.home_hide_savings_and_total_balance,
+                                onClick = viewModel::toggleOtherBalances,
+                            )
                         }
                     }
                 }
@@ -347,24 +376,51 @@ private const val HOLD_SCROLL_MS = 500
 private val HOLD_SCROLL_HEIGHT = 30_000.dp
 
 /**
+ * Eye / eye-slash button masking a balance figure. The glyph is deliberately small next to the
+ * balance type, but the [IconButton] keeps its default 48dp touch target.
+ */
+@Composable
+private fun RevealToggle(
+    hidden: Boolean,
+    @StringRes showLabel: Int,
+    @StringRes hideLabel: Int,
+    onClick: () -> Unit,
+) {
+    IconButton(onClick = onClick) {
+        Icon(
+            painterResource(if (hidden) R.drawable.ph_eye_slash else R.drawable.ph_eye),
+            contentDescription = stringResource(if (hidden) showLabel else hideLabel),
+            modifier = Modifier.size(REVEAL_ICON_SIZE),
+            tint = LocalContentColor.current.copy(alpha = REVEAL_ICON_ALPHA),
+        )
+    }
+}
+
+/** 0.6x Material's 24dp default, so the toggles sit quietly beside the amounts. */
+private val REVEAL_ICON_SIZE = 14.4.dp
+
+/** Faded to 30% of the inherited content colour, so the toggles read as secondary to the amounts. */
+private const val REVEAL_ICON_ALPHA = 0.3f
+
+/**
  * Balance label + amount. Primary amount is 1.2x headlineMedium; secondary label is 80% of the
  * primary label and secondary amount 60% of the primary amount, muted.
  */
 @Composable
-private fun BalanceBlock(@StringRes label: Int, amount: Long, primary: Boolean) {
+private fun BalanceBlock(@StringRes label: Int, amount: Long, primary: Boolean, visible: Boolean = true, modifier: Modifier = Modifier) {
     val labelBase = MaterialTheme.typography.labelLarge
     val labelScale = if (primary) 1f else 0.8f
     val base = MaterialTheme.typography.headlineMedium
     val scale = if (primary) 1.2f else 1.2f * 0.6f
     // Negative gap pulls the primary amount up to tighten label-amount spacing.
-    Column(verticalArrangement = Arrangement.spacedBy(if (primary) (-3.1).dp else 0.dp)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(if (primary) (-3.1).dp else 0.dp)) {
         Text(
             stringResource(label),
             style = labelBase.copy(fontSize = labelBase.fontSize * labelScale, lineHeight = labelBase.lineHeight * labelScale),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
-            Money.format(amount),
+            if (visible) Money.format(amount) else Money.formatHidden(),
             style = base.copy(fontSize = base.fontSize * scale, lineHeight = base.lineHeight * scale),
             fontWeight = if (primary) FontWeight.Bold else FontWeight.Normal,
             color = if (primary) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,

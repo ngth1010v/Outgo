@@ -31,4 +31,22 @@ class SettingRepository(private val context: Context, private val settingDao: Se
         // attachBaseContext, before the database can safely be opened.
         LocalePrefs.set(context, languageTag)
     }
+
+    /** Whether Home masks its available-balance figure. No SharedPreferences mirror: Home is not
+     *  the start destination, and HomeViewModel reads this in the same flow as the balances, so the
+     *  figure and its mask always arrive together. */
+    fun observeAvailableBalanceHidden(): Flow<Boolean> = observeFlag(SettingKeys.AVAILABLE_BALANCE_HIDDEN)
+
+    /** Whether Home masks its savings and total balance figures. */
+    fun observeOtherBalancesHidden(): Flow<Boolean> = observeFlag(SettingKeys.OTHER_BALANCES_HIDDEN)
+
+    suspend fun setAvailableBalanceHidden(hidden: Boolean) = setFlag(SettingKeys.AVAILABLE_BALANCE_HIDDEN, hidden)
+
+    suspend fun setOtherBalancesHidden(hidden: Boolean) = setFlag(SettingKeys.OTHER_BALANCES_HIDDEN, hidden)
+
+    private fun observeFlag(key: String): Flow<Boolean> = settingDao.observe(key).map { it == "1" }
+
+    private suspend fun setFlag(key: String, value: Boolean) {
+        settingDao.set(SettingEntity(key, if (value) "1" else "0"))
+    }
 }

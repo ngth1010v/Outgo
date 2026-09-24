@@ -27,4 +27,13 @@ object SettingKeys {
 
     /** Currency symbol shown next to every amount, e.g. "$". Absent in pre-currency backups — see [app.outgo.util.Money.DEFAULT_SYMBOL]. */
     const val CURRENCY = "currency"
+
+    /**
+     * "1" while Home's available-balance figure is masked. Stored as "hidden" rather than
+     * "visible" so an absent row — every pre-existing database and backup — means shown.
+     */
+    const val AVAILABLE_BALANCE_HIDDEN = "available_balance_hidden"
+
+    /** "1" while Home's savings *and* total balance figures are masked. Absent row means shown. */
+    const val OTHER_BALANCES_HIDDEN = "other_balances_hidden"
 }

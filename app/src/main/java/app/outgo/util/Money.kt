@@ -26,6 +26,9 @@ object Money {
     /** "1234567" -> "1.234.567 $" */
     fun format(amount: Long): String = "${groupThousands(amount)} $symbol"
 
+    /** Masked amount for when the user has hidden a balance, e.g. "--- $". */
+    fun formatHidden(): String = "--- $symbol"
+
     /** Same as [format] but with an explicit sign for positive amounts, e.g. "+50.000 $". */
     fun formatSigned(amount: Long): String {
         val sign = if (amount > 0) "+" else if (amount < 0) "-" else ""

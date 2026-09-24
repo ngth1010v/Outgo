@@ -46,6 +46,10 @@
     <string name="home_savings">Tiết kiệm</string>
     <string name="home_available_balance">Số dư khả dụng</string>
     <string name="home_savings_balance">Số dư tiết kiệm</string>
+    <string name="home_show_available_balance">Hiện số dư khả dụng</string>
+    <string name="home_hide_available_balance">Ẩn số dư khả dụng</string>
+    <string name="home_show_savings_and_total_balance">Hiện số dư tiết kiệm và tổng tài sản</string>
+    <string name="home_hide_savings_and_total_balance">Ẩn số dư tiết kiệm và tổng tài sản</string>
     <string name="home_income">Thu</string>
     <string name="home_expense">Chi</string>
     <string name="home_expense_history">Lịch sử Chi</string>
