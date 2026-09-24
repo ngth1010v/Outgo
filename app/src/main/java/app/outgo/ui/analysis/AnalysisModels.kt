@@ -79,7 +79,14 @@ data class BreakdownRow(
 
 /** The donut and the breakdown list are two views of one dataset. */
 @Immutable
-data class SliceSet(val donut: DonutUi, val rows: List<BreakdownRow>)
+data class SliceSet(
+    val donut: DonutUi,
+    val rows: List<BreakdownRow>,
+    val prevTotal: Long,
+    val deltaAmount: Long,
+    /** Change against the same period a month/year earlier; null with no baseline. */
+    val deltaPercent: Int?,
+)
 
 // ---------------------------------------------------------------- section 4
 
@@ -141,6 +148,12 @@ data class BarsUi(
 }
 
 // ---------------------------------------------------------------- section 6
+
+/** The top movers of both kinds, each side never empty — see [buildMovers]. */
+@Immutable
+data class MoversUi(val expense: List<MoverRow>, val income: List<MoverRow>) {
+    val rowCount: Int get() = maxOf(expense.size, 1) + maxOf(income.size, 1)
+}
 
 @Immutable
 data class MoverRow(
@@ -256,16 +269,10 @@ data class StatsData(
     val expense: SliceSet,
     val income: SliceSet,
     val bars: BarsUi,
-    val expenseMovers: List<MoverRow>,
-    val incomeMovers: List<MoverRow>,
-    val allMovers: List<MoverRow>,
+    /** Always both kinds: the section shows an expense half and an income half. */
+    val movers: MoversUi,
 ) {
     fun slicesOf(mode: AnalysisMode): SliceSet = if (mode == AnalysisMode.INCOME) income else expense
-    fun moversOf(mode: AnalysisMode): List<MoverRow> = when (mode) {
-        AnalysisMode.EXPENSE -> expenseMovers
-        AnalysisMode.INCOME -> incomeMovers
-        AnalysisMode.ALL -> allMovers
-    }
 }
 
 @Immutable

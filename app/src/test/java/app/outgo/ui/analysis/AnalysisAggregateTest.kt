@@ -192,38 +192,84 @@ class AnalysisAggregateTest {
 
     // ------------------------------------------------------------------- movers sort
 
+    private fun movers(totals: List<MonthCategoryTotal>, month: Int = 202608) =
+        (stats(totals, month) as Stage.Ready).data.movers
+
     @Test
     fun `movers sort by amount moved, not by percent`() {
         val current = listOf(stat(202608, 1, 1_000_000), stat(202608, 2, 300))
         val previous = listOf(stat(202607, 1, 900_000), stat(202607, 2, 10))
-        val movers = (stats(current + previous, 202608) as Stage.Ready).data.expenseMovers
+        val expense = movers(current + previous).expense
         // Category 2 moved +2900%, category 1 only +11% — but +100.000 beats +290.
-        assertEquals(listOf(1L, 2L), movers.map { it.rootId })
-        assertEquals(100_000L, movers[0].delta)
-        assertEquals(1f, movers[0].fraction)
+        assertEquals(listOf(1L, 2L), expense.map { it.rootId })
+        assertEquals(100_000L, expense[0].delta)
+        assertEquals(1f, expense[0].fraction)
     }
 
     @Test
     fun `a category that dropped to zero still counts as a mover`() {
-        val movers = (stats(listOf(stat(202608, 1, 100), stat(202607, 2, 5_000)), 202608) as Stage.Ready)
-            .data.expenseMovers
-        assertEquals(listOf(2L, 1L), movers.map { it.rootId })
-        assertEquals(-5_000L, movers[0].delta)
+        val expense = movers(listOf(stat(202608, 1, 100), stat(202607, 2, 5_000))).expense
+        assertEquals(listOf(2L, 1L), expense.map { it.rootId })
+        assertEquals(-5_000L, expense[0].delta)
     }
 
     @Test
-    fun `movers are kept per kind and merged for All mode`() {
+    fun `movers are ranked across both kinds, then split`() {
         val totals = listOf(
             stat(202608, 1, 1_000), stat(202607, 1, 100),
             stat(202608, 2, 9_000, CategoryKind.INCOME), stat(202607, 2, 100, CategoryKind.INCOME),
         )
-        val data = (stats(totals, 202608) as Stage.Ready).data
-        assertEquals(listOf(1L), data.expenseMovers.map { it.rootId })
-        assertEquals(listOf(2L), data.incomeMovers.map { it.rootId })
-        // All mode ranks both kinds together: the income category moved more.
-        assertEquals(listOf(2L, 1L), data.allMovers.map { it.rootId })
-        assertEquals(CategoryKind.INCOME, data.allMovers[0].kind)
-        assertEquals(CategoryKind.EXPENSE, data.allMovers[1].kind)
+        val ui = movers(totals)
+        assertEquals(listOf(1L), ui.expense.map { it.rootId })
+        assertEquals(listOf(2L), ui.income.map { it.rootId })
+        // The shared scale is the biggest move of either kind, so the two halves are comparable.
+        assertEquals(1f, ui.income.first().fraction, 0.0001f)
+        assertEquals(900f / 8900f, ui.expense.first().fraction, 0.0001f)
+    }
+
+    @Test
+    fun `the smallest of six expense movers gives up its place to an income mover`() {
+        // Six big expense moves plus one small income move: the income half must not be empty.
+        val totals = (1L..6L).flatMap { listOf(stat(202608, it, it * 1_000), stat(202607, it, 0)) } +
+            listOf(stat(202608, 9, 5, CategoryKind.INCOME), stat(202607, 9, 0, CategoryKind.INCOME))
+        val ui = movers(totals)
+        assertEquals(5, ui.expense.size)
+        assertEquals(listOf(9L), ui.income.map { it.rootId })
+        // The 1.000 mover is the one dropped, not one of the bigger ones.
+        assertEquals(listOf(6L, 5L, 4L, 3L, 2L), ui.expense.map { it.rootId })
+        assertEquals(MOVER_COUNT, ui.rowCount)
+    }
+
+    @Test
+    fun `a kind with no movers at all leaves room for its placeholder row`() {
+        val totals = (1L..8L).flatMap { listOf(stat(202608, it, it * 1_000), stat(202607, it, 0)) }
+        val ui = movers(totals)
+        // Five rows plus one placeholder, never six plus one.
+        assertEquals(5, ui.expense.size)
+        assertTrue(ui.income.isEmpty())
+        assertEquals(MOVER_COUNT, ui.rowCount)
+    }
+
+    @Test
+    fun `the row count stays between two and six`() {
+        val cases = listOf(
+            listOf(stat(202608, 1, 100)),
+            listOf(stat(202608, 1, 100), stat(202608, 2, 50, CategoryKind.INCOME)),
+            (1L..20L).map { stat(202608, it, it * 100) },
+            (1L..20L).map { stat(202608, it, it * 100, if (it % 2 == 0L) CategoryKind.INCOME else CategoryKind.EXPENSE) },
+        )
+        cases.forEach { totals ->
+            val count = movers(totals).rowCount
+            assertTrue("$count", count in 2..MOVER_COUNT)
+        }
+    }
+
+    @Test
+    fun `a month with no change at all has two placeholder rows`() {
+        val ui = movers(listOf(stat(202608, 1, 100), stat(202607, 1, 100)))
+        assertTrue(ui.expense.isEmpty())
+        assertTrue(ui.income.isEmpty())
+        assertEquals(2, ui.rowCount)
     }
 
     // ---------------------------------------------------------------------- summary
@@ -295,6 +341,24 @@ class AnalysisAggregateTest {
         assertTrue(august.selected)
         assertFalse(bars.bars.single { it.monthKey == 202607 }.selected)
         assertEquals(600L / 6, bars.expenseAverage)
+    }
+
+    @Test
+    fun `a slice set carries its own change, for the donut centre`() {
+        val totals = listOf(stat(202608, 1, 1_200), stat(202607, 1, 1_000))
+        val set = (stats(totals, 202608) as Stage.Ready).data.expense
+        assertEquals(1_000L, set.prevTotal)
+        assertEquals(200L, set.deltaAmount)
+        assertEquals(20, set.deltaPercent)
+    }
+
+    @Test
+    fun `a kind that vanished this month still reports its change`() {
+        val totals = listOf(stat(202608, 1, 500), stat(202607, 2, 800, CategoryKind.INCOME))
+        val income = (stats(totals, 202608) as Stage.Ready).data.income
+        assertTrue(income.rows.isEmpty())
+        assertEquals(-800L, income.deltaAmount)
+        assertEquals(-100, income.deltaPercent)
     }
 
     @Test

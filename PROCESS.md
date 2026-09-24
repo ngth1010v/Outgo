@@ -5,7 +5,7 @@ Update it at the end of every phase, and whenever a phase is interrupted.
 
 - Branch: `feat/analysis-v2` (off `feat/analysis-rebuild`)
 - Verify with: `gradlew.bat :app:assembleDebug` and `gradlew.bat :app:testDebugUnitTest`
-- Last verified: assembleDebug OK, 48 unit tests green, and run on an API 36 emulator —
+- Last verified: assembleDebug OK, 54 unit tests green, and run on an API 36 emulator —
   month page, year page, all three modes, transfers and the raw-trade sections all render
 
 ## Phase status
@@ -58,6 +58,17 @@ Update it at the end of every phase, and whenever a phase is interrupted.
   killed the app the moment the Analysis tab was opened. Keys are now `AnalysisPage.key`, a plain
   `Int` (`yyyyMM` for a month, `yyyy00` for a year, which months can never collide with).
   Regression test in `AnalysisPageTest`.
+
+**Donut centre, share precision and split movers**
+- The donut centre carries the period-over-period change under the amount; `SliceSet` now holds
+  `prevTotal`/`deltaAmount`/`deltaPercent`, so a kind that vanished this month still reports -100%.
+- The breakdown's share figure has two decimals — a small category rounded to "0%" said nothing.
+  The change column on the right is still whole percent on purpose.
+- Biggest movers is now one ranking across both kinds, split into an expense half and an income
+  half: at most 6 rows in total, each half never empty. If the top six are all one kind, the
+  smallest gives up its place to the biggest mover of the other; a kind with no movers at all gets
+  a single placeholder row and the other half is capped at 5, so the section is always 6 rows tall.
+  Movers no longer follow the mode switch — it always shows both halves.
 
 **Follow-up polish (after the second device run)**
 - Header rows shrunk to 34dp (0.7x the 48dp default), with 20dp arrow icons and a tight text button.

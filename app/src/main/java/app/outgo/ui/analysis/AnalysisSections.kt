@@ -68,6 +68,10 @@ val WeekdayHeight = 140.dp
 val YoyHeight = 140.dp
 private val RowHeight = 44.dp
 private val MoverRowHeight = 36.dp
+private val MoverLabelHeight = 22.dp
+
+/** Both half labels plus the full row budget, so the section never changes height. */
+val MoversContentHeight = MoverLabelHeight * 2 + MoverRowHeight * MOVER_COUNT
 private val BucketRowHeight = 52.dp
 
 /** Which slice/row the user tapped; read through `derivedStateOf` at the call sites. */
@@ -300,6 +304,9 @@ fun DonutSection(
         shown.rows.size,
         Money.format(shown.rows.firstOrNull()?.amount ?: 0L),
     )
+    // All mode's centre reads the outer (expense) ring, which is what its total shows.
+    val centred = if (mode == AnalysisMode.INCOME) income else expense
+    val centreKind = if (mode == AnalysisMode.INCOME) CategoryKind.INCOME else CategoryKind.EXPENSE
     Section(title, modifier.semantics { contentDescription = description }) {
         if (expense.rows.isEmpty() && income.rows.isEmpty()) {
             EmptyBox(DonutHeight)
@@ -310,6 +317,10 @@ fun DonutSection(
                 mode = mode,
                 selectedRootId = { selection.rootId },
                 centerLabel = Money.format(total),
+                centerDelta = centred.deltaPercent?.let { percent ->
+                    (if (percent > 0) "+" else "") + "$percent%"
+                },
+                centerDeltaColor = deltaColor(centred.deltaAmount, centreKind),
                 onSelect = selection::toggle,
                 progress = introProgress(animate),
                 modifier = Modifier.fillMaxWidth().height(DonutHeight),
@@ -364,7 +375,8 @@ private fun BreakdownRowItem(row: BreakdownRow, selection: AnalysisSelection) {
         Column(modifier = Modifier.weight(1f)) {
             Text(row.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                "${row.sharePercent.toInt()}%",
+                // Two decimals: a small category rounded to "0%" said nothing.
+                String.format(Locale.US, "%.2f%%", row.sharePercent),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -437,47 +449,73 @@ fun BarsSection(
 
 // ------------------------------------------------------------------ section 6
 
+/**
+ * Two halves, expense and income, ranked together and split. A half with no movers keeps one
+ * placeholder row, so the section is always [MOVER_COUNT] rows tall whatever the data says.
+ */
 @Composable
-fun MoversSection(movers: List<MoverRow>, animate: Boolean, modifier: Modifier = Modifier) {
+fun MoversSection(movers: MoversUi, animate: Boolean, modifier: Modifier = Modifier) {
     val description = stringResource(R.string.analysis_cd_movers)
     Section(stringResource(R.string.analysis_movers_title), modifier.semantics { contentDescription = description }) {
-        Box(modifier = Modifier.fillMaxWidth().height(MoverRowHeight * MOVER_COUNT)) {
-            if (movers.isEmpty()) {
-                EmptyBox(MoverRowHeight * MOVER_COUNT)
-            } else {
-                Column {
-                    movers.forEach { mover ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth().height(MoverRowHeight),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            IconView(iconId = mover.iconId, size = 22.dp, color = mover.color)
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                mover.name,
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.width(80.dp),
-                            )
-                            MoverBar(
-                                fraction = mover.fraction,
-                                increase = mover.delta > 0,
-                                kindColor = deltaColor(mover.delta, mover.kind),
-                                progress = introProgress(animate),
-                                modifier = Modifier.weight(1f).height(MoverRowHeight),
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                Money.formatSignedNoCurrency(mover.delta),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = deltaColor(mover.delta, mover.kind),
-                            )
-                        }
-                    }
-                }
-            }
+        Column(modifier = Modifier.fillMaxWidth().height(MoversContentHeight)) {
+            MoverHalf(stringResource(R.string.trade_expense), movers.expense, animate)
+            MoverHalf(stringResource(R.string.trade_income), movers.income, animate)
         }
+    }
+}
+
+@Composable
+private fun MoverHalf(label: String, rows: List<MoverRow>, animate: Boolean) {
+    Text(
+        label,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.height(MoverLabelHeight),
+    )
+    if (rows.isEmpty()) {
+        Box(
+            modifier = Modifier.fillMaxWidth().height(MoverRowHeight),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                stringResource(R.string.analysis_no_data),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    } else {
+        rows.forEach { mover -> MoverRowItem(mover, animate) }
+    }
+}
+
+@Composable
+private fun MoverRowItem(mover: MoverRow, animate: Boolean) {
+    Row(
+        modifier = Modifier.fillMaxWidth().height(MoverRowHeight),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconView(iconId = mover.iconId, size = 22.dp, color = mover.color)
+        Spacer(Modifier.width(8.dp))
+        Text(
+            mover.name,
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.width(80.dp),
+        )
+        MoverBar(
+            fraction = mover.fraction,
+            increase = mover.delta > 0,
+            kindColor = deltaColor(mover.delta, mover.kind),
+            progress = introProgress(animate),
+            modifier = Modifier.weight(1f).height(MoverRowHeight),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            Money.formatSignedNoCurrency(mover.delta),
+            style = MaterialTheme.typography.bodySmall,
+            color = deltaColor(mover.delta, mover.kind),
+        )
     }
 }
 

@@ -25,7 +25,8 @@ import kotlin.math.abs
 /** Slices past this count are summed into one "Other" row (plus the "Other" row itself). */
 const val TOP_SLICE_COUNT = 6
 const val TREND_MONTH_COUNT = 6
-const val MOVER_COUNT = 5
+/** Rows the movers section shows at most, counting both halves and any placeholder. */
+const val MOVER_COUNT = 6
 const val LARGEST_COUNT = 5
 const val TRANSFER_PAIR_COUNT = 5
 
@@ -71,9 +72,7 @@ fun buildStats(
             expense = buildSliceSet(curExpense, prevExpense, CategoryKind.EXPENSE, otherName),
             income = buildSliceSet(curIncome, prevIncome, CategoryKind.INCOME, otherName),
             bars = buildBars(byMonth, MonthKey.lastN(month, TREND_MONTH_COUNT), month),
-            expenseMovers = buildMovers(curExpense, prevExpense, CategoryKind.EXPENSE),
-            incomeMovers = buildMovers(curIncome, prevIncome, CategoryKind.INCOME),
-            allMovers = buildMovers(current, previous, null),
+            movers = buildMovers(current, previous),
         ),
     )
 }
@@ -177,7 +176,10 @@ private fun buildSliceSet(
     otherName: String,
 ): SliceSet {
     val total = current.sumOf { it.total }
-    if (total == 0L) return SliceSet(DonutUi(emptyList(), 0L), emptyList())
+    val prevTotal = previous.sumOf { it.total }
+    if (total == 0L) {
+        return SliceSet(DonutUi(emptyList(), 0L), emptyList(), prevTotal, -prevTotal, percentChange(0, prevTotal))
+    }
 
     val prevByRoot = previous.associate { it.rootId to it.total }
     val sorted = current.sortedByDescending { it.total }
@@ -222,7 +224,13 @@ private fun buildSliceSet(
         val sweep = fraction * 360f
         DonutSlice(row.rootId, row.color, row.amount, fraction, start, sweep).also { start += sweep }
     }
-    return SliceSet(DonutUi(slices, total), rows)
+    return SliceSet(
+        donut = DonutUi(slices, total),
+        rows = rows,
+        prevTotal = prevTotal,
+        deltaAmount = total - prevTotal,
+        deltaPercent = percentChange(total, prevTotal),
+    )
 }
 
 /**
@@ -291,12 +299,16 @@ private fun rawYoy(byMonth: Map<Int, List<MonthCategoryTotal>>, year: Int, month
     return YoySeriesRaw(current, previous, current.lastOrNull() ?: 0L, previous.lastOrNull() ?: 0L)
 }
 
-/** Top movers by amount moved. [kind] null means both kinds compete in one list. */
-private fun buildMovers(
-    current: List<MonthCategoryTotal>,
-    previous: List<MonthCategoryTotal>,
-    kind: Int?,
-): List<MoverRow> {
+/**
+ * The [MOVER_COUNT] biggest movers of either kind, ranked together by amount moved and then split
+ * into an expense half and an income half.
+ *
+ * Both halves are meant to say something, so a kind that exists in the data always gets at least
+ * one row: if the top six are all expense, the smallest of them gives up its place to the biggest
+ * income mover. When a kind has no movers at all, its half renders a single placeholder row, and
+ * the other half is capped one row shorter so the section still totals at most [MOVER_COUNT] rows.
+ */
+internal fun buildMovers(current: List<MonthCategoryTotal>, previous: List<MonthCategoryTotal>): MoversUi {
     val prevByRoot = previous.associateBy { it.rootId }
     val curByRoot = current.associateBy { it.rootId }
     // Categories that had a total last month and none this month are a full decrease, so the
@@ -304,14 +316,33 @@ private fun buildMovers(
     val deltas = (curByRoot.keys + prevByRoot.keys).mapNotNull { rootId ->
         val row = curByRoot[rootId] ?: prevByRoot.getValue(rootId)
         val delta = (curByRoot[rootId]?.total ?: 0L) - (prevByRoot[rootId]?.total ?: 0L)
-        if (delta == 0L) null else Triple(row, rootId, delta)
+        if (delta == 0L) null else row to delta
     }
+    if (deltas.isEmpty()) return MoversUi(emptyList(), emptyList())
+
     // Sorted by amount moved, never by percent: a 300% jump on a tiny category is noise.
-    val top = deltas.sortedByDescending { abs(it.third) }.take(MOVER_COUNT)
-    val max = top.maxOfOrNull { abs(it.third) }?.coerceAtLeast(1L) ?: return emptyList()
-    return top.map { (row, rootId, delta) ->
-        MoverRow(rootId, kind ?: row.type, row.name, row.iconId, row.color, delta, abs(delta).toFloat() / max)
+    val ranked = deltas.sortedByDescending { abs(it.second) }
+    val expenseAll = ranked.filter { it.first.type == CategoryKind.EXPENSE }
+    val incomeAll = ranked.filter { it.first.type == CategoryKind.INCOME }
+    val max = abs(ranked.first().second).coerceAtLeast(1L)
+
+    // A missing kind still costs a row, for its placeholder.
+    val limit = if (expenseAll.isEmpty() || incomeAll.isEmpty()) MOVER_COUNT - 1 else MOVER_COUNT
+    var top = ranked.take(limit)
+    if (expenseAll.isNotEmpty() && top.none { it.first.type == CategoryKind.EXPENSE }) {
+        top = top.dropLast(1) + expenseAll.first()
     }
+    if (incomeAll.isNotEmpty() && top.none { it.first.type == CategoryKind.INCOME }) {
+        top = top.dropLast(1) + incomeAll.first()
+    }
+
+    fun rows(kind: Int) = top.filter { it.first.type == kind }
+        .sortedByDescending { abs(it.second) }
+        .map { (row, delta) ->
+            MoverRow(row.rootId, row.type, row.name, row.iconId, row.color, delta, abs(delta).toFloat() / max)
+        }
+
+    return MoversUi(expense = rows(CategoryKind.EXPENSE), income = rows(CategoryKind.INCOME))
 }
 
 // -------------------------------------------------------------------- TRADES

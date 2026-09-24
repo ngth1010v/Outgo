@@ -77,6 +77,9 @@ fun DonutChart(
     /** Read inside the draw lambda, so selecting a slice redraws without recomposing. */
     selectedRootId: () -> Long?,
     centerLabel: String,
+    /** Change against the previous period, drawn under [centerLabel]; null hides the line. */
+    centerDelta: String?,
+    centerDeltaColor: Color,
     onSelect: (Long?) -> Unit,
     progress: Float,
     modifier: Modifier = Modifier,
@@ -84,8 +87,10 @@ fun DonutChart(
     val onSurface = MaterialTheme.colorScheme.onSurface
     val outline = MaterialTheme.colorScheme.onSurfaceVariant
     val labelStyle = MaterialTheme.typography.titleMedium
+    val deltaStyle = MaterialTheme.typography.labelMedium
     val measurer = rememberTextMeasurer()
     val label = remember(centerLabel, labelStyle) { measurer.measure(centerLabel, labelStyle) }
+    val delta = remember(centerDelta, deltaStyle) { centerDelta?.let { measurer.measure(it, deltaStyle) } }
     val rings = remember(expense, income, mode) { ringsOf(expense, income, mode) }
 
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
@@ -123,11 +128,21 @@ fun DonutChart(
                     )
                 }
             }
+            // The amount and its change are stacked around the middle of the hole.
+            val stackHeight = label.size.height + (delta?.size?.height ?: 0)
+            val top = (size.height - stackHeight) / 2f
             drawText(
                 textLayoutResult = label,
                 color = onSurface,
-                topLeft = Offset((size.width - label.size.width) / 2f, (size.height - label.size.height) / 2f),
+                topLeft = Offset((size.width - label.size.width) / 2f, top),
             )
+            delta?.let {
+                drawText(
+                    textLayoutResult = it,
+                    color = centerDeltaColor,
+                    topLeft = Offset((size.width - it.size.width) / 2f, top + label.size.height),
+                )
+            }
         }
     }
 }
