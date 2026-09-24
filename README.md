@@ -35,8 +35,8 @@ Open the app and you are already on the "add expense" screen. Log a purchase in 
 <img src="docs/home.png" align="right" width="240" alt="Home dashboard" />
 
 - **Available, savings and total balance** at a glance.
-- **Budgets** for this month: amount spent, amount remaining or over, and the change against last month.
-- **Savings** progress toward each savings account's monthly target.
+- **Budgets** for this month: amount spent, amount remaining or over, and the change against last month. They are listed in the same order as your categories.
+- **Savings** progress toward each savings account's monthly target, in the same order as your accounts.
 - **History** grouped by day with daily totals. You can filter by Expense, Income or Transfer. Tap a transaction to edit it or delete it.
 
 <br clear="right" />
@@ -53,6 +53,7 @@ Open the app and you are already on the "add expense" screen. Log a purchase in 
 - **Savings accounts** can have a monthly target, and a progress bar tracks it. The bar turns green when you reach the target.
 - Edit an account's balance directly. Outgo records the difference as a balance adjustment, so the balance always matches the transaction history.
 - Accounts that have history are archived, not deleted, so past records stay correct.
+- **Drag to reorder:** long-press an account, drag it to a new place and let go. The same order is used on Home and in the account picker.
 
 <br clear="right" />
 
@@ -67,13 +68,25 @@ Open the app and you are already on the "add expense" screen. Log a purchase in 
 
 <br clear="right" />
 
+#### Drag to reorder
+
+<img src="docs/reorder.png" align="right" width="240" alt="Dragging a subcategory to a new place" />
+
+- **Long-press** a category or subcategory to lift it. Drag it, and the other rows move aside to show where it will land. Let go to drop it there.
+- Categories move among categories. While you drag one, all categories fold so the list is short.
+- Subcategories move within their category or into another one. Hold a subcategory over a folded category for a moment and it opens, so you can drop the subcategory inside. The subcategory's past transactions and budget spending move with it.
+- A category's only subcategory can't be moved out of it.
+- The list scrolls when you drag near its top or bottom edge.
+
+<br clear="right" />
+
 ### Analysis
 
 <img src="docs/analysis.png" align="right" width="240" alt="Analysis" />
 
 - **One page per month and one per year**, swiped through or stepped with the year and month pickers in the top bar. Swipe right off December to reach that year's summary.
 - **Expense / Income / All**, one switch that drives every chart on the page. All mode draws both kinds together rather than a single net figure.
-- **Month summary:** total, change against last month, average per day, income, net and transfers.
+- **Month summary:** the total signed as money flows (spending −, income +, net in All mode), the change against last month in amount and percent, the average per day, and money moved between accounts.
 - **Where the money went:** a donut and a category breakdown, a 6-month trend, and the biggest movers against last month.
 - **When it went:** a cumulative spending pace line against last month, a daily heatmap that opens that day's history, and the average spend per weekday.
 - **What it went on:** the mix of purchase sizes around the month's median, and the five largest movements.
@@ -92,12 +105,14 @@ Open the app and you are already on the "add expense" screen. Log a purchase in 
 ## Download
 
 1. Go to the [Releases page](https://github.com/ngth1010v/Outgo/releases/latest).
-2. Download the latest `app-release.apk`.
+2. Download `Outgo.apk` from the latest release.
 3. Open the downloaded file on your Android phone to install it.
    - The first time, Android asks for permission to install apps from this source. Allow it, then tap **Install**.
 4. Open **Outgo** from your app drawer.
 
 Requires Android 11 (API 30) or newer.
+
+> **Updating from v1.5.1 or older?** Starting with v1.6.0, releases are signed with a new key, so Android will not install v1.6.0 over an older version. First export a backup in **Settings → Export backup**. Then uninstall the old app, install the new one, and use **Settings → Restore from backup**. Later versions will install over v1.6.0 normally.
 
 ## Build from source
 
