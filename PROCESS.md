@@ -5,7 +5,8 @@ Update it at the end of every phase, and whenever a phase is interrupted.
 
 - Branch: `feat/analysis-v2` (off `feat/analysis-rebuild`)
 - Verify with: `gradlew.bat :app:assembleDebug` and `gradlew.bat :app:testDebugUnitTest`
-- Last verified: assembleDebug OK, 44 unit tests green (32 aggregate + 12 page/caret)
+- Last verified: assembleDebug OK, 45 unit tests green, and run on an API 36 emulator —
+  month page, year page, all three modes, transfers and the raw-trade sections all render
 
 ## Phase status
 
@@ -51,6 +52,13 @@ Update it at the end of every phase, and whenever a phase is interrupted.
 - `YearPage` with summary, 12-month bars, category donut + breakdown, year-over-year, largest, transfers.
 - Strings added to `values` and `values-vi` (203 entries each), plus a `month_full` array.
 
+**Crash fix after first device run**
+- `HorizontalPager(key = ...)` returned an `AnalysisPage`, and lazy-layout keys are written into a
+  Bundle: `IllegalArgumentException: Type of the key Month(monthKey=202609) is not supported`, which
+  killed the app the moment the Analysis tab was opened. Keys are now `AnalysisPage.key`, a plain
+  `Int` (`yyyyMM` for a month, `yyyy00` for a year, which months can never collide with).
+  Regression test in `AnalysisPageTest`.
+
 **Phase 7 — cleanup**
 - Two strings that v2 stopped using (`analysis_month_label`, `analysis_income_and_net`) removed from
   both locales; 197 strings each, in sync.
@@ -74,8 +82,8 @@ Nothing.
   movers and largest sections trivial. Worth a look on real data (§12 of the plan).
 - Baseline profile has NOT been regenerated (needs an API 33+ emulator):
   `gradlew.bat :app:generateBaselineProfile -Pandroid.testInstrumentationRunnerArguments.class=app.outgo.baselineprofile.BaselineProfileGenerator`
-- Nothing has been verified on a device: dark mode, Vietnamese layout and the two-series charts are
-  unreviewed by eye.
+- Verified on an emulator in Vietnamese: month and year pages, all three modes, the two-ring donut,
+  diverging bars, heatmap, size mix, largest and transfers. **Dark mode is still unchecked.**
 
 ## Notes for whoever picks this up
 

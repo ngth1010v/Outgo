@@ -23,6 +23,17 @@ sealed interface AnalysisPage {
     data class Year(val year: Int) : AnalysisPage
 }
 
+/**
+ * Stable primitive id for this page, for pager/lazy-layout keys — those are written into a
+ * Bundle, so a data class is rejected at runtime. `yyyyMM` for a month; `yyyy00` for a year page,
+ * which no month can collide with because months run 01..12.
+ */
+val AnalysisPage.key: Int
+    get() = when (this) {
+        is AnalysisPage.Month -> monthKey
+        is AnalysisPage.Year -> year * 100
+    }
+
 val AnalysisPage.year: Int
     get() = when (this) {
         is AnalysisPage.Month -> monthKey / 100

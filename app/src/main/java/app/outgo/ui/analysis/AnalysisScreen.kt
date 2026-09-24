@@ -109,7 +109,8 @@ fun AnalysisScreen(onOpenTrade: (Long) -> Unit, onOpenDay: (Long) -> Unit) {
             state = pagerState,
             beyondViewportPageCount = 1,
             modifier = Modifier.fillMaxSize().padding(padding),
-            key = { pages.getOrNull(it) ?: it },
+            // Must be a Bundle-storable type: a data class key crashes the lazy layout.
+            key = { pages.getOrNull(it)?.key ?: -it },
         ) { index ->
             when (val page = pages.getOrNull(index)) {
                 is AnalysisPage.Month -> MonthPage(

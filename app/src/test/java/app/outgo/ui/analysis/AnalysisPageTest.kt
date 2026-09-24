@@ -80,6 +80,16 @@ class AnalysisPageTest {
     }
 
     @Test
+    fun `page keys are distinct primitives, safe to put in a Bundle`() {
+        // Pager and lazy-layout keys are written into a Bundle, so they must not be data classes.
+        val keys = pages.map { it.key }
+        assertEquals(keys.size, keys.toSet().size)
+        assertEquals(202603, AnalysisPage.Month(202603).key)
+        // A year page can never collide with a month: months run 01..12, never 00.
+        assertEquals(202600, AnalysisPage.Year(2026).key)
+    }
+
+    @Test
     fun `the now button points at today's month`() {
         assertEquals(AnalysisPage.Month(202603), pages[currentMonthIndex(pages, 202603)])
     }
