@@ -400,7 +400,7 @@ private fun RevealToggle(
 private val REVEAL_ICON_SIZE = 14.4.dp
 
 /** Faded to 30% of the inherited content colour, so the toggles read as secondary to the amounts. */
-private const val REVEAL_ICON_ALPHA = 0.3f
+private const val REVEAL_ICON_ALPHA = 0.2f
 
 /**
  * Balance label + amount. Primary amount is 1.2x headlineMedium; secondary label is 80% of the
