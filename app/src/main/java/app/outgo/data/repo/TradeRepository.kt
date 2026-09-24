@@ -2,6 +2,7 @@ package app.outgo.data.repo
 
 import app.outgo.data.db.dao.TradeDao
 import app.outgo.data.db.dao.TradeSlim
+import app.outgo.data.db.dao.TransferTotal
 import app.outgo.data.db.entity.TradeEntity
 import app.outgo.domain.TradeDraft
 import app.outgo.domain.TradeType
@@ -106,6 +107,9 @@ class TradeRepository(private val tradeDao: TradeDao) {
     suspend fun pageInRange(type: Int, fromMillis: Long, toMillis: Long): List<TradeEntity> =
         withContext(Dispatchers.IO) { tradeDao.pageInRange(type, fromMillis, toMillis) }
 
-    suspend fun amountsAndTimesForMonths(monthKeys: List<Int>, type: Int): List<TradeSlim> =
-        withContext(Dispatchers.IO) { tradeDao.amountsAndTimesForMonths(monthKeys, type) }
+    suspend fun amountsAndTimesForMonths(monthKeys: List<Int>, types: List<Int>): List<TradeSlim> =
+        withContext(Dispatchers.IO) { tradeDao.amountsAndTimesForMonths(monthKeys, types) }
+
+    suspend fun transferTotalsForMonths(monthKeys: List<Int>): List<TransferTotal> =
+        withContext(Dispatchers.IO) { tradeDao.transferTotalsForMonths(monthKeys) }
 }

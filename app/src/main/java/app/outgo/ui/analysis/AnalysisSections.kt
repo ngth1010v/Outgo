@@ -11,15 +11,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,13 +34,17 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.outgo.R
+import app.outgo.domain.CategoryKind
+import app.outgo.domain.TradeType
 import app.outgo.ui.component.IconView
 import app.outgo.ui.theme.ExpenseRed
 import app.outgo.ui.theme.IncomeGreen
+import app.outgo.ui.theme.TransferBlue
 import app.outgo.util.Money
 import app.outgo.util.formatDate
 import java.time.DayOfWeek
@@ -47,16 +52,20 @@ import java.time.format.TextStyle
 import java.util.Locale
 
 /**
- * The ten Analysis sections. Each one has a fixed height for its chart area and a fixed row
- * count for its lists, so the skeleton, the empty state and the loaded state are all exactly
- * as tall — nothing on the page moves when data arrives.
+ * The Analysis sections, shared by the month page and the year page. Each one has a fixed height
+ * for its chart area and a fixed row count for its lists, so the skeleton, the empty state and the
+ * loaded state are all exactly as tall — nothing on the page moves when data arrives.
+ *
+ * ★ sections read [AnalysisMode]; the heatmap, weekday and size-mix sections are expense-only and
+ * are hidden entirely in Income mode rather than shown with nothing in them.
  */
 
 // Heights are shared by the real content, the empty state and the skeleton.
 val DonutHeight = 200.dp
 val PaceHeight = 140.dp
-val TrendHeight = 140.dp
+val BarsHeight = 140.dp
 val WeekdayHeight = 140.dp
+val YoyHeight = 140.dp
 private val RowHeight = 44.dp
 private val MoverRowHeight = 36.dp
 private val BucketRowHeight = 52.dp
@@ -71,20 +80,24 @@ class AnalysisSelection {
 }
 
 @Composable
-fun monthLabel(monthKey: Int): String {
-    val months = stringArrayResource(R.array.month_abbrev)
-    return stringResource(R.string.analysis_month_label, months[(monthKey % 100) - 1], monthKey / 100)
-}
+fun monthName(monthKey: Int): String = stringArrayResource(R.array.month_full)[(monthKey % 100) - 1]
 
+/** More of a kind is red for expense and green for income; less is the other way round. */
 @Composable
-private fun SectionTitle(text: String) {
-    Text(text, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+internal fun deltaColor(delta: Long, kind: Int = CategoryKind.EXPENSE): Color {
+    val up = if (kind == CategoryKind.INCOME) IncomeGreen else ExpenseRed
+    val down = if (kind == CategoryKind.INCOME) ExpenseRed else IncomeGreen
+    return when {
+        delta > 0 -> up
+        delta < 0 -> down
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
 }
 
 @Composable
 fun Section(title: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SectionTitle(title)
+        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
         content()
     }
 }
@@ -105,14 +118,17 @@ fun SectionSkeleton(title: String, height: Dp, modifier: Modifier = Modifier) {
 
 @Composable
 fun SectionEmpty(title: String, height: Dp, modifier: Modifier = Modifier) {
-    Section(title, modifier) {
-        Box(modifier = Modifier.fillMaxWidth().height(height), contentAlignment = Alignment.Center) {
-            Text(
-                stringResource(R.string.analysis_no_data),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+    Section(title, modifier) { EmptyBox(height) }
+}
+
+@Composable
+private fun EmptyBox(height: Dp) {
+    Box(modifier = Modifier.fillMaxWidth().height(height), contentAlignment = Alignment.Center) {
+        Text(
+            stringResource(R.string.analysis_no_data),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -132,41 +148,76 @@ fun <T> StageSection(
     }
 }
 
+// ------------------------------------------------------------------ section 0
+
+@Composable
+fun ModeSwitch(mode: AnalysisMode, onSelect: (AnalysisMode) -> Unit, modifier: Modifier = Modifier) {
+    val labels = listOf(
+        AnalysisMode.EXPENSE to stringResource(R.string.trade_expense),
+        AnalysisMode.INCOME to stringResource(R.string.trade_income),
+        AnalysisMode.ALL to stringResource(R.string.analysis_mode_all),
+    )
+    SingleChoiceSegmentedButtonRow(modifier = modifier.fillMaxWidth()) {
+        labels.forEachIndexed { index, (value, label) ->
+            SegmentedButton(
+                selected = mode == value,
+                onClick = { onSelect(value) },
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = labels.size),
+            ) {
+                Text(label)
+            }
+        }
+    }
+}
+
 // ------------------------------------------------------------------ section 1
 
 @Composable
-fun SummarySection(summary: SummaryUi, modifier: Modifier = Modifier) {
-    val changeText = changeLabel(summary.deltaAmount, summary.deltaPercent)
-    val description = if (summary.deltaPercent == null && summary.prevTotal == 0L) {
-        stringResource(R.string.analysis_cd_summary_no_baseline, Money.format(summary.total))
-    } else {
-        val direction = if (summary.deltaAmount >= 0) {
-            stringResource(R.string.analysis_cd_more, Money.format(kotlin.math.abs(summary.deltaAmount)))
-        } else {
-            stringResource(R.string.analysis_cd_less, Money.format(kotlin.math.abs(summary.deltaAmount)))
-        }
-        stringResource(R.string.analysis_cd_summary, Money.format(summary.total), direction)
-    }
+fun SummarySection(
+    summary: SummaryUi,
+    mode: AnalysisMode,
+    transfers: TransfersUi?,
+    modifier: Modifier = Modifier,
+    title: String = stringResource(R.string.analysis_summary_title),
+    perPeriodFormat: Int = R.string.analysis_avg_per_day,
+    subtitle: String? = null,
+) {
+    val kind = summary.of(mode)
+    val kindType = if (mode == AnalysisMode.INCOME) CategoryKind.INCOME else CategoryKind.EXPENSE
+    val headline = if (mode == AnalysisMode.ALL) summary.net else kind.total
+    val description = summaryDescription(kind, mode, summary)
 
-    Section(stringResource(R.string.analysis_summary_title), modifier.semantics { contentDescription = description }) {
+    Section(title, modifier.semantics { contentDescription = description }) {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(Money.format(summary.total), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            if (subtitle != null) {
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             Text(
-                changeText,
-                style = MaterialTheme.typography.bodyMedium,
-                color = deltaColor(summary.deltaAmount),
+                if (mode == AnalysisMode.ALL) Money.formatSigned(headline) else Money.format(headline),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = if (mode == AnalysisMode.ALL) deltaColor(summary.net, CategoryKind.INCOME) else MaterialTheme.colorScheme.onSurface,
             )
             Text(
-                stringResource(R.string.analysis_avg_per_day, Money.format(summary.avgPerDay)),
+                changeLabel(kind.deltaAmount, kind.deltaPercent, perPeriodFormat == R.string.analysis_per_month),
+                style = MaterialTheme.typography.bodyMedium,
+                color = deltaColor(kind.deltaAmount, kindType),
+            )
+            Text(
+                stringResource(perPeriodFormat, Money.format(kind.perPeriod)),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            // Priority line: expense and income always readable, transfers last and quietest.
+            Text(
+                stringResource(R.string.analysis_income_line, Money.format(summary.income.total)) + " · " +
+                    stringResource(R.string.analysis_net_line, Money.formatSigned(summary.net)),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                stringResource(
-                    R.string.analysis_income_and_net,
-                    Money.format(summary.income),
-                    Money.formatSigned(summary.net),
-                ),
+                // Transfers arrive with the raw-trade stage; the line keeps its height until then.
+                stringResource(R.string.analysis_transfer_line, transfers?.total?.let { Money.format(it) } ?: "—"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -175,68 +226,61 @@ fun SummarySection(summary: SummaryUi, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun changeLabel(delta: Long, percent: Int?): String =
-    if (percent == null) {
-        stringResource(R.string.analysis_vs_last_month, Money.formatSigned(delta))
-    } else {
-        stringResource(R.string.analysis_vs_last_month_percent, Money.formatSigned(delta), percent)
+private fun summaryDescription(kind: KindSummary, mode: AnalysisMode, summary: SummaryUi): String {
+    val total = if (mode == AnalysisMode.ALL) summary.net else kind.total
+    if (kind.deltaPercent == null && kind.prevTotal == 0L) {
+        return stringResource(R.string.analysis_cd_summary_no_baseline, Money.format(total))
     }
+    val direction = if (kind.deltaAmount >= 0) {
+        stringResource(R.string.analysis_cd_more, Money.format(kotlin.math.abs(kind.deltaAmount)))
+    } else {
+        stringResource(R.string.analysis_cd_less, Money.format(kotlin.math.abs(kind.deltaAmount)))
+    }
+    return stringResource(R.string.analysis_cd_summary, Money.format(total), direction)
+}
 
-/** More spending is red, less is green — the opposite of a plain +/- colouring. */
 @Composable
-private fun deltaColor(delta: Long): Color = when {
-    delta > 0 -> ExpenseRed
-    delta < 0 -> IncomeGreen
-    else -> MaterialTheme.colorScheme.onSurfaceVariant
+private fun changeLabel(delta: Long, percent: Int?, yearly: Boolean): String = when {
+    yearly -> stringResource(R.string.analysis_vs_last_year, Money.formatSigned(delta))
+    percent == null -> stringResource(R.string.analysis_vs_last_month, Money.formatSigned(delta))
+    else -> stringResource(R.string.analysis_vs_last_month_percent, Money.formatSigned(delta), percent)
 }
 
 // ------------------------------------------------------------------ section 2
 
 @Composable
 fun DonutSection(
-    set: SliceSet,
-    showIncome: Boolean,
-    onToggle: (Boolean) -> Unit,
+    expense: SliceSet,
+    income: SliceSet,
+    mode: AnalysisMode,
     selection: AnalysisSelection,
     animate: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val title = stringResource(
-        if (showIncome) R.string.analysis_by_category_income_title else R.string.analysis_by_category_title,
+        if (mode == AnalysisMode.INCOME) R.string.analysis_by_category_income_title else R.string.analysis_by_category_title,
     )
-    val largest = set.rows.firstOrNull()?.amount ?: 0L
+    val shown = if (mode == AnalysisMode.INCOME) income else expense
+    val total = when (mode) {
+        AnalysisMode.ALL -> expense.donut.total
+        else -> shown.donut.total
+    }
     val description = stringResource(
         R.string.analysis_cd_donut,
-        Money.format(set.donut.total),
-        set.rows.size,
-        Money.format(largest),
+        Money.format(total),
+        shown.rows.size,
+        Money.format(shown.rows.firstOrNull()?.amount ?: 0L),
     )
     Section(title, modifier.semantics { contentDescription = description }) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(
-                selected = !showIncome,
-                onClick = { onToggle(false) },
-                label = { Text(stringResource(R.string.trade_expense)) },
-            )
-            FilterChip(
-                selected = showIncome,
-                onClick = { onToggle(true) },
-                label = { Text(stringResource(R.string.trade_income)) },
-            )
-        }
-        if (set.rows.isEmpty()) {
-            Box(modifier = Modifier.fillMaxWidth().height(DonutHeight), contentAlignment = Alignment.Center) {
-                Text(
-                    stringResource(R.string.analysis_no_data),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+        if (expense.rows.isEmpty() && income.rows.isEmpty()) {
+            EmptyBox(DonutHeight)
         } else {
             DonutChart(
-                donut = set.donut,
+                expense = expense.donut,
+                income = income.donut,
+                mode = mode,
                 selectedRootId = { selection.rootId },
-                centerLabel = Money.format(set.donut.total),
+                centerLabel = Money.format(total),
                 onSelect = selection::toggle,
                 progress = introProgress(animate),
                 modifier = Modifier.fillMaxWidth().height(DonutHeight),
@@ -249,22 +293,20 @@ fun DonutSection(
 
 @Composable
 fun BreakdownSection(
-    rows: List<BreakdownRow>,
+    expense: SliceSet,
+    income: SliceSet,
+    mode: AnalysisMode,
     selection: AnalysisSelection,
     modifier: Modifier = Modifier,
 ) {
+    // All mode lists expense first, then income — the stated priority, not interleaved by amount.
+    val rows = when (mode) {
+        AnalysisMode.EXPENSE -> expense.rows
+        AnalysisMode.INCOME -> income.rows
+        AnalysisMode.ALL -> expense.rows + income.rows
+    }
     Section(stringResource(R.string.analysis_breakdown_title), modifier) {
-        if (rows.isEmpty()) {
-            Box(modifier = Modifier.fillMaxWidth().height(RowHeight), contentAlignment = Alignment.Center) {
-                Text(
-                    stringResource(R.string.analysis_no_data),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        } else {
-            rows.forEach { row -> BreakdownRowItem(row, selection) }
-        }
+        if (rows.isEmpty()) EmptyBox(RowHeight) else rows.forEach { BreakdownRowItem(it, selection) }
     }
 }
 
@@ -285,7 +327,7 @@ private fun BreakdownRowItem(row: BreakdownRow, selection: AnalysisSelection) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (row.rootId == null) {
-            ColorDot(Color(row.color), size = 28.dp, modifier = Modifier)
+            ColorDot(Color(row.color), size = 28.dp)
         } else {
             IconView(iconId = row.iconId, size = 28.dp, color = row.color)
         }
@@ -299,7 +341,11 @@ private fun BreakdownRowItem(row: BreakdownRow, selection: AnalysisSelection) {
             )
         }
         Column(horizontalAlignment = Alignment.End) {
-            Text(Money.format(row.amount), style = MaterialTheme.typography.bodyMedium)
+            Text(
+                Money.format(row.amount),
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (row.kind == CategoryKind.INCOME) IncomeGreen else MaterialTheme.colorScheme.onSurface,
+            )
             Text(
                 if (row.deltaPercent == null) {
                     Money.formatSignedNoCurrency(row.deltaAmount)
@@ -307,7 +353,7 @@ private fun BreakdownRowItem(row: BreakdownRow, selection: AnalysisSelection) {
                     "${if (row.deltaPercent > 0) "+" else ""}${row.deltaPercent}%"
                 },
                 style = MaterialTheme.typography.bodySmall,
-                color = deltaColor(row.deltaAmount),
+                color = deltaColor(row.deltaAmount, row.kind),
             )
         }
     }
@@ -316,38 +362,46 @@ private fun BreakdownRowItem(row: BreakdownRow, selection: AnalysisSelection) {
 // ------------------------------------------------------------------ section 4
 
 @Composable
-fun PaceSection(pace: PaceUi, animate: Boolean, modifier: Modifier = Modifier) {
-    val description = stringResource(R.string.analysis_cd_pace, Money.format(pace.currentTotal))
+fun PaceSection(pace: PaceUi, mode: AnalysisMode, animate: Boolean, modifier: Modifier = Modifier) {
+    val description = stringResource(R.string.analysis_cd_pace, Money.format(pace.of(mode).currentTotal))
     Section(stringResource(R.string.analysis_pace_title), modifier.semantics { contentDescription = description }) {
         Text(
             stringResource(R.string.analysis_pace_legend),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        PaceChart(pace, introProgress(animate), Modifier.fillMaxWidth().height(PaceHeight))
+        PaceChart(pace, mode, introProgress(animate), Modifier.fillMaxWidth().height(PaceHeight))
     }
 }
 
-// ------------------------------------------------------------------ section 5
+// -------------------------------------------------------------- sections 5, Y2
 
 @Composable
-fun TrendSection(trend: TrendUi, onSelectMonth: (Int) -> Unit, animate: Boolean, modifier: Modifier = Modifier) {
+fun BarsSection(
+    bars: BarsUi,
+    mode: AnalysisMode,
+    title: String,
+    onSelectMonth: (Int) -> Unit,
+    animate: Boolean,
+    modifier: Modifier = Modifier,
+) {
     val months = stringArrayResource(R.array.month_abbrev)
-    val labels = remember(trend.bars, months) { trend.bars.map { months[(it.monthKey % 100) - 1] } }
-    val description = stringResource(R.string.analysis_cd_trend, Money.format(trend.average))
-    Section(stringResource(R.string.analysis_trend_title), modifier.semantics { contentDescription = description }) {
+    val labels = remember(bars.bars, months) { bars.bars.map { months[(it.monthKey % 100) - 1] } }
+    val description = stringResource(R.string.analysis_cd_trend, Money.format(bars.averageOf(mode)))
+    Section(title, modifier.semantics { contentDescription = description }) {
         Text(
-            stringResource(R.string.analysis_average, Money.format(trend.average)),
+            stringResource(R.string.analysis_average, Money.format(bars.averageOf(mode))),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        TrendBars(
-            bars = trend.bars,
+        MonthBars(
+            bars = bars.bars,
             labels = labels,
-            averageFraction = trend.averageFraction,
+            mode = mode,
+            averageFraction = bars.averageFractionOf(mode),
             onSelect = onSelectMonth,
             progress = introProgress(animate),
-            modifier = Modifier.fillMaxWidth().height(TrendHeight),
+            modifier = Modifier.fillMaxWidth().height(BarsHeight),
         )
     }
 }
@@ -360,13 +414,7 @@ fun MoversSection(movers: List<MoverRow>, animate: Boolean, modifier: Modifier =
     Section(stringResource(R.string.analysis_movers_title), modifier.semantics { contentDescription = description }) {
         Box(modifier = Modifier.fillMaxWidth().height(MoverRowHeight * MOVER_COUNT)) {
             if (movers.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        stringResource(R.string.analysis_no_data),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                EmptyBox(MoverRowHeight * MOVER_COUNT)
             } else {
                 Column {
                     movers.forEach { mover ->
@@ -386,6 +434,7 @@ fun MoversSection(movers: List<MoverRow>, animate: Boolean, modifier: Modifier =
                             MoverBar(
                                 fraction = mover.fraction,
                                 increase = mover.delta > 0,
+                                kindColor = deltaColor(mover.delta, mover.kind),
                                 progress = introProgress(animate),
                                 modifier = Modifier.weight(1f).height(MoverRowHeight),
                             )
@@ -393,7 +442,7 @@ fun MoversSection(movers: List<MoverRow>, animate: Boolean, modifier: Modifier =
                             Text(
                                 Money.formatSignedNoCurrency(mover.delta),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = deltaColor(mover.delta),
+                                color = deltaColor(mover.delta, mover.kind),
                             )
                         }
                     }
@@ -417,7 +466,7 @@ fun HeatmapSection(heatmap: HeatmapUi, onDayClick: (Long) -> Unit, modifier: Mod
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    textAlign = TextAlign.Center,
                 )
             }
         }
@@ -497,13 +546,7 @@ fun LargestSection(items: List<LargestItem>, onOpenTrade: (Long) -> Unit, modifi
     Section(stringResource(R.string.analysis_largest_title), modifier) {
         Box(modifier = Modifier.fillMaxWidth().height(RowHeight * LARGEST_COUNT)) {
             if (items.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        stringResource(R.string.analysis_no_data),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                EmptyBox(RowHeight * LARGEST_COUNT)
             } else {
                 Column {
                     items.forEach { item ->
@@ -534,11 +577,120 @@ fun LargestSection(items: List<LargestItem>, onOpenTrade: (Long) -> Unit, modifi
                                 )
                             }
                             Spacer(Modifier.width(8.dp))
-                            Text(Money.format(item.amount), style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                Money.format(item.amount),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (item.type == TradeType.INCOME) IncomeGreen else MaterialTheme.colorScheme.onSurface,
+                            )
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+// ----------------------------------------------------------------- section 11
+
+/** Transfers never join the mode switch: they move money without spending or earning it. */
+@Composable
+fun TransfersSection(transfers: TransfersUi, animate: Boolean, modifier: Modifier = Modifier) {
+    val description = stringResource(R.string.analysis_cd_transfers, Money.format(transfers.total), transfers.count)
+    Section(stringResource(R.string.analysis_transfers_title), modifier.semantics { contentDescription = description }) {
+        Text(
+            stringResource(R.string.analysis_transfers_count, transfers.count, Money.format(transfers.total)),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Box(modifier = Modifier.fillMaxWidth().height(RowHeight * TRANSFER_PAIR_COUNT)) {
+            if (transfers.pairs.isEmpty()) {
+                EmptyBox(RowHeight * TRANSFER_PAIR_COUNT)
+            } else {
+                Column {
+                    transfers.pairs.forEach { pair ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().height(RowHeight).padding(horizontal = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            ColorDot(TransferBlue, size = 10.dp)
+                            Spacer(Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    stringResource(R.string.analysis_transfer_pair, pair.fromName, pair.toName),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                TransferBar(
+                                    fraction = pair.fraction,
+                                    progress = introProgress(animate),
+                                    modifier = Modifier.fillMaxWidth().height(6.dp),
+                                )
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Text(Money.format(pair.total), style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ----------------------------------------------------------------- section Y4
+
+@Composable
+fun YoySection(yoy: YoyUi, year: Int, mode: AnalysisMode, animate: Boolean, modifier: Modifier = Modifier) {
+    val series = yoy.of(mode)
+    val description = stringResource(
+        R.string.analysis_cd_yoy,
+        Money.format(series.currentTotal),
+        Money.format(series.previousTotal),
+    )
+    Section(stringResource(R.string.analysis_year_yoy_title), modifier.semantics { contentDescription = description }) {
+        Text(
+            stringResource(
+                R.string.analysis_year_yoy_legend,
+                year,
+                Money.format(series.currentTotal),
+                year - 1,
+                Money.format(series.previousTotal),
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        YoyChart(series, mode, introProgress(animate), Modifier.fillMaxWidth().height(YoyHeight))
+    }
+}
+
+// ----------------------------------------------------------------- section Y1
+
+@Composable
+fun YearSummarySection(
+    year: YearSummaryUi,
+    mode: AnalysisMode,
+    transfers: TransfersUi?,
+    modifier: Modifier = Modifier,
+) {
+    val months = stringArrayResource(R.array.month_abbrev)
+    fun label(monthKey: Int?) = monthKey?.let { months[(it % 100) - 1] }.orEmpty()
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        SummarySection(
+            summary = year.summary,
+            mode = mode,
+            transfers = transfers,
+            title = stringResource(R.string.analysis_year_summary_title),
+            perPeriodFormat = R.string.analysis_per_month,
+            subtitle = if (year.partial) stringResource(R.string.analysis_year_to_date, year.monthsCounted) else null,
+        )
+        if (year.biggestMonth != null) {
+            Text(
+                stringResource(R.string.analysis_year_biggest, label(year.biggestMonth), Money.format(year.biggestAmount)) +
+                    " · " +
+                    stringResource(R.string.analysis_year_smallest, label(year.smallestMonth), Money.format(year.smallestAmount)),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

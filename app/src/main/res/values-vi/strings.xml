@@ -17,6 +17,12 @@
         <item>T12</item>
     </string-array>
 
+    <string-array name="month_full">
+        <item>Tháng 1</item><item>Tháng 2</item><item>Tháng 3</item><item>Tháng 4</item>
+        <item>Tháng 5</item><item>Tháng 6</item><item>Tháng 7</item><item>Tháng 8</item>
+        <item>Tháng 9</item><item>Tháng 10</item><item>Tháng 11</item><item>Tháng 12</item>
+    </string-array>
+
     <string name="nav_home">Tổng quan</string>
     <string name="nav_trade">Thêm</string>
     <string name="nav_balance">Tài khoản</string>
@@ -96,12 +102,33 @@
     <!-- Analysis -->
     <string name="analysis_previous_month">Tháng trước</string>
     <string name="analysis_next_month">Tháng sau</string>
-    <string name="analysis_month_label">%1$s %2$d</string>
     <string name="analysis_no_data">Tháng này chưa có dữ liệu</string>
+    <string name="analysis_mode_all">Tất cả</string>
+    <string name="analysis_previous_year">Năm trước</string>
+    <string name="analysis_next_year">Năm sau</string>
+    <string name="analysis_month_page_title">Phân tích %1$s</string>
+    <string name="analysis_year_page_title">Phân tích năm</string>
+    <string name="analysis_go_now">Hiện tại</string>
+    <string name="analysis_income_line">Thu %1$s</string>
+    <string name="analysis_net_line">Còn lại %1$s</string>
+    <string name="analysis_transfer_line">Đã chuyển %1$s giữa các tài khoản</string>
+    <string name="analysis_transfers_title">Chuyển khoản</string>
+    <string name="analysis_transfers_count">%1$d lần · %2$s</string>
+    <string name="analysis_transfer_pair">%1$s → %2$s</string>
+    <string name="analysis_year_summary_title">Tổng quan năm</string>
+    <string name="analysis_year_to_date">Từ đầu năm · %1$d tháng</string>
+    <string name="analysis_per_month">%1$s mỗi tháng</string>
+    <string name="analysis_year_biggest">Cao nhất %1$s · %2$s</string>
+    <string name="analysis_year_smallest">Thấp nhất %1$s · %2$s</string>
+    <string name="analysis_year_bars_title">Từng tháng</string>
+    <string name="analysis_year_yoy_title">So với năm trước</string>
+    <string name="analysis_year_yoy_legend">%1$d %2$s · %3$d %4$s</string>
+    <string name="analysis_vs_last_year">%1$s so với năm trước</string>
+    <string name="analysis_cd_transfers">Đã chuyển %1$s giữa các tài khoản trong %2$d lần</string>
+    <string name="analysis_cd_yoy">Đã %1$s, so với %2$s cùng kỳ năm trước</string>
     <string name="analysis_other">Khác</string>
     <string name="analysis_summary_title">Tổng quan tháng</string>
     <string name="analysis_avg_per_day">%1$s mỗi ngày</string>
-    <string name="analysis_income_and_net">Thu %1$s · Còn lại %2$s</string>
     <string name="analysis_vs_last_month">%1$s so với tháng trước</string>
     <string name="analysis_vs_last_month_percent">%1$s (%2$d%%) so với tháng trước</string>
     <string name="analysis_by_category_title">Chi theo danh mục</string>

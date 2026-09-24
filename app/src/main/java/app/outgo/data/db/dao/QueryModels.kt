@@ -47,8 +47,20 @@ data class BudgetWithProgress(
  */
 data class TradeSlim(
     val id: Long,
+    val type: Int,
     val amount: Long,
     val occurredAt: Long,
     val categoryId: Long?,
     val note: String?,
+)
+
+/**
+ * Transfers summed per account pair. They carry no category, so nothing about them reaches
+ * `category_month_stat` and the Analysis transfer section has to aggregate them directly.
+ */
+data class TransferTotal(
+    val fromAccountId: Long,
+    val toAccountId: Long?,
+    val count: Int,
+    val total: Long,
 )

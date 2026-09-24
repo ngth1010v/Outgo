@@ -18,6 +18,13 @@
         <item>Dec</item>
     </string-array>
 
+    <!-- Month picker label, index 0 = January -->
+    <string-array name="month_full">
+        <item>January</item><item>February</item><item>March</item><item>April</item>
+        <item>May</item><item>June</item><item>July</item><item>August</item>
+        <item>September</item><item>October</item><item>November</item><item>December</item>
+    </string-array>
+
     <!-- Bottom navigation -->
     <string name="nav_home">Home</string>
     <string name="nav_trade">Add</string>
@@ -102,12 +109,33 @@
     <!-- Analysis -->
     <string name="analysis_previous_month">Previous month</string>
     <string name="analysis_next_month">Next month</string>
-    <string name="analysis_month_label">%1$s %2$d</string>
     <string name="analysis_no_data">No data for this month</string>
+    <string name="analysis_mode_all">All</string>
+    <string name="analysis_previous_year">Previous year</string>
+    <string name="analysis_next_year">Next year</string>
+    <string name="analysis_month_page_title">%1$s analysis</string>
+    <string name="analysis_year_page_title">Yearly analysis</string>
+    <string name="analysis_go_now">Now</string>
+    <string name="analysis_income_line">Income %1$s</string>
+    <string name="analysis_net_line">Net %1$s</string>
+    <string name="analysis_transfer_line">Moved %1$s between accounts</string>
+    <string name="analysis_transfers_title">Transfers</string>
+    <string name="analysis_transfers_count">%1$d moves · %2$s</string>
+    <string name="analysis_transfer_pair">%1$s → %2$s</string>
+    <string name="analysis_year_summary_title">Year summary</string>
+    <string name="analysis_year_to_date">Year to date · %1$d months</string>
+    <string name="analysis_per_month">%1$s per month</string>
+    <string name="analysis_year_biggest">Biggest %1$s · %2$s</string>
+    <string name="analysis_year_smallest">Smallest %1$s · %2$s</string>
+    <string name="analysis_year_bars_title">Month by month</string>
+    <string name="analysis_year_yoy_title">Versus last year</string>
+    <string name="analysis_year_yoy_legend">%1$d %2$s · %3$d %4$s</string>
+    <string name="analysis_vs_last_year">%1$s vs last year</string>
+    <string name="analysis_cd_transfers">Moved %1$s between accounts in %2$d transfers</string>
+    <string name="analysis_cd_yoy">%1$s so far, against %2$s at the same point last year</string>
     <string name="analysis_other">Other</string>
     <string name="analysis_summary_title">Month summary</string>
     <string name="analysis_avg_per_day">%1$s per day</string>
-    <string name="analysis_income_and_net">Income %1$s · Net %2$s</string>
     <string name="analysis_vs_last_month">%1$s vs last month</string>
     <string name="analysis_vs_last_month_percent">%1$s (%2$d%%) vs last month</string>
     <string name="analysis_by_category_title">Expense by category</string>

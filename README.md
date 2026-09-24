@@ -71,11 +71,14 @@ Open the app and you are already on the "add expense" screen. Log a purchase in 
 
 <img src="docs/analysis.png" align="right" width="240" alt="Analysis" />
 
-- **One page per month**, swiped or stepped through with the `‹ Sep 2026 ›` picker in the top bar.
-- **Month summary:** total spent, change against last month, average per day, income and net.
-- **Where the money went:** a donut and a category breakdown (expense or income), a 6-month trend, and the biggest movers against last month.
+- **One page per month and one per year**, swiped through or stepped with the year and month pickers in the top bar. Swipe right off December to reach that year's summary.
+- **Expense / Income / All**, one switch that drives every chart on the page. All mode draws both kinds together rather than a single net figure.
+- **Month summary:** total, change against last month, average per day, income, net and transfers.
+- **Where the money went:** a donut and a category breakdown, a 6-month trend, and the biggest movers against last month.
 - **When it went:** a cumulative spending pace line against last month, a daily heatmap that opens that day's history, and the average spend per weekday.
-- **What it went on:** the mix of purchase sizes around the month's median, and the five largest purchases.
+- **What it went on:** the mix of purchase sizes around the month's median, and the five largest movements.
+- **Transfers** between your own accounts, summed per account pair.
+- **Yearly analysis:** year summary, month-by-month bars, category totals for the year, and this year against last year. A part-finished year is compared against the same months a year earlier, never against a full twelve.
 
 <br clear="right" />
 

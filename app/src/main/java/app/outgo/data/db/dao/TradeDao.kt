@@ -50,15 +50,31 @@ interface TradeDao {
     )
     suspend fun pageInRange(type: Int, fromMillis: Long, toMillis: Long): List<TradeEntity>
 
-    /** Analysis: whole months of one type, narrow columns. Uses `index_trade_month_key_type`. */
+    /**
+     * Analysis: whole months of the given types, narrow columns. `type` rides along so one pass
+     * over the result can split expense from income. Uses `index_trade_month_key_type`.
+     */
     @Query(
         """
-        SELECT id, amount, occurred_at AS occurredAt, category_id AS categoryId, note
+        SELECT id, type, amount, occurred_at AS occurredAt, category_id AS categoryId, note
         FROM trade
-        WHERE type = :type AND month_key IN (:monthKeys)
+        WHERE type IN (:types) AND month_key IN (:monthKeys)
         """,
     )
-    suspend fun amountsAndTimesForMonths(monthKeys: List<Int>, type: Int): List<TradeSlim>
+    suspend fun amountsAndTimesForMonths(monthKeys: List<Int>, types: List<Int>): List<TradeSlim>
+
+    /** Analysis: transfers of the given months, summed per (from, to) account pair. */
+    @Query(
+        """
+        SELECT account_id AS fromAccountId, to_account_id AS toAccountId,
+               COUNT(*) AS count, SUM(amount) AS total
+        FROM trade
+        WHERE type = 4 AND month_key IN (:monthKeys)
+        GROUP BY account_id, to_account_id
+        ORDER BY total DESC
+        """,
+    )
+    suspend fun transferTotalsForMonths(monthKeys: List<Int>): List<TransferTotal>
 
     @Query("SELECT * FROM trade WHERE account_id = :accountId ORDER BY occurred_at DESC, id DESC LIMIT :limit")
     suspend fun firstPageForAccount(accountId: Long, limit: Int): List<TradeEntity>

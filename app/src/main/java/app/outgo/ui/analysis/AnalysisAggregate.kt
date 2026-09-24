@@ -2,7 +2,9 @@ package app.outgo.ui.analysis
 
 import app.outgo.data.db.dao.MonthCategoryTotal
 import app.outgo.data.db.dao.TradeSlim
+import app.outgo.data.db.dao.TransferTotal
 import app.outgo.domain.CategoryKind
+import app.outgo.domain.TradeType
 import app.outgo.util.MonthKey
 import java.time.Instant
 import java.time.LocalDate
@@ -11,12 +13,13 @@ import java.time.ZoneId
 import kotlin.math.abs
 
 /**
- * Pure aggregation for the Analysis screen: `category_month_stat` rows and raw trade rows in,
- * finished [StatsData]/[TradesData] out. No Android, no coroutines, no Compose — the ViewModel
- * calls these on [kotlinx.coroutines.Dispatchers.Default] and the unit tests call them directly.
+ * Pure aggregation for the Analysis screen: `category_month_stat` rows, raw trade rows and transfer
+ * totals in, finished [StatsData]/[TradesData]/[YearStatsData]/[YearTradesData] out. No Android, no
+ * coroutines, no Compose — the ViewModel calls these on [kotlinx.coroutines.Dispatchers.Default]
+ * and the unit tests call them directly.
  *
- * Days and weekdays are derived from `occurred_at` with the same zone [MonthKey] uses, so a
- * trade never lands on a day outside the `month_key` it was filed under.
+ * Days and weekdays are derived from `occurred_at` with the same zone [MonthKey] uses, so a trade
+ * never lands on a day outside the `month_key` it was filed under.
  */
 
 /** Slices past this count are summed into one "Other" row (plus the "Other" row itself). */
@@ -24,6 +27,7 @@ const val TOP_SLICE_COUNT = 6
 const val TREND_MONTH_COUNT = 6
 const val MOVER_COUNT = 5
 const val LARGEST_COUNT = 5
+const val TRANSFER_PAIR_COUNT = 5
 
 /** Neutral grey for the "Other" slice — not a category color, and readable in both themes. */
 const val OTHER_COLOR = 0xFF9E9E9E.toInt()
@@ -34,6 +38,8 @@ fun monthKeyOf(epochMillis: Long, zone: ZoneId): Int {
 }
 
 fun yearMonthOf(monthKey: Int): YearMonth = YearMonth.of(monthKey / 100, monthKey % 100)
+
+fun monthsOfYear(year: Int): List<Int> = (1..12).map { year * 100 + it }
 
 // --------------------------------------------------------------------- STATS
 
@@ -52,42 +58,79 @@ fun buildStats(
     val current = byMonth[month].orEmpty()
     if (current.isEmpty()) return Stage.Empty
 
-    val prevMonth = MonthKey.minus(month, 1)
-    val previous = byMonth[prevMonth].orEmpty()
-
-    fun ofKind(rows: List<MonthCategoryTotal>, kind: Int) = rows.filter { it.type == kind }
-    val curExpense = ofKind(current, CategoryKind.EXPENSE)
-    val prevExpense = ofKind(previous, CategoryKind.EXPENSE)
-    val curIncome = ofKind(current, CategoryKind.INCOME)
-    val prevIncome = ofKind(previous, CategoryKind.INCOME)
-
-    val expenseTotal = curExpense.sumOf { it.total }
-    val prevExpenseTotal = prevExpense.sumOf { it.total }
-    val incomeTotal = curIncome.sumOf { it.total }
+    val previous = byMonth[MonthKey.minus(month, 1)].orEmpty()
+    val curExpense = current.filter { it.type == CategoryKind.EXPENSE }
+    val prevExpense = previous.filter { it.type == CategoryKind.EXPENSE }
+    val curIncome = current.filter { it.type == CategoryKind.INCOME }
+    val prevIncome = previous.filter { it.type == CategoryKind.INCOME }
 
     val days = daysCounted(month, zone, nowMillis)
-    val summary = SummaryUi(
-        total = expenseTotal,
-        prevTotal = prevExpenseTotal,
-        deltaAmount = expenseTotal - prevExpenseTotal,
-        deltaPercent = percentChange(expenseTotal, prevExpenseTotal),
-        avgPerDay = if (days > 0) expenseTotal / days else 0L,
-        income = incomeTotal,
-        net = incomeTotal - expenseTotal,
-    )
-
     return Stage.Ready(
         StatsData(
-            summary = summary,
-            expense = buildSliceSet(curExpense, prevExpense, otherName),
-            income = buildSliceSet(curIncome, prevIncome, otherName),
-            trend = buildTrend(byMonth, month),
-            movers = buildMovers(curExpense, prevExpense),
+            summary = summaryOf(curExpense, prevExpense, curIncome, prevIncome, days),
+            expense = buildSliceSet(curExpense, prevExpense, CategoryKind.EXPENSE, otherName),
+            income = buildSliceSet(curIncome, prevIncome, CategoryKind.INCOME, otherName),
+            bars = buildBars(byMonth, MonthKey.lastN(month, TREND_MONTH_COUNT), month),
+            expenseMovers = buildMovers(curExpense, prevExpense, CategoryKind.EXPENSE),
+            incomeMovers = buildMovers(curIncome, prevIncome, CategoryKind.INCOME),
+            allMovers = buildMovers(current, previous, null),
         ),
     )
 }
 
-/** Days the month's average-per-day divides by: elapsed so far for the live month, else its full length. */
+/** Sections Y1–Y4 for [year]. [totals] must cover `year-1 Jan … year Dec`. */
+fun buildYearStats(
+    totals: List<MonthCategoryTotal>,
+    year: Int,
+    otherName: String,
+    zone: ZoneId = ZoneId.systemDefault(),
+    nowMillis: Long = System.currentTimeMillis(),
+): Stage<YearStatsData> {
+    val byMonth = totals.groupBy { it.monthKey }
+    val months = monthsOfYear(year)
+    val today = Instant.ofEpochMilli(nowMillis).atZone(zone).toLocalDate()
+    val partial = today.year == year
+    // A partial year is compared against the same months of last year, never against 12.
+    val monthsCounted = if (partial) today.monthValue else 12
+    val counted = months.take(monthsCounted)
+    val previousCounted = monthsOfYear(year - 1).take(monthsCounted)
+
+    val current = counted.flatMap { byMonth[it].orEmpty() }
+    if (current.isEmpty()) return Stage.Empty
+    val previous = previousCounted.flatMap { byMonth[it].orEmpty() }
+
+    val curExpense = current.filter { it.type == CategoryKind.EXPENSE }
+    val prevExpense = previous.filter { it.type == CategoryKind.EXPENSE }
+    val curIncome = current.filter { it.type == CategoryKind.INCOME }
+    val prevIncome = previous.filter { it.type == CategoryKind.INCOME }
+
+    // Categories are summed across the year before the top-6 cut, so one row per category.
+    fun merge(rows: List<MonthCategoryTotal>): List<MonthCategoryTotal> =
+        rows.groupBy { it.rootId }.map { (_, group) -> group.first().copy(total = group.sumOf { it.total }) }
+
+    val expenseByMonth = counted.map { m -> m to byMonth[m].orEmpty().filter { it.type == CategoryKind.EXPENSE }.sumOf { it.total } }
+    val nonEmpty = expenseByMonth.filter { it.second > 0L }
+
+    return Stage.Ready(
+        YearStatsData(
+            summary = YearSummaryUi(
+                summary = summaryOf(curExpense, prevExpense, curIncome, prevIncome, monthsCounted),
+                monthsCounted = monthsCounted,
+                partial = partial,
+                biggestMonth = nonEmpty.maxByOrNull { it.second }?.first,
+                biggestAmount = nonEmpty.maxOfOrNull { it.second } ?: 0L,
+                smallestMonth = nonEmpty.minByOrNull { it.second }?.first,
+                smallestAmount = nonEmpty.minOfOrNull { it.second } ?: 0L,
+            ),
+            expense = buildSliceSet(merge(curExpense), merge(prevExpense), CategoryKind.EXPENSE, otherName),
+            income = buildSliceSet(merge(curIncome), merge(prevIncome), CategoryKind.INCOME, otherName),
+            bars = buildBars(byMonth, months, selected = null),
+            yoy = buildYoy(byMonth, year, monthsCounted),
+        ),
+    )
+}
+
+/** Days the month's average divides by: elapsed so far for the live month, else its full length. */
 internal fun daysCounted(month: Int, zone: ZoneId, nowMillis: Long): Int {
     val ym = yearMonthOf(month)
     val today = Instant.ofEpochMilli(nowMillis).atZone(zone).toLocalDate()
@@ -98,9 +141,39 @@ internal fun daysCounted(month: Int, zone: ZoneId, nowMillis: Long): Int {
 internal fun percentChange(current: Long, previous: Long): Int? =
     if (previous == 0L) null else ((current - previous) * 100 / previous).toInt()
 
+private fun kindSummary(current: List<MonthCategoryTotal>, previous: List<MonthCategoryTotal>, periods: Int): KindSummary {
+    val total = current.sumOf { it.total }
+    val prev = previous.sumOf { it.total }
+    return KindSummary(
+        total = total,
+        prevTotal = prev,
+        deltaAmount = total - prev,
+        deltaPercent = percentChange(total, prev),
+        perPeriod = if (periods > 0) total / periods else 0L,
+    )
+}
+
+private fun summaryOf(
+    curExpense: List<MonthCategoryTotal>,
+    prevExpense: List<MonthCategoryTotal>,
+    curIncome: List<MonthCategoryTotal>,
+    prevIncome: List<MonthCategoryTotal>,
+    periods: Int,
+): SummaryUi {
+    val expense = kindSummary(curExpense, prevExpense, periods)
+    val income = kindSummary(curIncome, prevIncome, periods)
+    return SummaryUi(
+        expense = expense,
+        income = income,
+        net = income.total - expense.total,
+        prevNet = income.prevTotal - expense.prevTotal,
+    )
+}
+
 private fun buildSliceSet(
     current: List<MonthCategoryTotal>,
     previous: List<MonthCategoryTotal>,
+    kind: Int,
     otherName: String,
 ): SliceSet {
     val total = current.sumOf { it.total }
@@ -116,6 +189,7 @@ private fun buildSliceSet(
         val prev = prevByRoot[row.rootId] ?: 0L
         rows += BreakdownRow(
             rootId = row.rootId,
+            kind = kind,
             name = row.name,
             iconId = row.iconId,
             color = row.color,
@@ -130,6 +204,7 @@ private fun buildSliceSet(
         val prev = rest.sumOf { prevByRoot[it.rootId] ?: 0L }
         rows += BreakdownRow(
             rootId = null,
+            kind = kind,
             name = otherName,
             iconId = null,
             color = OTHER_COLOR,
@@ -150,26 +225,81 @@ private fun buildSliceSet(
     return SliceSet(DonutUi(slices, total), rows)
 }
 
-private fun buildTrend(byMonth: Map<Int, List<MonthCategoryTotal>>, month: Int): TrendUi {
-    val months = MonthKey.lastN(month, TREND_MONTH_COUNT)
-    val amounts = months.map { m ->
-        byMonth[m].orEmpty().filter { it.type == CategoryKind.EXPENSE }.sumOf { it.total }
-    }
-    val max = amounts.max().coerceAtLeast(1L)
-    val average = amounts.sum() / months.size
-    return TrendUi(
+/**
+ * Bars for [months]. Expense and income share one scale so the diverging All-mode chart is
+ * readable; [selected] highlights one bar, or null on the year page.
+ */
+private fun buildBars(byMonth: Map<Int, List<MonthCategoryTotal>>, months: List<Int>, selected: Int?): BarsUi {
+    fun sum(month: Int, kind: Int) = byMonth[month].orEmpty().filter { it.type == kind }.sumOf { it.total }
+    val expense = months.map { sum(it, CategoryKind.EXPENSE) }
+    val income = months.map { sum(it, CategoryKind.INCOME) }
+    val max = (expense + income).max().coerceAtLeast(1L)
+    val expenseAverage = expense.sum() / months.size
+    val incomeAverage = income.sum() / months.size
+    return BarsUi(
         bars = months.mapIndexed { i, m ->
-            TrendBar(m, amounts[i], amounts[i].toFloat() / max, selected = m == month)
+            MonthBar(
+                monthKey = m,
+                expense = expense[i],
+                income = income[i],
+                expenseFraction = expense[i].toFloat() / max,
+                incomeFraction = income[i].toFloat() / max,
+                selected = m == selected,
+            )
         },
-        average = average,
-        averageFraction = average.toFloat() / max,
+        expenseAverage = expenseAverage,
+        incomeAverage = incomeAverage,
+        expenseAverageFraction = expenseAverage.toFloat() / max,
+        incomeAverageFraction = incomeAverage.toFloat() / max,
     )
 }
 
-private fun buildMovers(current: List<MonthCategoryTotal>, previous: List<MonthCategoryTotal>): List<MoverRow> {
+/** Cumulative month-by-month totals for [year] against the same months of the year before. */
+private fun buildYoy(byMonth: Map<Int, List<MonthCategoryTotal>>, year: Int, monthsCounted: Int): YoyUi {
+    val expense = rawYoy(byMonth, year, monthsCounted, CategoryKind.EXPENSE)
+    val income = rawYoy(byMonth, year, monthsCounted, CategoryKind.INCOME)
+    // Both kinds and both years share one axis.
+    val max = maxOf(expense.max(), income.max()).coerceAtLeast(1L)
+    return YoyUi(expense = expense.toSeries(max), income = income.toSeries(max), maxTotal = max)
+}
+
+private class YoySeriesRaw(
+    val current: List<Long>,
+    val previous: List<Long>,
+    val currentTotal: Long,
+    val previousTotal: Long,
+) {
+    fun max(): Long = maxOf(currentTotal, previousTotal)
+    fun toSeries(max: Long): YoySeries = YoySeries(
+        current = current.map { it.toFloat() / max },
+        previous = previous.map { it.toFloat() / max },
+        currentTotal = currentTotal,
+        previousTotal = previousTotal,
+    )
+}
+
+private fun rawYoy(byMonth: Map<Int, List<MonthCategoryTotal>>, year: Int, monthsCounted: Int, kind: Int): YoySeriesRaw {
+    fun cumulative(months: List<Int>): List<Long> {
+        var running = 0L
+        return months.map { m ->
+            running += byMonth[m].orEmpty().filter { it.type == kind }.sumOf { it.total }
+            running
+        }
+    }
+    val current = cumulative(monthsOfYear(year).take(monthsCounted))
+    val previous = cumulative(monthsOfYear(year - 1))
+    return YoySeriesRaw(current, previous, current.lastOrNull() ?: 0L, previous.lastOrNull() ?: 0L)
+}
+
+/** Top movers by amount moved. [kind] null means both kinds compete in one list. */
+private fun buildMovers(
+    current: List<MonthCategoryTotal>,
+    previous: List<MonthCategoryTotal>,
+    kind: Int?,
+): List<MoverRow> {
     val prevByRoot = previous.associateBy { it.rootId }
     val curByRoot = current.associateBy { it.rootId }
-    // Categories that had spend last month and none this month are a full decrease, so the
+    // Categories that had a total last month and none this month are a full decrease, so the
     // union of both months is the candidate set — not just this month's.
     val deltas = (curByRoot.keys + prevByRoot.keys).mapNotNull { rootId ->
         val row = curByRoot[rootId] ?: prevByRoot.getValue(rootId)
@@ -180,100 +310,178 @@ private fun buildMovers(current: List<MonthCategoryTotal>, previous: List<MonthC
     val top = deltas.sortedByDescending { abs(it.third) }.take(MOVER_COUNT)
     val max = top.maxOfOrNull { abs(it.third) }?.coerceAtLeast(1L) ?: return emptyList()
     return top.map { (row, rootId, delta) ->
-        MoverRow(rootId, row.name, row.iconId, row.color, delta, abs(delta).toFloat() / max)
+        MoverRow(rootId, kind ?: row.type, row.name, row.iconId, row.color, delta, abs(delta).toFloat() / max)
     }
 }
 
 // -------------------------------------------------------------------- TRADES
 
 /**
- * Sections 4, 7, 9 and 10 in a single pass over [rows], which must be the EXPENSE trades of
- * [month] and the month before it (one query, see `amountsAndTimesForMonths`).
- * [weekdayRows] is the separate 3-month fetch for section 8.
+ * Sections 4, 7, 9, 10 and 11 in a single pass over [rows], which must be the EXPENSE and INCOME
+ * trades of [month] and the month before it (one query, see `amountsAndTimesForMonths`).
+ * [weekdayRows] is the 3-month window for section 8; [transfers] is the separate transfer
+ * aggregate for section 11.
  */
 fun buildTrades(
     rows: List<TradeSlim>,
     weekdayRows: List<TradeSlim>,
+    transfers: List<TransferTotal>,
     month: Int,
-    categoryNames: Map<Long, Triple<String, Long?, Int>>,
+    categories: Map<Long, Triple<String, Long?, Int>>,
+    accountNames: Map<Long, String>,
     zone: ZoneId = ZoneId.systemDefault(),
     nowMillis: Long = System.currentTimeMillis(),
 ): Stage<TradesData> {
     val ym = yearMonthOf(month)
     val prevYm = ym.minusMonths(1)
-    val daysInMonth = ym.lengthOfMonth()
-    val daily = LongArray(daysInMonth)
+    val daily = LongArray(ym.lengthOfMonth())
     val prevDaily = LongArray(prevYm.lengthOfMonth())
-    val currentAmounts = ArrayList<Long>(rows.size)
-    var largest = ArrayList<TradeSlim>(rows.size)
+    val incomeDaily = LongArray(ym.lengthOfMonth())
+    val incomePrevDaily = LongArray(prevYm.lengthOfMonth())
+    val expenseAmounts = ArrayList<Long>(rows.size)
+    val currentRows = ArrayList<TradeSlim>(rows.size)
 
     for (row in rows) {
         val date = Instant.ofEpochMilli(row.occurredAt).atZone(zone).toLocalDate()
+        val expense = row.type == TradeType.EXPENSE
         when (YearMonth.from(date)) {
             ym -> {
-                daily[date.dayOfMonth - 1] += row.amount
-                currentAmounts += row.amount
-                largest += row
+                if (expense) {
+                    daily[date.dayOfMonth - 1] += row.amount
+                    expenseAmounts += row.amount
+                } else {
+                    incomeDaily[date.dayOfMonth - 1] += row.amount
+                }
+                currentRows += row
             }
-            prevYm -> prevDaily[date.dayOfMonth - 1] += row.amount
+            // Only the pace line looks at the previous month.
+            prevYm -> if (expense) prevDaily[date.dayOfMonth - 1] += row.amount else incomePrevDaily[date.dayOfMonth - 1] += row.amount
             else -> Unit // a trade whose month_key disagrees with its timestamp; ignore it
         }
     }
 
-    if (currentAmounts.isEmpty()) return Stage.Empty
-
-    largest = ArrayList(largest.sortedByDescending { it.amount }.take(LARGEST_COUNT))
+    val transfersUi = buildTransfers(transfers, accountNames)
+    if (currentRows.isEmpty() && transfersUi.count == 0) return Stage.Empty
 
     return Stage.Ready(
         TradesData(
-            pace = buildPace(daily, prevDaily, month, zone, nowMillis),
+            pace = buildPace(daily, prevDaily, incomeDaily, incomePrevDaily, month, zone, nowMillis),
             heatmap = buildHeatmap(daily, ym, zone),
             weekday = buildWeekday(weekdayRows, month, zone, nowMillis),
-            buckets = buildBuckets(currentAmounts),
-            largest = largest.map { row ->
-                val category = row.categoryId?.let { categoryNames[it] }
-                LargestItem(
-                    tradeId = row.id,
-                    name = category?.first.orEmpty(),
-                    iconId = category?.second,
-                    color = category?.third ?: OTHER_COLOR,
-                    amount = row.amount,
-                    occurredAt = row.occurredAt,
-                    note = row.note,
-                )
-            },
+            buckets = buildBuckets(expenseAmounts),
+            expenseLargest = largestOf(currentRows, TradeType.EXPENSE, categories),
+            incomeLargest = largestOf(currentRows, TradeType.INCOME, categories),
+            allLargest = largestOf(currentRows, null, categories),
+            transfers = transfersUi,
         ),
+    )
+}
+
+/** Sections Y5 and Y6: the year's transfers and its biggest movements. */
+fun buildYearTrades(
+    rows: List<TradeSlim>,
+    transfers: List<TransferTotal>,
+    year: Int,
+    categories: Map<Long, Triple<String, Long?, Int>>,
+    accountNames: Map<Long, String>,
+    zone: ZoneId = ZoneId.systemDefault(),
+): Stage<YearTradesData> {
+    val months = monthsOfYear(year).toSet()
+    val inYear = rows.filter { monthKeyOf(it.occurredAt, zone) in months }
+    val transfersUi = buildTransfers(transfers, accountNames)
+    if (inYear.isEmpty() && transfersUi.count == 0) return Stage.Empty
+    return Stage.Ready(
+        YearTradesData(
+            transfers = transfersUi,
+            expenseLargest = largestOf(inYear, TradeType.EXPENSE, categories),
+            incomeLargest = largestOf(inYear, TradeType.INCOME, categories),
+            allLargest = largestOf(inYear, null, categories),
+        ),
+    )
+}
+
+/** Biggest [LARGEST_COUNT] movements; [type] null means expense and income compete together. */
+internal fun largestOf(
+    rows: List<TradeSlim>,
+    type: Int?,
+    categories: Map<Long, Triple<String, Long?, Int>>,
+): List<LargestItem> = rows
+    .filter { type == null || it.type == type }
+    .sortedByDescending { it.amount }
+    .take(LARGEST_COUNT)
+    .map { row ->
+        val category = row.categoryId?.let { categories[it] }
+        LargestItem(
+            tradeId = row.id,
+            type = row.type,
+            name = category?.first.orEmpty(),
+            iconId = category?.second,
+            color = category?.third ?: OTHER_COLOR,
+            amount = row.amount,
+            occurredAt = row.occurredAt,
+            note = row.note,
+        )
+    }
+
+internal fun buildTransfers(totals: List<TransferTotal>, accountNames: Map<Long, String>): TransfersUi {
+    val total = totals.sumOf { it.total }
+    val max = totals.maxOfOrNull { it.total }?.coerceAtLeast(1L) ?: 1L
+    return TransfersUi(
+        pairs = totals.sortedByDescending { it.total }.take(TRANSFER_PAIR_COUNT).map { row ->
+            TransferPair(
+                fromName = accountNames[row.fromAccountId].orEmpty(),
+                toName = row.toAccountId?.let { accountNames[it] }.orEmpty(),
+                total = row.total,
+                count = row.count,
+                fraction = row.total.toFloat() / max,
+            )
+        },
+        total = total,
+        count = totals.sumOf { it.count },
     )
 }
 
 internal fun buildPace(
     daily: LongArray,
     prevDaily: LongArray,
+    incomeDaily: LongArray,
+    incomePrevDaily: LongArray,
     month: Int,
     zone: ZoneId,
     nowMillis: Long,
 ): PaceUi {
     // The live month's line stops at today instead of flat-lining to the end of the month.
     val lastDay = daysCounted(month, zone, nowMillis).coerceAtMost(daily.size)
-    val current = ArrayList<Float>(lastDay)
-    val previous = ArrayList<Float>(prevDaily.size)
+    val expenseCurrent = runningTotals(daily, lastDay)
+    val expensePrevious = runningTotals(prevDaily, prevDaily.size)
+    val incomeCurrent = runningTotals(incomeDaily, lastDay)
+    val incomePrevious = runningTotals(incomePrevDaily, incomePrevDaily.size)
+
+    // One axis for both kinds and both months, so every line is comparable.
+    val max = listOf(expenseCurrent, expensePrevious, incomeCurrent, incomePrevious)
+        .maxOf { it.lastOrNull() ?: 0L }
+        .coerceAtLeast(1L)
+
+    fun series(current: List<Long>, previous: List<Long>) = PaceSeries(
+        current = current.map { it.toFloat() / max },
+        previous = previous.map { it.toFloat() / max },
+        currentTotal = current.lastOrNull() ?: 0L,
+    )
+
+    return PaceUi(
+        expense = series(expenseCurrent, expensePrevious),
+        income = series(incomeCurrent, incomePrevious),
+        daysInMonth = daily.size,
+        maxTotal = max,
+    )
+}
+
+private fun runningTotals(daily: LongArray, days: Int): List<Long> {
     var running = 0L
-    val currentTotals = LongArray(lastDay)
-    for (i in 0 until lastDay) {
+    return (0 until days).map { i ->
         running += daily[i]
-        currentTotals[i] = running
+        running
     }
-    val currentTotal = running
-    running = 0L
-    val prevTotals = LongArray(prevDaily.size)
-    for (i in prevDaily.indices) {
-        running += prevDaily[i]
-        prevTotals[i] = running
-    }
-    val max = maxOf(currentTotal, running).coerceAtLeast(1L)
-    currentTotals.forEach { current += it.toFloat() / max }
-    prevTotals.forEach { previous += it.toFloat() / max }
-    return PaceUi(current, previous, daily.size, max, currentTotal)
 }
 
 internal fun buildHeatmap(daily: LongArray, ym: YearMonth, zone: ZoneId): HeatmapUi {
@@ -308,6 +516,7 @@ internal fun buildWeekday(rows: List<TradeSlim>, month: Int, zone: ZoneId, nowMi
     val totals = LongArray(8)
     val inRange = months.toSet()
     for (row in rows) {
+        if (row.type != TradeType.EXPENSE) continue
         val date = Instant.ofEpochMilli(row.occurredAt).atZone(zone).toLocalDate()
         if (monthKeyOf(row.occurredAt, zone) in inRange && !date.isAfter(last)) {
             totals[date.dayOfWeek.value] += row.amount
