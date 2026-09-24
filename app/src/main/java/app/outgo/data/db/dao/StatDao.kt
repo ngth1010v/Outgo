@@ -21,6 +21,10 @@ interface StatDao {
     )
     fun observeMonthlyTotals(fromMonth: Int, toMonth: Int): Flow<List<MonthCategoryTotal>>
 
+    /** Oldest month that has any data, i.e. the lower bound of the Analysis month picker. */
+    @Query("SELECT MIN(month_key) FROM category_month_stat")
+    suspend fun earliestMonth(): Int?
+
     @Query(
         """
         SELECT COALESCE(SUM(s.total), 0) FROM category_month_stat s JOIN category c ON c.id = s.category_id

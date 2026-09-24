@@ -29,7 +29,6 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import app.outgo.ui.analysis.AnalysisScreen
-import app.outgo.ui.analysis.AnalysisSubScreen
 import app.outgo.ui.balance.BalanceScreen
 import app.outgo.ui.category.CategoryScreen
 import app.outgo.ui.component.LocalSwipeParent
@@ -121,20 +120,16 @@ fun OutgoRoot(openSetting: Boolean = false) {
                 composable(Routes.TABS) {}
 
                 composable(
-                    route = Routes.ANALYSIS_SUB_PATTERN,
-                    arguments = listOf(navArgument("kind") { type = NavType.StringType }),
-                ) { entry ->
-                    val kind = AnalysisKind.fromArg(entry.arguments?.getString("kind"))
-                    AnalysisSubScreen(kind = kind, onBack = { navController.popBackStack() })
-                }
-
-                composable(
                     route = Routes.HISTORY_PATTERN,
-                    arguments = listOf(navArgument("type") { type = NavType.StringType }),
+                    arguments = listOf(
+                        navArgument("type") { type = NavType.StringType },
+                        navArgument("day") { type = NavType.LongType; defaultValue = 0L },
+                    ),
                 ) { entry ->
                     val type = HistoryType.fromArg(entry.arguments?.getString("type"))
                     HistoryScreen(
                         type = type,
+                        dayStartMillis = entry.arguments?.getLong("day")?.takeIf { it > 0L },
                         onBack = { navController.popBackStack() },
                         onOpenTrade = { tradeId -> navController.navigate(Routes.tradeEdit(tradeId)) },
                     )
@@ -162,7 +157,10 @@ private fun TabContent(route: String, shown: Boolean, navController: NavHostCont
         )
         Routes.BALANCE -> BalanceScreen()
         Routes.CATEGORY -> CategoryScreen()
-        Routes.ANALYSIS -> AnalysisScreen(onOpenSub = { kind -> navController.navigate(Routes.analysisSub(kind)) })
+        Routes.ANALYSIS -> AnalysisScreen(
+            onOpenTrade = { tradeId -> navController.navigate(Routes.tradeEdit(tradeId)) },
+            onOpenDay = { dayStart -> navController.navigate(Routes.history(HistoryType.EXPENSE, dayStart)) },
+        )
         Routes.SETTING -> SettingScreen()
     }
 }

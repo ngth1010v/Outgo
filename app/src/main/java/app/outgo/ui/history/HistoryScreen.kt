@@ -32,13 +32,24 @@ import app.outgo.ui.nav.HistoryType
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HistoryScreen(type: HistoryType, onBack: () -> Unit, onOpenTrade: (Long) -> Unit) {
+fun HistoryScreen(
+    type: HistoryType,
+    onBack: () -> Unit,
+    onOpenTrade: (Long) -> Unit,
+    dayStartMillis: Long? = null,
+) {
     val container = LocalAppContainer.current
     val viewModel: HistoryViewModel = viewModel(
-        key = "history-${type.arg}",
+        key = "history-${type.arg}-${dayStartMillis ?: 0L}",
         factory = viewModelFactory {
             initializer {
-                HistoryViewModel(container.tradeRepository, container.accountRepository, container.categoryRepository, type)
+                HistoryViewModel(
+                    container.tradeRepository,
+                    container.accountRepository,
+                    container.categoryRepository,
+                    type,
+                    dayStartMillis,
+                )
             }
         },
     )

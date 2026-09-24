@@ -1,14 +1,30 @@
 package app.outgo.data.repo
 
 import app.outgo.data.db.dao.TradeDao
+import app.outgo.data.db.dao.TradeSlim
 import app.outgo.data.db.entity.TradeEntity
 import app.outgo.domain.TradeDraft
 import app.outgo.domain.TradeType
 import app.outgo.util.MonthKey
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.withContext
 
 class TradeRepository(private val tradeDao: TradeDao) {
+
+    private val _changes = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    /**
+     * Emits after every write. Screens whose trade data is a one-shot fetch rather than a
+     * Flow (see [TradeDao]) use it to reload just what they are holding.
+     */
+    val changes: SharedFlow<Unit> = _changes.asSharedFlow()
+
+    private fun signalChange() {
+        _changes.tryEmit(Unit)
+    }
 
     suspend fun insert(draft: TradeDraft): Long = withContext(Dispatchers.IO) {
         require(draft.amount > 0) { "amount must be > 0" }
@@ -26,7 +42,7 @@ class TradeRepository(private val tradeDao: TradeDao) {
                 createdAt = now,
                 updatedAt = now,
             ),
-        )
+        ).also { signalChange() }
     }
 
     suspend fun update(id: Long, draft: TradeDraft) = withContext(Dispatchers.IO) {
@@ -45,10 +61,12 @@ class TradeRepository(private val tradeDao: TradeDao) {
                 updatedAt = System.currentTimeMillis(),
             ),
         )
+        signalChange()
     }
 
     suspend fun delete(id: Long) = withContext(Dispatchers.IO) {
         tradeDao.findById(id)?.let { tradeDao.delete(it) }
+        signalChange()
     }
 
     /** Records the delta between an account's old and new "current balance" as one adjustment trade. */
@@ -68,6 +86,7 @@ class TradeRepository(private val tradeDao: TradeDao) {
                 updatedAt = now,
             ),
         )
+        signalChange()
     }
 
     suspend fun findById(id: Long): TradeEntity? = withContext(Dispatchers.IO) { tradeDao.findById(id) }
@@ -83,4 +102,10 @@ class TradeRepository(private val tradeDao: TradeDao) {
 
     suspend fun nextPageForAccount(accountId: Long, before: TradeEntity, limit: Int = 50): List<TradeEntity> =
         withContext(Dispatchers.IO) { tradeDao.nextPageForAccount(accountId, before.occurredAt, before.id, limit) }
+
+    suspend fun pageInRange(type: Int, fromMillis: Long, toMillis: Long): List<TradeEntity> =
+        withContext(Dispatchers.IO) { tradeDao.pageInRange(type, fromMillis, toMillis) }
+
+    suspend fun amountsAndTimesForMonths(monthKeys: List<Int>, type: Int): List<TradeSlim> =
+        withContext(Dispatchers.IO) { tradeDao.amountsAndTimesForMonths(monthKeys, type) }
 }

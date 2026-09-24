@@ -71,9 +71,11 @@ Open the app and you are already on the "add expense" screen. Log a purchase in 
 
 <img src="docs/analysis.png" align="right" width="240" alt="Analysis" />
 
-- A **stacked bar chart** compares income and expense by category, month over month.
-- **Most income and most expense** categories for the month, with the percentage change from last month.
-- Detail pages for **General, Income, Expense and Transfer**.
+- **One page per month**, swiped or stepped through with the `‹ Sep 2026 ›` picker in the top bar.
+- **Month summary:** total spent, change against last month, average per day, income and net.
+- **Where the money went:** a donut and a category breakdown (expense or income), a 6-month trend, and the biggest movers against last month.
+- **When it went:** a cumulative spending pace line against last month, a daily heatmap that opens that day's history, and the average spend per weekday.
+- **What it went on:** the mix of purchase sizes around the month's median, and the five largest purchases.
 
 <br clear="right" />
 

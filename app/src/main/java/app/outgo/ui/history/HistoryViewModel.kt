@@ -31,12 +31,15 @@ data class HistoryUiState(
 )
 
 private const val PAGE_SIZE = 50
+private const val DAY_MILLIS = 24L * 60 * 60 * 1000
 
 class HistoryViewModel(
     private val tradeRepository: TradeRepository,
     accountRepository: AccountRepository,
     categoryRepository: CategoryRepository,
     historyType: HistoryType,
+    /** Start of a single day to show, or null for the whole (paged) history. */
+    private val dayStartMillis: Long? = null,
 ) : ViewModel() {
 
     private val tradeType = when (historyType) {
@@ -67,9 +70,21 @@ class HistoryViewModel(
     /** Re-runs the first page query. Call when the screen re-enters composition — the trade list is a one-shot fetch, not a Flow, so an edit made elsewhere (e.g. the trade-edit screen) isn't seen until this runs again. */
     fun refresh() {
         viewModelScope.launch {
-            val first = tradeRepository.firstPage(tradeType, PAGE_SIZE)
+            // A single day is small enough to come back in one query, so it never pages.
+            val first = if (dayStartMillis == null) {
+                tradeRepository.firstPage(tradeType, PAGE_SIZE)
+            } else {
+                tradeRepository.pageInRange(tradeType, dayStartMillis, dayStartMillis + DAY_MILLIS)
+            }
             val items = withContext(Dispatchers.Default) { buildHistoryItems(first) }
-            _state.update { it.copy(trades = first, items = items, isLoading = false, canLoadMore = first.size == PAGE_SIZE) }
+            _state.update {
+                it.copy(
+                    trades = first,
+                    items = items,
+                    isLoading = false,
+                    canLoadMore = dayStartMillis == null && first.size == PAGE_SIZE,
+                )
+            }
         }
     }
 

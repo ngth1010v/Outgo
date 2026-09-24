@@ -70,11 +70,18 @@ internal fun MacrobenchmarkScope.animationJourney() {
     tap(By.text("Income"))
     tap(By.text("Expense"))
 
-    // Analysis sub screen and back.
+    // Analysis: the month pager (one swipe back a month) and a scroll through its sections,
+    // which is what compiles the hand-drawn charts.
     tap(By.desc("Analysis"))
-    tap(By.text("General"))
-    device.pressBack()
+    device.findObject(By.scrollable(true))?.let {
+        it.fling(Direction.DOWN)
+        device.waitForIdle()
+        it.fling(Direction.UP)
+        device.waitForIdle()
+    }
+    tap(By.desc("Previous month"))
     device.waitForIdle()
+    Thread.sleep(700)
 }
 
 private fun MacrobenchmarkScope.tap(selector: BySelector) {

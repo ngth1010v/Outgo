@@ -40,6 +40,26 @@ interface TradeDao {
     )
     suspend fun nextPage(type: Int, beforeOccurredAt: Long, beforeId: Long, limit: Int): List<TradeEntity>
 
+    /** One day of one type, for History opened from the Analysis heatmap. A day never pages. */
+    @Query(
+        """
+        SELECT * FROM trade
+        WHERE type = :type AND occurred_at >= :fromMillis AND occurred_at < :toMillis
+        ORDER BY occurred_at DESC, id DESC
+        """,
+    )
+    suspend fun pageInRange(type: Int, fromMillis: Long, toMillis: Long): List<TradeEntity>
+
+    /** Analysis: whole months of one type, narrow columns. Uses `index_trade_month_key_type`. */
+    @Query(
+        """
+        SELECT id, amount, occurred_at AS occurredAt, category_id AS categoryId, note
+        FROM trade
+        WHERE type = :type AND month_key IN (:monthKeys)
+        """,
+    )
+    suspend fun amountsAndTimesForMonths(monthKeys: List<Int>, type: Int): List<TradeSlim>
+
     @Query("SELECT * FROM trade WHERE account_id = :accountId ORDER BY occurred_at DESC, id DESC LIMIT :limit")
     suspend fun firstPageForAccount(accountId: Long, limit: Int): List<TradeEntity>
 

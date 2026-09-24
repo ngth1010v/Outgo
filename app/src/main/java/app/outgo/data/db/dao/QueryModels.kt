@@ -39,3 +39,16 @@ data class BudgetWithProgress(
     val displayName: String get() = if (name != null) name else categoryName.orEmpty()
     val displayIconId: Long? get() = iconId ?: categoryIconId
 }
+
+/**
+ * The few trade columns the Analysis screen needs. Deliberately not `SELECT *`:
+ * these rows are fetched a whole month at a time and every extra column is copied
+ * for nothing.
+ */
+data class TradeSlim(
+    val id: Long,
+    val amount: Long,
+    val occurredAt: Long,
+    val categoryId: Long?,
+    val note: String?,
+)

@@ -100,10 +100,44 @@
     <string name="category_default_child_name">General</string>
 
     <!-- Analysis -->
-    <string name="analysis_placeholder">Coming soon</string>
-    <string name="analysis_most_income">Most income</string>
-    <string name="analysis_most_expense">Most expense</string>
-    <string name="analysis_general">General</string>
+    <string name="analysis_previous_month">Previous month</string>
+    <string name="analysis_next_month">Next month</string>
+    <string name="analysis_month_label">%1$s %2$d</string>
+    <string name="analysis_no_data">No data for this month</string>
+    <string name="analysis_other">Other</string>
+    <string name="analysis_summary_title">Month summary</string>
+    <string name="analysis_avg_per_day">%1$s per day</string>
+    <string name="analysis_income_and_net">Income %1$s · Net %2$s</string>
+    <string name="analysis_vs_last_month">%1$s vs last month</string>
+    <string name="analysis_vs_last_month_percent">%1$s (%2$d%%) vs last month</string>
+    <string name="analysis_by_category_title">Expense by category</string>
+    <string name="analysis_by_category_income_title">Income by category</string>
+    <string name="analysis_breakdown_title">Category breakdown</string>
+    <string name="analysis_pace_title">Spending pace</string>
+    <string name="analysis_pace_legend">This month vs last month</string>
+    <string name="analysis_trend_title">6-month trend</string>
+    <string name="analysis_average">Average %1$s</string>
+    <string name="analysis_movers_title">Biggest movers</string>
+    <string name="analysis_heatmap_title">Daily spending</string>
+    <string name="analysis_weekday_title">Spend by weekday</string>
+    <string name="analysis_buckets_title">Purchase size mix</string>
+    <string name="analysis_buckets_median">Median %1$s</string>
+    <string name="analysis_buckets_legend">Transactions vs money</string>
+    <string name="analysis_bucket_under">under %1$s</string>
+    <string name="analysis_bucket_range">%1$s – %2$s</string>
+    <string name="analysis_bucket_over">over %1$s</string>
+    <string name="analysis_largest_title">Largest purchases</string>
+    <string name="analysis_cd_summary">Spent %1$s, %2$s than last month</string>
+    <string name="analysis_cd_summary_no_baseline">Spent %1$s</string>
+    <string name="analysis_cd_more">%1$s more</string>
+    <string name="analysis_cd_less">%1$s less</string>
+    <string name="analysis_cd_donut">%1$s across %2$d categories, largest %3$s</string>
+    <string name="analysis_cd_pace">%1$s spent so far this month</string>
+    <string name="analysis_cd_trend">Six-month expense trend, average %1$s</string>
+    <string name="analysis_cd_movers">Biggest changes against last month</string>
+    <string name="analysis_cd_heatmap">Daily spending, heaviest day %1$s</string>
+    <string name="analysis_cd_weekday">Average spend per weekday</string>
+    <string name="analysis_cd_buckets">Purchase sizes relative to a median of %1$s</string>
 
     <!-- Settings -->
     <string name="setting_section_general">General</string>

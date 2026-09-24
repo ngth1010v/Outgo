@@ -115,6 +115,8 @@ dependencies {
 
     implementation(libs.kotlinx.coroutines.android)
 
+    testImplementation(libs.junit)
+
     // Installs the baseline profile on sideloaded installs too, not just Play Store ones.
     implementation(libs.androidx.profileinstaller)
     "baselineProfile"(project(":baselineprofile"))
