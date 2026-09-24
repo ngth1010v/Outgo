@@ -70,6 +70,7 @@ import app.outgo.ui.component.budgetRemainingText
 import app.outgo.ui.component.rememberReorderState
 import app.outgo.ui.component.rememberSwipeLevel
 import app.outgo.ui.component.reorderableItem
+import app.outgo.ui.component.slideItem
 import app.outgo.ui.component.swipeShift
 import app.outgo.ui.component.swipeStep
 import app.outgo.util.Money
@@ -168,8 +169,9 @@ private data class AddChildEntry(val parent: CategoryEntity) : CategoryEntry {
     override val key: Any get() = "add-${parent.id}"
 }
 
-private data object AddParentEntry : CategoryEntry {
-    override val key: Any = "add"
+/** Keyed per type, so a type switch replaces it instead of sliding it to the other list's end. */
+private data class AddParentEntry(val type: Int) : CategoryEntry {
+    override val key: Any get() = "add-$type"
 }
 
 /** The parent a child row or a slot next to it belongs to. */
@@ -204,7 +206,7 @@ private fun CategoryList(
     val dragged = reorder.draggingKey
     val draggingParent = dragged != null && parents.any { it.id == dragged }
     val shownExpanded = if (draggingParent) emptySet() else expanded
-    val entries = remember(parents, children, shownExpanded) {
+    val entries = remember(state.type, parents, children, shownExpanded) {
         buildList {
             parents.forEach { parent ->
                 add(ParentEntry(parent))
@@ -213,7 +215,7 @@ private fun CategoryList(
                     add(AddChildEntry(parent))
                 }
             }
-            add(AddParentEntry)
+            add(AddParentEntry(state.type))
         }
     }
     val byKey = remember(entries) { entries.associateBy { it.key } }
@@ -311,14 +313,14 @@ private fun CategoryList(
                 is AddChildEntry -> PlusRow(
                     onClick = { edit(EditTarget.NewChild(entry.parent.id, entry.parent.color)) },
                     modifier = Modifier
-                        .animateItem()
+                        .then(slideItem())
                         .padding(start = 20.dp)
                         .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
                 )
-                AddParentEntry -> PlusRow(
+                is AddParentEntry -> PlusRow(
                     onClick = { edit(EditTarget.NewParent) },
                     modifier = Modifier
-                        .animateItem()
+                        .then(slideItem())
                         .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
                 )
             }

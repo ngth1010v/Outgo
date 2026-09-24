@@ -223,7 +223,7 @@ fun rememberReorderState(listState: LazyListState): ReorderState {
 /**
  * A row of a reorderable list: a long press lifts it, then it follows the finger while the other
  * rows slide aside. Put it on the item's root, keyed as in [ReorderState.update]; spacing padding
- * goes before it so the lifted shadow hugs the row. Rows that never move use plain `animateItem`.
+ * goes before it so the lifted shadow hugs the row. Rows that never lift use [slideItem].
  */
 @Composable
 fun LazyItemScope.reorderableItem(state: ReorderState, key: Any): Modifier {
@@ -237,14 +237,7 @@ fun LazyItemScope.reorderableItem(state: ReorderState, key: Any): Modifier {
         val handle = if (dragging) pinnable?.pin() else null
         onDispose { handle?.release() }
     }
-    return Modifier
-        .animateItem(
-            placementSpec = if (lifted) {
-                null
-            } else {
-                spring(stiffness = Spring.StiffnessMediumLow, visibilityThreshold = IntOffset.VisibilityThreshold)
-            },
-        )
+    return slideItem(lifted)
         .zIndex(if (lifted) 1f else 0f)
         .graphicsLayer {
             translationY = state.offsetOf(key)
@@ -265,3 +258,14 @@ fun LazyItemScope.reorderableItem(state: ReorderState, key: Any): Modifier {
             )
         }
 }
+
+/**
+ * A row of a reorderable list that slides when rows move around it. Rows appear and leave without
+ * fading: a fade would replay the old rows over new ones when the whole list is swapped (a type
+ * swipe), after the swipe has already shown the new ones. [lifted] rows are placed by the finger.
+ */
+fun LazyItemScope.slideItem(lifted: Boolean = false): Modifier = Modifier.animateItem(
+    fadeInSpec = null,
+    placementSpec = if (lifted) null else spring(stiffness = Spring.StiffnessMediumLow, visibilityThreshold = IntOffset.VisibilityThreshold),
+    fadeOutSpec = null,
+)

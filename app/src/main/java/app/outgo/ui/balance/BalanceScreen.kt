@@ -62,6 +62,7 @@ import app.outgo.ui.component.IconView
 import app.outgo.ui.component.PlusRow
 import app.outgo.ui.component.rememberReorderState
 import app.outgo.ui.component.reorderableItem
+import app.outgo.ui.component.slideItem
 import app.outgo.ui.component.savingsProgressColor
 import app.outgo.ui.component.savingsProgressText
 import app.outgo.util.Money
@@ -150,7 +151,7 @@ fun BalanceScreen() {
             item(key = AddKey) {
                 PlusRow(
                     onClick = { showCreate = true },
-                    modifier = Modifier.animateItem().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
+                    modifier = slideItem().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
                 )
             }
         }
