@@ -33,10 +33,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringArrayResource
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -226,7 +228,17 @@ fun SummarySection(
 ) {
     val kind = summary.of(mode)
     val kindType = if (mode == AnalysisMode.INCOME) CategoryKind.INCOME else CategoryKind.EXPENSE
-    val headline = if (mode == AnalysisMode.ALL) summary.net else kind.total
+    // Signed as money flows: expense out (-), income in (+), All mode the net of both.
+    val headline = when (mode) {
+        AnalysisMode.EXPENSE -> -kind.total
+        AnalysisMode.INCOME -> kind.total
+        AnalysisMode.ALL -> summary.net
+    }
+    val perPeriod = when (mode) {
+        AnalysisMode.EXPENSE -> -kind.perPeriod
+        AnalysisMode.INCOME -> kind.perPeriod
+        AnalysisMode.ALL -> summary.income.perPeriod - summary.expense.perPeriod
+    }
     val description = summaryDescription(kind, mode, summary)
 
     Section(title, modifier.semantics { contentDescription = description }) {
@@ -235,10 +247,10 @@ fun SummarySection(
                 Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text(
-                if (mode == AnalysisMode.ALL) Money.formatSigned(headline) else Money.format(headline),
+                Money.formatSigned(headline),
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
-                color = if (mode == AnalysisMode.ALL) deltaColor(summary.net, CategoryKind.INCOME) else MaterialTheme.colorScheme.onSurface,
+                color = deltaColor(headline, CategoryKind.INCOME),
             )
             Text(
                 changeLabel(kind.deltaAmount, kind.deltaPercent, perPeriodFormat == R.string.analysis_per_month),
@@ -246,14 +258,7 @@ fun SummarySection(
                 color = deltaColor(kind.deltaAmount, kindType),
             )
             Text(
-                stringResource(perPeriodFormat, Money.format(kind.perPeriod)),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            // Priority line: expense and income always readable, transfers last and quietest.
-            Text(
-                stringResource(R.string.analysis_income_line, Money.format(summary.income.total)) + " · " +
-                    stringResource(R.string.analysis_net_line, Money.formatSigned(summary.net)),
+                stringResource(perPeriodFormat, Money.formatSigned(perPeriod)),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -270,7 +275,7 @@ fun SummarySection(
 @Composable
 private fun summaryDescription(kind: KindSummary, mode: AnalysisMode, summary: SummaryUi): String {
     val total = if (mode == AnalysisMode.ALL) summary.net else kind.total
-    if (kind.deltaPercent == null && kind.prevTotal == 0L) {
+    if (kind.prevTotal == 0L) {
         return stringResource(R.string.analysis_cd_summary_no_baseline, Money.format(total))
     }
     val direction = if (kind.deltaAmount >= 0) {
@@ -282,11 +287,14 @@ private fun summaryDescription(kind: KindSummary, mode: AnalysisMode, summary: S
 }
 
 @Composable
-private fun changeLabel(delta: Long, percent: Int?, yearly: Boolean): String = when {
-    yearly -> stringResource(R.string.analysis_vs_last_year, Money.formatSigned(delta))
-    percent == null -> stringResource(R.string.analysis_vs_last_month, Money.formatSigned(delta))
-    else -> stringResource(R.string.analysis_vs_last_month_percent, Money.formatSigned(delta), percent)
-}
+private fun changeLabel(delta: Long, percent: Int, yearly: Boolean): String =
+    if (yearly) {
+        stringResource(R.string.analysis_vs_last_year, Money.formatSigned(delta))
+    } else {
+        stringResource(R.string.analysis_vs_last_month_percent, Money.formatSigned(delta), percent)
+    }
+
+private fun signedPercent(percent: Int): String = (if (percent > 0) "+" else "") + "$percent%"
 
 // ------------------------------------------------------------------ section 2
 
@@ -301,19 +309,21 @@ fun DonutSection(
 ) {
     val title = categoryTitle(mode)
     val shown = if (mode == AnalysisMode.INCOME) income else expense
-    val total = when (mode) {
-        AnalysisMode.ALL -> expense.donut.total
-        else -> shown.donut.total
-    }
+    // All mode's centre shows the net of both rings, signed and coloured like the summary.
+    val net = income.donut.total - expense.donut.total
+    val prevNet = income.prevTotal - expense.prevTotal
+    val centreLabel = if (mode == AnalysisMode.ALL) Money.formatSigned(net) else Money.format(shown.donut.total)
+    val centreLabelColor =
+        if (mode == AnalysisMode.ALL) deltaColor(net, CategoryKind.INCOME) else MaterialTheme.colorScheme.onSurface
+    val centreDelta = if (mode == AnalysisMode.ALL) net - prevNet else shown.deltaAmount
+    val centrePercent = if (mode == AnalysisMode.ALL) percentChange(net, prevNet) else shown.deltaPercent
+    val centreKind = if (mode == AnalysisMode.EXPENSE) CategoryKind.EXPENSE else CategoryKind.INCOME
     val description = stringResource(
         R.string.analysis_cd_donut,
-        Money.format(total),
+        centreLabel,
         shown.rows.size,
         Money.format(shown.rows.firstOrNull()?.amount ?: 0L),
     )
-    // All mode's centre reads the outer (expense) ring, which is what its total shows.
-    val centred = if (mode == AnalysisMode.INCOME) income else expense
-    val centreKind = if (mode == AnalysisMode.INCOME) CategoryKind.INCOME else CategoryKind.EXPENSE
     Section(title, modifier.semantics { contentDescription = description }) {
         if (expense.rows.isEmpty() && income.rows.isEmpty()) {
             EmptyBox(DonutHeight)
@@ -323,11 +333,10 @@ fun DonutSection(
                 income = income.donut,
                 mode = mode,
                 selectedRootId = { selection.rootId },
-                centerLabel = Money.format(total),
-                centerDelta = centred.deltaPercent?.let { percent ->
-                    (if (percent > 0) "+" else "") + "$percent%"
-                },
-                centerDeltaColor = deltaColor(centred.deltaAmount, centreKind),
+                centerLabel = centreLabel,
+                centerLabelColor = centreLabelColor,
+                centerDelta = signedPercent(centrePercent),
+                centerDeltaColor = deltaColor(centreDelta, centreKind),
                 onSelect = selection::toggle,
                 progress = introProgress(animate),
                 modifier = Modifier.fillMaxWidth().height(DonutHeight),
@@ -395,11 +404,7 @@ private fun BreakdownRowItem(row: BreakdownRow, selection: AnalysisSelection) {
                 color = if (row.kind == CategoryKind.INCOME) IncomeGreen else MaterialTheme.colorScheme.onSurface,
             )
             Text(
-                if (row.deltaPercent == null) {
-                    Money.formatSignedNoCurrency(row.deltaAmount)
-                } else {
-                    "${if (row.deltaPercent > 0) "+" else ""}${row.deltaPercent}%"
-                },
+                "${Money.formatSignedNoCurrency(row.deltaAmount)} (${signedPercent(row.deltaPercent)})",
                 style = MaterialTheme.typography.bodySmall,
                 color = deltaColor(row.deltaAmount, row.kind),
             )
@@ -413,12 +418,36 @@ private fun BreakdownRowItem(row: BreakdownRow, selection: AnalysisSelection) {
 fun PaceSection(pace: PaceUi, mode: AnalysisMode, animate: Boolean, modifier: Modifier = Modifier) {
     val description = stringResource(R.string.analysis_cd_pace, Money.format(pace.of(mode).currentTotal))
     Section(paceTitle(mode), modifier.semantics { contentDescription = description }) {
-        Text(
-            stringResource(R.string.analysis_pace_legend),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
         PaceChart(pace, mode, introProgress(animate), Modifier.fillMaxWidth().height(PaceHeight))
+        ChartLegend(
+            listOf(
+                stringResource(R.string.analysis_this_month) to
+                    if (mode == AnalysisMode.ALL) listOf(ExpenseRed, IncomeGreen) else listOf(colorOf(mode)),
+                stringResource(R.string.analysis_last_month) to listOf(previousLineColor()),
+            ),
+            Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+/** The colour the charts draw the previous period's dashed line in. */
+@Composable
+private fun previousLineColor(): Color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+
+/** Centred row of legend entries: each label follows its colour boxes. */
+@Composable
+private fun ChartLegend(items: List<Pair<String, List<Color>>>, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        items.forEach { (label, colors) ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                colors.forEach { Box(Modifier.size(10.dp).background(it, RoundedCornerShape(2.dp))) }
+                Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
     }
 }
 
@@ -446,6 +475,7 @@ fun BarsSection(
             bars = bars.bars,
             labels = labels,
             mode = mode,
+            max = bars.max,
             averageFraction = bars.averageFractionOf(mode),
             onSelect = onSelectMonth,
             progress = introProgress(animate),
@@ -463,17 +493,27 @@ fun BarsSection(
 @Composable
 fun MoversSection(movers: MoversUi, mode: AnalysisMode, animate: Boolean, modifier: Modifier = Modifier) {
     val description = stringResource(R.string.analysis_cd_movers)
+    // The delta column is as wide as its widest label in every row, so all bars share one zero line.
+    val style = MaterialTheme.typography.bodySmall
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val deltaWidth = remember(movers, mode, style, density) {
+        val rows = if (mode == AnalysisMode.ALL) movers.all.expense + movers.all.income else movers.of(mode)
+        with(density) {
+            (rows.maxOfOrNull { measurer.measure(Money.formatSignedNoCurrency(it.delta), style).size.width } ?: 0).toDp()
+        }
+    }
     Section(stringResource(R.string.analysis_movers_title), modifier.semantics { contentDescription = description }) {
         Column(modifier = Modifier.fillMaxWidth().height(moversContentHeight(mode))) {
             if (mode == AnalysisMode.ALL) {
-                MoverHalf(stringResource(R.string.trade_expense), movers.all.expense, animate)
-                MoverHalf(stringResource(R.string.trade_income), movers.all.income, animate)
+                MoverHalf(stringResource(R.string.trade_expense), movers.all.expense, deltaWidth, animate)
+                MoverHalf(stringResource(R.string.trade_income), movers.all.income, deltaWidth, animate)
             } else {
                 val rows = movers.of(mode)
                 if (rows.isEmpty()) {
                     EmptyBox(MoverRowHeight * MOVER_COUNT)
                 } else {
-                    rows.forEach { mover -> MoverRowItem(mover, animate) }
+                    rows.forEach { mover -> MoverRowItem(mover, deltaWidth, animate) }
                 }
             }
         }
@@ -481,7 +521,7 @@ fun MoversSection(movers: MoversUi, mode: AnalysisMode, animate: Boolean, modifi
 }
 
 @Composable
-private fun MoverHalf(label: String, rows: List<MoverRow>, animate: Boolean) {
+private fun MoverHalf(label: String, rows: List<MoverRow>, deltaWidth: Dp, animate: Boolean) {
     Text(
         label,
         style = MaterialTheme.typography.labelMedium,
@@ -500,12 +540,12 @@ private fun MoverHalf(label: String, rows: List<MoverRow>, animate: Boolean) {
             )
         }
     } else {
-        rows.forEach { mover -> MoverRowItem(mover, animate) }
+        rows.forEach { mover -> MoverRowItem(mover, deltaWidth, animate) }
     }
 }
 
 @Composable
-private fun MoverRowItem(mover: MoverRow, animate: Boolean) {
+private fun MoverRowItem(mover: MoverRow, deltaWidth: Dp, animate: Boolean) {
     Row(
         modifier = Modifier.fillMaxWidth().height(MoverRowHeight),
         verticalAlignment = Alignment.CenterVertically,
@@ -531,6 +571,9 @@ private fun MoverRowItem(mover: MoverRow, animate: Boolean) {
             Money.formatSignedNoCurrency(mover.delta),
             style = MaterialTheme.typography.bodySmall,
             color = deltaColor(mover.delta, mover.kind),
+            textAlign = TextAlign.End,
+            maxLines = 1,
+            modifier = Modifier.width(deltaWidth),
         )
     }
 }
@@ -584,12 +627,20 @@ fun WeekdaySection(bars: List<WeekdayBar>, animate: Boolean, modifier: Modifier 
 fun BucketsSection(buckets: BucketsUi, animate: Boolean, modifier: Modifier = Modifier) {
     val description = stringResource(R.string.analysis_cd_buckets, Money.format(buckets.median))
     Section(stringResource(R.string.analysis_buckets_title), modifier.semantics { contentDescription = description }) {
-        Text(
-            stringResource(R.string.analysis_buckets_median, Money.format(buckets.median)) +
-                " · " + stringResource(R.string.analysis_buckets_legend),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                stringResource(R.string.analysis_buckets_median, Money.format(buckets.median)),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            ChartLegend(
+                listOf(
+                    stringResource(R.string.analysis_buckets_count) to listOf(MaterialTheme.colorScheme.primary),
+                    stringResource(R.string.analysis_buckets_money) to listOf(ExpenseRed),
+                ),
+            )
+        }
         buckets.buckets.forEach { bucket ->
             Row(
                 modifier = Modifier.fillMaxWidth().height(BucketRowHeight),
@@ -753,18 +804,14 @@ fun YoySection(yoy: YoyUi, year: Int, mode: AnalysisMode, animate: Boolean, modi
         Money.format(series.previousTotal),
     )
     Section(stringResource(R.string.analysis_year_yoy_title), modifier.semantics { contentDescription = description }) {
-        Text(
-            stringResource(
-                R.string.analysis_year_yoy_legend,
-                year,
-                Money.format(series.currentTotal),
-                year - 1,
-                Money.format(series.previousTotal),
+        YoyChart(series, year, mode, introProgress(animate), Modifier.fillMaxWidth().height(YoyHeight))
+        ChartLegend(
+            listOf(
+                "$year ${Money.format(series.currentTotal)}" to listOf(colorOf(mode)),
+                "${year - 1} ${Money.format(series.previousTotal)}" to listOf(previousLineColor()),
             ),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            Modifier.fillMaxWidth(),
         )
-        YoyChart(series, mode, introProgress(animate), Modifier.fillMaxWidth().height(YoyHeight))
     }
 }
 

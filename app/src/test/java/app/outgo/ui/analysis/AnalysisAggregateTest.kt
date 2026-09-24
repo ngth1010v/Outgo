@@ -343,9 +343,12 @@ class AnalysisAggregateTest {
     }
 
     @Test
-    fun `percent change is null without a baseline`() {
-        assertNull(percentChange(500, 0))
+    fun `percent change is 100 percent without a baseline`() {
+        assertEquals(100, percentChange(500, 0))
+        assertEquals(-100, percentChange(-500, 0))
+        assertEquals(0, percentChange(0, 0))
         assertEquals(-20, percentChange(400, 500))
+        assertEquals(50, percentChange(-500, -1_000))
     }
 
     // ------------------------------------------------------------------ slices, bars

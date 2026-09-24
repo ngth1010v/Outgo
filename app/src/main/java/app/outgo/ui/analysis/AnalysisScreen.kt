@@ -288,7 +288,7 @@ private fun MonthPage(
         item(key = "mode", contentType = "mode") { ModeSwitch(mode, onModeChange) }
 
         item(key = "summary", contentType = "summary") {
-            StageSection(stats, stringResource(R.string.analysis_summary_title), 130.dp) {
+            StageSection(stats, stringResource(R.string.analysis_summary_title), 112.dp) {
                 SummarySection(it.summary, mode, trades.dataOrNull?.transfers)
             }
         }
@@ -377,7 +377,7 @@ private fun YearPage(
         item(key = "mode", contentType = "mode") { ModeSwitch(mode, onModeChange) }
 
         item(key = "year-summary", contentType = "summary") {
-            StageSection(stats, stringResource(R.string.analysis_year_summary_title), 150.dp) {
+            StageSection(stats, stringResource(R.string.analysis_year_summary_title), 132.dp) {
                 YearSummarySection(it.summary, mode, trades.dataOrNull?.transfers)
             }
         }

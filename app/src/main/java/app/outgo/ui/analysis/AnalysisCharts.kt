@@ -13,7 +13,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -22,12 +21,14 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.outgo.R
@@ -35,6 +36,8 @@ import app.outgo.ui.home.compactAmount
 import app.outgo.ui.theme.ExpenseRed
 import app.outgo.ui.theme.IncomeGreen
 import app.outgo.ui.theme.TransferBlue
+import java.time.Year
+import java.time.YearMonth
 import java.util.Locale
 import kotlin.math.atan2
 import kotlin.math.hypot
@@ -42,8 +45,8 @@ import kotlin.math.min
 
 /**
  * Hand-drawn charts for the Analysis screen, in the same idiom as
- * [app.outgo.ui.home.StackedDivergingBarChart]: plain [Canvas]/[drawWithCache], one
- * [TextMeasurer] per chart, and every number already computed in [AnalysisModels].
+ * [app.outgo.ui.home.StackedDivergingBarChart]: plain [Canvas], one
+ * text measurer per chart, and every number already computed in [AnalysisModels].
  *
  * In [AnalysisMode.ALL] a chart draws both kinds at once — expense red, income green — rather than
  * a net figure, so the gross amounts stay visible.
@@ -77,20 +80,20 @@ fun DonutChart(
     /** Read inside the draw lambda, so selecting a slice redraws without recomposing. */
     selectedRootId: () -> Long?,
     centerLabel: String,
-    /** Change against the previous period, drawn under [centerLabel]; null hides the line. */
-    centerDelta: String?,
+    centerLabelColor: Color,
+    /** Change against the previous period, drawn under [centerLabel]. */
+    centerDelta: String,
     centerDeltaColor: Color,
     onSelect: (Long?) -> Unit,
     progress: Float,
     modifier: Modifier = Modifier,
 ) {
-    val onSurface = MaterialTheme.colorScheme.onSurface
     val outline = MaterialTheme.colorScheme.onSurfaceVariant
     val labelStyle = MaterialTheme.typography.titleMedium
     val deltaStyle = MaterialTheme.typography.labelMedium
     val measurer = rememberTextMeasurer()
     val label = remember(centerLabel, labelStyle) { measurer.measure(centerLabel, labelStyle) }
-    val delta = remember(centerDelta, deltaStyle) { centerDelta?.let { measurer.measure(it, deltaStyle) } }
+    val delta = remember(centerDelta, deltaStyle) { measurer.measure(centerDelta, deltaStyle) }
     val rings = remember(expense, income, mode) { ringsOf(expense, income, mode) }
 
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
@@ -129,20 +132,17 @@ fun DonutChart(
                 }
             }
             // The amount and its change are stacked around the middle of the hole.
-            val stackHeight = label.size.height + (delta?.size?.height ?: 0)
-            val top = (size.height - stackHeight) / 2f
+            val top = (size.height - label.size.height - delta.size.height) / 2f
             drawText(
                 textLayoutResult = label,
-                color = onSurface,
+                color = centerLabelColor,
                 topLeft = Offset((size.width - label.size.width) / 2f, top),
             )
-            delta?.let {
-                drawText(
-                    textLayoutResult = it,
-                    color = centerDeltaColor,
-                    topLeft = Offset((size.width - it.size.width) / 2f, top + label.size.height),
-                )
-            }
+            drawText(
+                textLayoutResult = delta,
+                color = centerDeltaColor,
+                topLeft = Offset((size.width - delta.size.width) / 2f, top + label.size.height),
+            )
         }
     }
 }
@@ -184,17 +184,9 @@ fun PaceChart(pace: PaceUi, mode: AnalysisMode, progress: Float, modifier: Modif
     val axisColor = MaterialTheme.colorScheme.onSurfaceVariant
     val style = MaterialTheme.typography.labelSmall
     val measurer = rememberTextMeasurer()
-    val units = Triple(
-        stringResource(R.string.unit_thousand),
-        stringResource(R.string.unit_million),
-        stringResource(R.string.unit_billion),
-    )
 
     val max = pace.maxOf(mode)
-    // Axis ticks and their measured labels are computed once per (data, mode), never per frame.
-    val yTicks = remember(max, style, units) {
-        valueTicks(max).map { it to measurer.measure(compactAmount(it, units), style) }
-    }
+    val yTicks = rememberAxisLabels(remember(max) { valueTicks(max) })
     val xTicks = remember(pace.daysInMonth, style) {
         axisDays(pace.daysInMonth).map { day ->
             day to measurer.measure(String.format(Locale.US, "%02d", day), style)
@@ -209,7 +201,7 @@ fun PaceChart(pace: PaceUi, mode: AnalysisMode, progress: Float, modifier: Modif
     }
 
     Canvas(modifier = modifier) {
-        val gutter = (yTicks.maxOfOrNull { it.second.size.width } ?: 0) + AxisGap.toPx()
+        val gutter = gutterOf(yTicks)
         val labelHeight = (xTicks.firstOrNull()?.second?.size?.height ?: 0).toFloat() + AxisGap.toPx()
         val plotWidth = size.width - gutter
         val plotHeight = size.height - labelHeight
@@ -251,6 +243,26 @@ fun PaceChart(pace: PaceUi, mode: AnalysisMode, progress: Float, modifier: Modif
 /** Gap between the plot and its axis labels. */
 private val AxisGap = 4.dp
 
+/**
+ * Compact value-axis labels ("1.5M") for [values], measured once per list, never per frame.
+ * A negative value is labelled with its sign, for the lower half of a diverging chart.
+ */
+@Composable
+private fun rememberAxisLabels(values: List<Long>): List<Pair<Long, TextLayoutResult>> {
+    val style = MaterialTheme.typography.labelSmall
+    val measurer = rememberTextMeasurer()
+    val units = Triple(
+        stringResource(R.string.unit_thousand),
+        stringResource(R.string.unit_million),
+        stringResource(R.string.unit_billion),
+    )
+    return remember(values, style, units) { values.map { it to measurer.measure(compactAmount(it, units), style) } }
+}
+
+/** Width the value-axis labels take on the right of the plot, gap included. */
+private fun Density.gutterOf(labels: List<Pair<Long, TextLayoutResult>>): Float =
+    (labels.maxOfOrNull { it.second.size.width } ?: 0) + AxisGap.toPx()
+
 /** Half the widest line stroke, so a line at the maximum is drawn whole. */
 private const val LineHeadroom = 3f
 
@@ -275,15 +287,11 @@ private fun linePath(
     return path
 }
 
-private fun fractionPath(values: List<Float>, points: Int, width: Float, height: Float): Path {
+/** Starts at zero on the left edge; value i sits at xs[i], a fraction of [width]. */
+private fun fractionPath(values: List<Float>, xs: List<Float>, width: Float, height: Float): Path {
     val path = Path()
-    if (values.isEmpty()) return path
-    val stepX = width / (points - 1).coerceAtLeast(1)
-    values.forEachIndexed { index, value ->
-        val x = index * stepX
-        val y = height - value * height
-        if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
-    }
+    path.moveTo(0f, height)
+    values.forEachIndexed { index, value -> path.lineTo(xs[index] * width, height - value * height) }
     return path
 }
 
@@ -298,6 +306,8 @@ fun MonthBars(
     bars: List<MonthBar>,
     labels: List<String>,
     mode: AnalysisMode,
+    /** The amount a fraction of 1f stands for. */
+    max: Long,
     averageFraction: Float,
     onSelect: (Int) -> Unit,
     progress: Float,
@@ -308,21 +318,34 @@ fun MonthBars(
     val style = MaterialTheme.typography.labelSmall
     val measurer = rememberTextMeasurer()
     val measured = remember(labels, style) { labels.map { measurer.measure(it, style) } }
+    val diverging = mode == AnalysisMode.ALL
+    // A diverging half is only half as tall, so it gets fewer ticks; its lower half counts down.
+    val yTicks = rememberAxisLabels(
+        remember(max, diverging) {
+            if (diverging) valueTicks(max, 2).let { up -> up + up.drop(1).map { -it } } else valueTicks(max)
+        },
+    )
 
     Canvas(
-        modifier = modifier.pointerInput(bars) {
+        modifier = modifier.pointerInput(bars, yTicks) {
             detectTapGestures { tap ->
-                val index = (tap.x / (size.width / bars.size.coerceAtLeast(1))).toInt()
+                val index = (tap.x / ((size.width - gutterOf(yTicks)) / bars.size.coerceAtLeast(1))).toInt()
                 bars.getOrNull(index)?.let { onSelect(it.monthKey) }
             }
         },
     ) {
         val labelHeight = (measured.firstOrNull()?.size?.height ?: 0).toFloat() + 6f
         val plotHeight = size.height - labelHeight
-        val slot = size.width / bars.size.coerceAtLeast(1)
+        val plotWidth = size.width - gutterOf(yTicks)
+        val slot = plotWidth / bars.size.coerceAtLeast(1)
         val barWidth = slot * 0.55f
-        val diverging = mode == AnalysisMode.ALL
         val baseline = if (diverging) plotHeight / 2f else plotHeight
+
+        yTicks.forEach { (value, label) ->
+            val y = baseline - value.toFloat() / max * (if (value >= 0) baseline else plotHeight - baseline)
+            drawLine(gridColor, Offset(0f, y), Offset(plotWidth, y), strokeWidth = 1f)
+            drawText(label, color = axisColor, topLeft = Offset(plotWidth + AxisGap.toPx(), y - label.size.height / 2f))
+        }
 
         bars.forEachIndexed { index, bar ->
             val x = index * slot + (slot - barWidth) / 2f
@@ -347,10 +370,10 @@ fun MonthBars(
         }
 
         if (diverging) {
-            drawLine(gridColor, Offset(0f, baseline), Offset(size.width, baseline), strokeWidth = 1.5f)
+            drawLine(gridColor, Offset(0f, baseline), Offset(plotWidth, baseline), strokeWidth = 1.5f)
         } else {
             val y = plotHeight - averageFraction * plotHeight
-            drawLine(gridColor, Offset(0f, y), Offset(size.width, y), strokeWidth = 2f, pathEffect = DashEffect)
+            drawLine(gridColor, Offset(0f, y), Offset(plotWidth, y), strokeWidth = 2f, pathEffect = DashEffect)
         }
     }
 }
@@ -505,23 +528,54 @@ private fun DrawScope.drawTrackBar(y: Float, height: Float, width: Float, color:
 
 // ----------------------------------------------------------------- section Y4
 
-/** Cumulative year-to-date against the same run of months last year. */
+/**
+ * Cumulative year-to-date against the same run of months last year, on a day-of-year axis: each
+ * month's running total sits on that month's last day, so both lines start at 0 on 01/01.
+ */
 @Composable
-fun YoyChart(series: YoySeries, mode: AnalysisMode, progress: Float, modifier: Modifier = Modifier) {
+fun YoyChart(series: YoySeries, year: Int, mode: AnalysisMode, progress: Float, modifier: Modifier = Modifier) {
     val color = colorOf(mode)
     val fadedColor = MaterialTheme.colorScheme.onSurfaceVariant
     val gridColor = MaterialTheme.colorScheme.outlineVariant
-    Box(
-        modifier = modifier.drawWithCache {
-            val current = fractionPath(series.current, 12, size.width, size.height)
-            val previous = fractionPath(series.previous, 12, size.width, size.height)
-            onDrawBehind {
-                drawLine(gridColor, Offset(0f, size.height), Offset(size.width, size.height), strokeWidth = 1.5f)
-                drawPath(previous, fadedColor, alpha = 0.4f, style = Stroke(width = 3f, pathEffect = DashEffect))
-                drawPath(current, color, alpha = progress, style = Stroke(width = 5f))
-            }
-        },
-    )
+    val style = MaterialTheme.typography.labelSmall
+    val measurer = rememberTextMeasurer()
+    val length = Year.of(year).length()
+    // Seven equal gaps' worth of day-of-year labels, always 01/01 and 31/12 at the ends.
+    val xTicks = remember(year, style) {
+        axisDays(length, 7).map { day ->
+            val date = Year.of(year).atDay(day)
+            measurer.measure(String.format(Locale.US, "%02d/%02d", date.dayOfMonth, date.monthValue), style)
+        }
+    }
+    val monthEnds = remember(year) {
+        (1..12).map { (YearMonth.of(year, it).atEndOfMonth().dayOfYear - 1f) / (length - 1) }
+    }
+
+    Canvas(modifier = modifier) {
+        val plotHeight = size.height - (xTicks.firstOrNull()?.size?.height ?: 0) - AxisGap.toPx()
+        // Inset by half a label so 01/01 and 31/12 sit centred under the ends, keeping the gaps equal.
+        val inset = (xTicks.maxOfOrNull { it.size.width } ?: 0) / 2f
+        val plotWidth = size.width - inset * 2
+        drawLine(gridColor, Offset(inset, plotHeight), Offset(inset + plotWidth, plotHeight), strokeWidth = 1.5f)
+        xTicks.forEachIndexed { index, label ->
+            val x = inset + plotWidth * index / (xTicks.size - 1)
+            drawText(label, color = fadedColor, topLeft = Offset(x - label.size.width / 2f, plotHeight + AxisGap.toPx()))
+        }
+        translate(left = inset) {
+            drawPath(
+                fractionPath(series.previous, monthEnds, plotWidth, plotHeight),
+                fadedColor,
+                alpha = 0.4f,
+                style = Stroke(width = 3f, pathEffect = DashEffect),
+            )
+            drawPath(
+                fractionPath(series.current, monthEnds, plotWidth, plotHeight),
+                color,
+                alpha = progress,
+                style = Stroke(width = 5f),
+            )
+        }
+    }
 }
 
 /** A flat coloured block used by legends and list bullets. */

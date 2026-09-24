@@ -11,6 +11,7 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
 import kotlin.math.abs
+import kotlin.math.sign
 
 /**
  * Pure aggregation for the Analysis screen: `category_month_stat` rows, raw trade rows and transfer
@@ -136,9 +137,13 @@ internal fun daysCounted(month: Int, zone: ZoneId, nowMillis: Long): Int {
     return if (YearMonth.from(today) == ym) today.dayOfMonth else ym.lengthOfMonth()
 }
 
-/** Percent change, or null when there is no baseline to compare against. */
-internal fun percentChange(current: Long, previous: Long): Int? =
-    if (previous == 0L) null else ((current - previous) * 100 / previous).toInt()
+/**
+ * Percent change against [previous]. With no baseline, anything that appeared counts as +100%
+ * (and a vanished negative net as -100%), so the change is always shown. Divides by |previous| so
+ * a net that was negative still reads "+" when it grew.
+ */
+internal fun percentChange(current: Long, previous: Long): Int =
+    if (previous == 0L) current.sign * 100 else ((current - previous) * 100 / abs(previous)).toInt()
 
 private fun kindSummary(current: List<MonthCategoryTotal>, previous: List<MonthCategoryTotal>, periods: Int): KindSummary {
     val total = current.sumOf { it.total }
@@ -259,6 +264,7 @@ private fun buildBars(byMonth: Map<Int, List<MonthCategoryTotal>>, months: List<
         incomeAverage = incomeAverage,
         expenseAverageFraction = expenseAverage.toFloat() / max,
         incomeAverageFraction = incomeAverage.toFloat() / max,
+        max = max,
     )
 }
 

@@ -32,8 +32,8 @@ data class KindSummary(
     val total: Long,
     val prevTotal: Long,
     val deltaAmount: Long,
-    /** null when the previous period had nothing to compare against. */
-    val deltaPercent: Int?,
+    /** +100% when the previous period had nothing, see [percentChange]. */
+    val deltaPercent: Int,
     val perPeriod: Long,
 )
 
@@ -74,7 +74,7 @@ data class BreakdownRow(
     val amount: Long,
     val sharePercent: Float,
     val deltaAmount: Long,
-    val deltaPercent: Int?,
+    val deltaPercent: Int,
 )
 
 /** The donut and the breakdown list are two views of one dataset. */
@@ -84,8 +84,8 @@ data class SliceSet(
     val rows: List<BreakdownRow>,
     val prevTotal: Long,
     val deltaAmount: Long,
-    /** Change against the same period a month/year earlier; null with no baseline. */
-    val deltaPercent: Int?,
+    /** Change against the same period a month/year earlier. */
+    val deltaPercent: Int,
 )
 
 // ---------------------------------------------------------------- section 4
@@ -141,6 +141,8 @@ data class BarsUi(
     val incomeAverage: Long,
     val expenseAverageFraction: Float,
     val incomeAverageFraction: Float,
+    /** The amount a fraction of 1f stands for; labels the value axis. */
+    val max: Long,
 ) {
     fun averageOf(mode: AnalysisMode): Long = if (mode == AnalysisMode.INCOME) incomeAverage else expenseAverage
     fun averageFractionOf(mode: AnalysisMode): Float =
