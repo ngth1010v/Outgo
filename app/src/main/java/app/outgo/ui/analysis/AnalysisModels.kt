@@ -226,10 +226,15 @@ data class LargestItem(
 
 // --------------------------------------------------------------- section 11
 
+/** One account pair. Both ends carry their own icon and colour, so the row can show the move. */
 @Immutable
 data class TransferPair(
     val fromName: String,
+    val fromIconId: Long?,
+    val fromColor: Int,
     val toName: String,
+    val toIconId: Long?,
+    val toColor: Int,
     val total: Long,
     val count: Int,
     val fraction: Float,

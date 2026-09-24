@@ -43,6 +43,13 @@ private fun trades(
 private fun stats(totals: List<MonthCategoryTotal>, month: Int, nowMillis: Long = millis(2026, 8, 31)) =
     buildStats(totals, month, "Other", ZONE, nowMillis)
 
+/** id -> (name, iconId, color), the shape the transfer rows need. */
+private val accounts = mapOf(
+    1L to Triple("Cash", 10L as Long?, 0x111111),
+    2L to Triple("Bank", 20L as Long?, 0x222222),
+    3L to Triple("Savings", 30L as Long?, 0x333333),
+)
+
 class AnalysisAggregateTest {
 
     // -------------------------------------------------------------- weekday averages
@@ -426,13 +433,25 @@ class AnalysisAggregateTest {
             TransferTotal(fromAccountId = 1, toAccountId = 2, count = 2, total = 500),
             TransferTotal(fromAccountId = 2, toAccountId = 3, count = 1, total = 1_500),
         )
-        val ui = buildTransfers(totals, mapOf(1L to "Cash", 2L to "Bank", 3L to "Savings"))
+        val ui = buildTransfers(totals, accounts)
         assertEquals(listOf("Bank", "Cash"), ui.pairs.map { it.fromName })
         assertEquals("Savings", ui.pairs.first().toName)
+        // Both ends keep their own icon and colour, for the row's from -> to block.
+        assertEquals(20L, ui.pairs.first().fromIconId)
+        assertEquals(30L, ui.pairs.first().toIconId)
+        assertEquals(0x222222, ui.pairs.first().fromColor)
+        assertEquals(0x333333, ui.pairs.first().toColor)
         assertEquals(2_000L, ui.total)
         assertEquals(3, ui.count)
         assertEquals(1f, ui.pairs.first().fraction, 0.0001f)
         assertEquals(500f / 1500f, ui.pairs.last().fraction, 0.0001f)
+    }
+
+    @Test
+    fun `an unknown account leaves the row without a name or icon`() {
+        val ui = buildTransfers(listOf(TransferTotal(1, null, count = 1, total = 500)), accounts)
+        assertEquals("", ui.pairs.single().toName)
+        assertNull(ui.pairs.single().toIconId)
     }
 
     @Test

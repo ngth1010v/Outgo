@@ -359,7 +359,7 @@ fun buildTrades(
     transfers: List<TransferTotal>,
     month: Int,
     categories: Map<Long, Triple<String, Long?, Int>>,
-    accountNames: Map<Long, String>,
+    accounts: Map<Long, Triple<String, Long?, Int>>,
     zone: ZoneId = ZoneId.systemDefault(),
     nowMillis: Long = System.currentTimeMillis(),
 ): Stage<TradesData> {
@@ -391,7 +391,7 @@ fun buildTrades(
         }
     }
 
-    val transfersUi = buildTransfers(transfers, accountNames)
+    val transfersUi = buildTransfers(transfers, accounts)
     if (currentRows.isEmpty() && transfersUi.count == 0) return Stage.Empty
 
     return Stage.Ready(
@@ -414,12 +414,12 @@ fun buildYearTrades(
     transfers: List<TransferTotal>,
     year: Int,
     categories: Map<Long, Triple<String, Long?, Int>>,
-    accountNames: Map<Long, String>,
+    accounts: Map<Long, Triple<String, Long?, Int>>,
     zone: ZoneId = ZoneId.systemDefault(),
 ): Stage<YearTradesData> {
     val months = monthsOfYear(year).toSet()
     val inYear = rows.filter { monthKeyOf(it.occurredAt, zone) in months }
-    val transfersUi = buildTransfers(transfers, accountNames)
+    val transfersUi = buildTransfers(transfers, accounts)
     if (inYear.isEmpty() && transfersUi.count == 0) return Stage.Empty
     return Stage.Ready(
         YearTradesData(
@@ -454,14 +454,21 @@ internal fun largestOf(
         )
     }
 
-internal fun buildTransfers(totals: List<TransferTotal>, accountNames: Map<Long, String>): TransfersUi {
+/** [accounts] maps an account id to its (name, iconId, color). */
+internal fun buildTransfers(totals: List<TransferTotal>, accounts: Map<Long, Triple<String, Long?, Int>>): TransfersUi {
     val total = totals.sumOf { it.total }
     val max = totals.maxOfOrNull { it.total }?.coerceAtLeast(1L) ?: 1L
     return TransfersUi(
         pairs = totals.sortedByDescending { it.total }.take(TRANSFER_PAIR_COUNT).map { row ->
+            val from = accounts[row.fromAccountId]
+            val to = row.toAccountId?.let { accounts[it] }
             TransferPair(
-                fromName = accountNames[row.fromAccountId].orEmpty(),
-                toName = row.toAccountId?.let { accountNames[it] }.orEmpty(),
+                fromName = from?.first.orEmpty(),
+                fromIconId = from?.second,
+                fromColor = from?.third ?: OTHER_COLOR,
+                toName = to?.first.orEmpty(),
+                toIconId = to?.second,
+                toColor = to?.third ?: OTHER_COLOR,
                 total = row.total,
                 count = row.count,
                 fraction = row.total.toFloat() / max,

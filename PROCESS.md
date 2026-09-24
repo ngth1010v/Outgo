@@ -5,7 +5,7 @@ Update it at the end of every phase, and whenever a phase is interrupted.
 
 - Branch: `feat/analysis-v2` (off `feat/analysis-rebuild`)
 - Verify with: `gradlew.bat :app:assembleDebug` and `gradlew.bat :app:testDebugUnitTest`
-- Last verified: assembleDebug OK, 54 unit tests green, and run on an API 36 emulator —
+- Last verified: assembleDebug OK, 55 unit tests green, and run on an API 36 emulator —
   month page, year page, all three modes, transfers and the raw-trade sections all render
 
 ## Phase status
@@ -58,6 +58,14 @@ Update it at the end of every phase, and whenever a phase is interrupted.
   killed the app the moment the Analysis tab was opened. Keys are now `AnalysisPage.key`, a plain
   `Int` (`yyyyMM` for a month, `yyyy00` for a year, which months can never collide with).
   Regression test in `AnalysisPageTest`.
+
+**Transfers section**
+- Month page: the section only appears in All mode. It moves money without spending or earning it,
+  so it has nothing to say while the switch names one kind. The YEAR page still shows it in every
+  mode — the instruction named the monthly analysis only; worth confirming.
+- Each row now opens with the two accounts it moved between: source icon, arrow, target icon,
+  replacing the flat blue dot. `TransferPair` carries each end's icon and colour, and the ViewModel
+  feeds `buildTransfers` the accounts rather than just their names.
 
 **Donut centre, share precision and split movers**
 - The donut centre carries the period-over-period change under the amount; `SliceSet` now holds

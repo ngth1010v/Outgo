@@ -339,9 +339,12 @@ private fun MonthPage(
                 LargestSection(it.largestOf(mode), mode, onOpenTrade)
             }
         }
-        item(key = "transfers", contentType = "transfers") {
-            StageSection(trades, stringResource(R.string.analysis_transfers_title), 244.dp) {
-                TransfersSection(it.transfers, animate)
+        // Transfers move money without spending or earning it, so they only belong to All.
+        if (mode == AnalysisMode.ALL) {
+            item(key = "transfers", contentType = "transfers") {
+                StageSection(trades, stringResource(R.string.analysis_transfers_title), 244.dp) {
+                    TransfersSection(it.transfers, animate)
+                }
             }
         }
     }

@@ -67,8 +67,8 @@ class AnalysisViewModel(
     /** id -> (name, iconId, color); labels the largest-movement rows. */
     private var categories: Map<Long, Triple<String, Long?, Int>> = emptyMap()
 
-    /** id -> name; labels the transfer pairs. */
-    private var accountNames: Map<Long, String> = emptyMap()
+    /** id -> (name, iconId, color); labels both ends of a transfer row. */
+    private var accounts: Map<Long, Triple<String, Long?, Int>> = emptyMap()
 
     private val monthStatsCache = lru<Stage<StatsData>>()
     private val monthTradesCache = lru<Stage<TradesData>>()
@@ -96,7 +96,9 @@ class AnalysisViewModel(
             }
         }
         viewModelScope.launch {
-            accountRepository.observeAll().collect { list -> accountNames = list.associate { it.id to it.name } }
+            accountRepository.observeAll().collect { list ->
+                accounts = list.associate { it.id to Triple(it.name, it.iconId, it.color) }
+            }
         }
         viewModelScope.launch { observeStats() }
         viewModelScope.launch {
@@ -199,7 +201,7 @@ class AnalysisViewModel(
                     val rows = tradeRepository.amountsAndTimesForMonths(months, TRADE_TYPES)
                     val transfers = tradeRepository.transferTotalsForMonths(listOf(page.monthKey))
                     val stage = withContext(Dispatchers.Default) {
-                        buildTrades(rows, rows, transfers, page.monthKey, categories, accountNames, zone)
+                        buildTrades(rows, rows, transfers, page.monthKey, categories, accounts, zone)
                     }
                     monthTradesCache[page.monthKey] = stage
                 }
@@ -208,7 +210,7 @@ class AnalysisViewModel(
                     val rows = tradeRepository.amountsAndTimesForMonths(months, TRADE_TYPES)
                     val transfers = tradeRepository.transferTotalsForMonths(months)
                     val stage = withContext(Dispatchers.Default) {
-                        buildYearTrades(rows, transfers, page.year, categories, accountNames, zone)
+                        buildYearTrades(rows, transfers, page.year, categories, accounts, zone)
                     }
                     yearTradesCache[page.year] = stage
                 }

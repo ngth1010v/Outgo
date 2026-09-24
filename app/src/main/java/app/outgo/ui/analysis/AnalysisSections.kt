@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -29,6 +30,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -684,7 +687,7 @@ fun TransfersSection(transfers: TransfersUi, animate: Boolean, modifier: Modifie
                             modifier = Modifier.fillMaxWidth().height(RowHeight).padding(horizontal = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            ColorDot(TransferBlue, size = 10.dp)
+                            TransferEnds(pair)
                             Spacer(Modifier.width(10.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
@@ -708,6 +711,23 @@ fun TransfersSection(transfers: TransfersUi, animate: Boolean, modifier: Modifie
         }
     }
 }
+
+/** Both accounts of a transfer, source on the left, target on the right, arrow between them. */
+@Composable
+private fun TransferEnds(pair: TransferPair) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        IconView(iconId = pair.fromIconId, size = TransferIconSize, color = pair.fromColor)
+        Icon(
+            painter = painterResource(R.drawable.ph_arrow_right),
+            contentDescription = null,
+            tint = TransferBlue,
+            modifier = Modifier.padding(horizontal = 2.dp).size(12.dp),
+        )
+        IconView(iconId = pair.toIconId, size = TransferIconSize, color = pair.toColor)
+    }
+}
+
+private val TransferIconSize = 24.dp
 
 // ----------------------------------------------------------------- section Y4
 
