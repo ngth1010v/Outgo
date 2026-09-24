@@ -105,11 +105,45 @@ Requirements: JDK 17+ and the Android SDK (`ANDROID_HOME` or `local.properties`)
 
 ```bash
 build.bat            # debug APK   -> app\build\outputs\apk\debug\app-debug.apk
-build.bat release    # release APK (R8 minified; unsigned unless you add a signing config)
+build.bat release    # release APK (R8 minified; needs a signing config, see below)
 build.bat clean      # clean, then debug APK
 ```
 
 Or run Gradle directly: `gradlew.bat assembleDebug`, `gradlew.bat assembleRelease`.
+
+### Release signing
+
+`build.bat release` signs with the keystore named by `keystore.properties`. Both that file and the
+`keystore/` directory are gitignored: a signing key in a public repository lets anyone build an APK
+that Android installs straight over yours as an update. Without them the build still succeeds, but
+the APK is unsigned and will not install.
+
+Create your own once:
+
+```bash
+keytool -genkeypair -v -keystore keystore/outgo-release.jks -alias outgo \
+        -keyalg RSA -keysize 4096 -validity 10000
+```
+
+Then write `keystore.properties` in the repository root (`storeFile` is resolved from there):
+
+```properties
+storeFile=keystore/outgo-release.jks
+storePassword=…
+keyAlias=outgo
+keyPassword=…
+```
+
+Keep that keystore backed up somewhere private. Losing it means existing installs can never be
+updated — they have to be uninstalled first, and Outgo keeps its data on the device only. For CI,
+hold the keystore as a base64 secret and write both files during the job rather than committing
+them. For Google Play, enrol in Play App Signing and keep this key as the private *upload* key.
+
+Check what a build actually produced:
+
+```bash
+apksigner verify --verbose app\build\outputs\apk\release\app-release.apk
+```
 
 ## Under the hood
 

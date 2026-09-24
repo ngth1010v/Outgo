@@ -9,8 +9,10 @@ build/
 *.apk
 *.aab
 
-# Release signing: credentials and keystores never go in version control
+# Release signing: credentials and keystores never go in version control.
+# A public signing key lets anyone ship an "update" Android accepts over yours.
 /keystore.properties
+/keystore/
 *.jks
 *.keystore
 

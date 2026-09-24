@@ -9,8 +9,10 @@ rem    build.bat            -> debug APK  (fast, unsigned, installable as-is)
 rem    build.bat release     -> release APK (minified, signed with the keystore
 rem                             from keystore.properties, which needs the keys
 rem                             storeFile/storePassword/keyAlias/keyPassword.
-rem                             Without that file the APK comes out unsigned
-rem                             and Android refuses to install it.)
+rem                             Both it and the keystore are gitignored, so a
+rem                             fresh clone has to create them - see the README.
+rem                             Without them the APK comes out unsigned and
+rem                             Android refuses to install it.)
 rem    build.bat clean       -> clean + debug APK
 rem ============================================================
 
@@ -80,7 +82,8 @@ if defined FOUND_APK (
             echo.
             echo [WARN] No keystore.properties found, so this APK is UNSIGNED and
             echo        Android will reject it with "invalid package" or "app not
-            echo        installed". Add a signing config before installing it.
+            echo        installed". Create a signing config first - see the
+            echo        "Release signing" section of README.md.
         )
     )
     echo.

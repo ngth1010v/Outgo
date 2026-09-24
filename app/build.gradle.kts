@@ -8,9 +8,10 @@ plugins {
     alias(libs.plugins.baselineprofile)
 }
 
-// Release signing credentials live in keystore.properties (gitignored, alongside the keystore
-// itself which sits outside the repo). Absent it — a fresh clone, CI — the release build stays
-// unsigned rather than failing, exactly as it behaved before signing was set up.
+// Release signing credentials live in keystore.properties, which is gitignored along with the
+// keystore/ directory it points at: a signing key in version control lets anyone ship an
+// "update" Android installs over yours. Absent the file — a fresh clone, CI — the release build
+// stays unsigned rather than failing. See the README for how to create one.
 val keystorePropsFile = rootProject.file("keystore.properties")
 val keystoreProps = Properties().apply {
     if (keystorePropsFile.exists()) keystorePropsFile.inputStream().use { load(it) }
@@ -36,7 +37,9 @@ android {
     signingConfigs {
         if (hasSigningConfig) {
             create("release") {
-                storeFile = file(keystoreProps.getProperty("storeFile"))
+                // Resolved against the repository root, so keystore.properties can hold a
+                // path that works from a fresh clone on any machine.
+                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
                 storePassword = keystoreProps.getProperty("storePassword")
                 keyAlias = keystoreProps.getProperty("keyAlias")
                 keyPassword = keystoreProps.getProperty("keyPassword")
