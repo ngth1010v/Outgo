@@ -104,6 +104,19 @@ class CategoryRepository(
         }
     }
 
+    /**
+     * Saves each list's order as its rows' sort_order, under that list's parent (null: the top
+     * level). A child listed under a new parent moves there, its history with it: stats and
+     * budgets resolve parents at query time.
+     */
+    suspend fun reorder(lists: Map<Long?, List<Long>>) = withContext(Dispatchers.IO) {
+        db.withTransaction {
+            lists.forEach { (parentId, ids) ->
+                ids.forEachIndexed { index, id -> categoryDao.setPosition(id, parentId, index) }
+            }
+        }
+    }
+
     suspend fun childCount(parentId: Long): Int = withContext(Dispatchers.IO) { categoryDao.countChildren(parentId) }
     suspend fun hasTrades(categoryId: Long): Boolean = withContext(Dispatchers.IO) { categoryDao.countTrades(categoryId) > 0 }
 

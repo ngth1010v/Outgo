@@ -30,6 +30,7 @@ interface BudgetDao {
      * parent category also counts its children's spend. (Budgets used to
      * also have a SAVING kind tied to an account; that's been replaced by
      * savings accounts, see [app.outgo.domain.AccountType.SAVINGS].)
+     * Listed in the Category screen's order: by parent, a parent's own budget before its children's.
      */
     @Query(
         """
@@ -48,8 +49,11 @@ interface BudgetDao {
                cat.color AS categoryColor
         FROM budget b
         LEFT JOIN category cat ON cat.id = b.category_id
+        LEFT JOIN category parent ON parent.id = cat.parent_id
         WHERE b.kind = 0
-        ORDER BY b.sort_order, b.id
+        ORDER BY b.category_id IS NULL,
+                 COALESCE(parent.sort_order, cat.sort_order), COALESCE(parent.id, cat.id),
+                 cat.parent_id IS NOT NULL, cat.sort_order, b.id
         """,
     )
     fun observeBudgetsWithProgress(monthKey: Int, prevMonthKey: Int): Flow<List<BudgetWithProgress>>

@@ -91,6 +91,11 @@ class AccountRepository(
     suspend fun hasTrades(accountId: Long): Boolean = withContext(Dispatchers.IO) { accountDao.countTrades(accountId) > 0 }
 
     /** Hard-deletes if the account has no history, otherwise archives it (hidden, history kept). */
+    /** Saves [ids]' order as their sort_order. */
+    suspend fun reorder(ids: List<Long>) = withContext(Dispatchers.IO) {
+        db.withTransaction { ids.forEachIndexed { index, id -> accountDao.setSortOrder(id, index) } }
+    }
+
     suspend fun deleteOrArchive(account: AccountEntity) = withContext(Dispatchers.IO) {
         if (accountDao.countTrades(account.id) > 0) {
             accountDao.update(account.copy(archived = true))

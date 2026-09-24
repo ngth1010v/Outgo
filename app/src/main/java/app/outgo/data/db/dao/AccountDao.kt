@@ -64,4 +64,7 @@ interface AccountDao {
 
     @Query("SELECT COALESCE(MAX(sort_order), -1) FROM account")
     suspend fun maxSortOrder(): Int
+
+    @Query("UPDATE account SET sort_order = :order WHERE id = :id")
+    suspend fun setSortOrder(id: Long, order: Int)
 }

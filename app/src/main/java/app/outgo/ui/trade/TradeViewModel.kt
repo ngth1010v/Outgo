@@ -72,7 +72,9 @@ class TradeViewModel(
         viewModelScope.launch {
             accountRepository.observeActive().collect { accounts ->
                 _state.update { s ->
-                    val fallbackAccount = s.selectedAccountId ?: accounts.firstOrNull()?.id
+                    // While loading, the default (last used) account is still on its way: the first
+                    // account would beat it. After that, this covers an account created from none.
+                    val fallbackAccount = if (s.isLoading) null else accounts.firstOrNull()?.id
                     s.copy(accounts = accounts, selectedAccountId = s.selectedAccountId ?: fallbackAccount)
                 }
             }

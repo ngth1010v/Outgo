@@ -26,6 +26,10 @@ class BalanceViewModel(private val accountRepository: AccountRepository) : ViewM
         viewModelScope.launch { accountRepository.update(accountId, name, iconId, color, balance, accountType, savingsTarget) }
     }
 
+    fun reorder(ids: List<Long>) {
+        viewModelScope.launch { accountRepository.reorder(ids) }
+    }
+
     fun deleteOrArchive(account: AccountEntity) {
         viewModelScope.launch { accountRepository.deleteOrArchive(account) }
     }

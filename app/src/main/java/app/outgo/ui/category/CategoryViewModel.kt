@@ -71,6 +71,10 @@ class CategoryViewModel(
         viewModelScope.launch { categoryRepository.update(category, name, iconId, color, budget) }
     }
 
+    fun reorder(lists: Map<Long?, List<Long>>) {
+        viewModelScope.launch { categoryRepository.reorder(lists) }
+    }
+
     fun deleteOrArchive(category: CategoryEntity) {
         viewModelScope.launch { categoryRepository.deleteOrArchive(category) }
     }

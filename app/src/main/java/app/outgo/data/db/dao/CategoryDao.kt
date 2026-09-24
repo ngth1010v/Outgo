@@ -63,4 +63,7 @@ interface CategoryDao {
 
     @Query("SELECT COALESCE(MAX(sort_order), -1) FROM category WHERE parent_id IS :parentId")
     suspend fun maxSortOrder(parentId: Long?): Int
+
+    @Query("UPDATE category SET parent_id = :parentId, sort_order = :order WHERE id = :id")
+    suspend fun setPosition(id: Long, parentId: Long?, order: Int)
 }

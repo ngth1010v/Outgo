@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -59,10 +60,15 @@ import app.outgo.ui.component.ConfirmDialog
 import app.outgo.ui.component.IconPickerSheet
 import app.outgo.ui.component.IconView
 import app.outgo.ui.component.PlusRow
+import app.outgo.ui.component.rememberReorderState
+import app.outgo.ui.component.reorderableItem
 import app.outgo.ui.component.savingsProgressColor
 import app.outgo.ui.component.savingsProgressText
 import app.outgo.util.Money
 import androidx.compose.ui.graphics.Color
+
+/** The "add account" row's key; account rows are keyed by id. */
+private const val AddKey = "add"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -74,20 +80,36 @@ fun BalanceScreen() {
     val accounts by viewModel.accounts.collectAsStateWithLifecycle()
     var editing by remember { mutableStateOf<AccountEntity?>(null) }
     var showCreate by remember { mutableStateOf(false) }
+    // The order a drag is working on; the database's next emission replaces it.
+    var order by remember(accounts) { mutableStateOf(accounts) }
+    val listState = rememberLazyListState()
+    val reorder = rememberReorderState(listState)
+    reorder.update(
+        keys = order.map { it.account.id } + AddKey,
+        canDrag = { it != AddKey },
+        isSlot = { _, after -> after != null },
+        onMove = { key, to ->
+            val others = order.filter { it.account.id != key }
+            order = others.toMutableList().apply { add(to, order.first { it.account.id == key }) }
+        },
+        onDrop = { viewModel.reorder(order.map { it.account.id }) },
+    )
 
     Scaffold(topBar = { CenterAlignedTopAppBar(title = { Text(stringResource(R.string.nav_balance)) }) }) { padding ->
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            items(accounts, key = { it.account.id }) { row ->
+            items(order, key = { it.account.id }) { row ->
                 val account = row.account
                 val target = account.savingsTarget?.takeIf { it > 0 && account.accountType == AccountType.SAVINGS }
                 Column(
-                    modifier = Modifier
+                    modifier = reorderableItem(reorder, account.id)
                         .fillMaxWidth()
                         .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
-                        .clickable { editing = account }
+                        // A lifted row's release also ends a tap on it: that tap must not open the editor.
+                        .clickable { if (reorder.draggingKey == null) editing = account }
                         .padding(horizontal = 12.dp, vertical = 14.dp),
                 ) {
                     Row(
@@ -125,10 +147,10 @@ fun BalanceScreen() {
                     }
                 }
             }
-            item {
+            item(key = AddKey) {
                 PlusRow(
                     onClick = { showCreate = true },
-                    modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
+                    modifier = Modifier.animateItem().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
                 )
             }
         }

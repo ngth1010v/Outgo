@@ -39,6 +39,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,10 +67,14 @@ import app.outgo.ui.component.IconView
 import app.outgo.ui.component.PlusRow
 import app.outgo.ui.component.budgetRemainingColor
 import app.outgo.ui.component.budgetRemainingText
+import app.outgo.ui.component.rememberReorderState
 import app.outgo.ui.component.rememberSwipeLevel
+import app.outgo.ui.component.reorderableItem
 import app.outgo.ui.component.swipeShift
 import app.outgo.ui.component.swipeStep
 import app.outgo.util.Money
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 
 private sealed interface EditTarget {
     data object NewParent : EditTarget
@@ -120,6 +126,7 @@ fun CategoryScreen() {
                     expanded = expanded,
                     onToggle = { id -> expanded = if (id in expanded) expanded - id else expanded + id },
                     onEdit = { editTarget = it },
+                    onReorder = viewModel::reorder,
                     modifier = modifier,
                 )
                 list(state, listState, Modifier.swipeShift(typeSwipe))
@@ -144,7 +151,42 @@ fun CategoryScreen() {
     }
 }
 
-/** One type's categories; drawn for both types while a type swipe moves. */
+/** One row of the flattened category list; parents, children and plus rows are each a lazy item. */
+private sealed interface CategoryEntry {
+    val key: Any
+}
+
+private data class ParentEntry(val category: CategoryEntity) : CategoryEntry {
+    override val key: Any get() = category.id
+}
+
+private data class ChildEntry(val category: CategoryEntity) : CategoryEntry {
+    override val key: Any get() = category.id
+}
+
+private data class AddChildEntry(val parent: CategoryEntity) : CategoryEntry {
+    override val key: Any get() = "add-${parent.id}"
+}
+
+private data object AddParentEntry : CategoryEntry {
+    override val key: Any = "add"
+}
+
+/** The parent a child row or a slot next to it belongs to. */
+private fun ownerOf(entry: CategoryEntry?): Long? = when (entry) {
+    is ChildEntry -> entry.category.parentId
+    is AddChildEntry -> entry.parent.id
+    else -> null
+}
+
+/** How long a lifted child hovers over a folded parent before it unfolds to take it. */
+private const val HOVER_EXPAND_MS = 500L
+
+/**
+ * One type's categories; drawn for both types while a type swipe moves. A long press lifts a row
+ * to reorder it: a parent among parents (every parent folds for the drag), a child among the
+ * children of any unfolded parent. A parent's only child can't leave it.
+ */
 @Composable
 private fun CategoryList(
     state: CategoryUiState,
@@ -152,53 +194,134 @@ private fun CategoryList(
     expanded: Set<Long>,
     onToggle: (Long) -> Unit,
     onEdit: (EditTarget) -> Unit,
+    onReorder: (Map<Long?, List<Long>>) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // The order a drag is working on; the database's next emission replaces it.
+    var parents by remember(state.parents) { mutableStateOf(state.parents) }
+    var children by remember(state.childrenByParent) { mutableStateOf(state.childrenByParent) }
+    val reorder = rememberReorderState(listState)
+    val dragged = reorder.draggingKey
+    val draggingParent = dragged != null && parents.any { it.id == dragged }
+    val shownExpanded = if (draggingParent) emptySet() else expanded
+    val entries = remember(parents, children, shownExpanded) {
+        buildList {
+            parents.forEach { parent ->
+                add(ParentEntry(parent))
+                if (parent.id in shownExpanded) {
+                    children[parent.id].orEmpty().forEach { add(ChildEntry(it)) }
+                    add(AddChildEntry(parent))
+                }
+            }
+            add(AddParentEntry)
+        }
+    }
+    val byKey = remember(entries) { entries.associateBy { it.key } }
+    // The saved parent of the lifted child; a parent's only child stays inside it.
+    val home = dragged?.let { key -> state.childrenByParent.entries.firstOrNull { e -> e.value.any { it.id == key } }?.key }
+    val lone = home != null && state.childrenByParent[home]?.size == 1
+
+    reorder.update(
+        keys = entries.map { it.key },
+        canDrag = { byKey[it] is ParentEntry || byKey[it] is ChildEntry },
+        isSlot = { before, after ->
+            val b = byKey[before]
+            val a = byKey[after]
+            if (draggingParent) {
+                a is ParentEntry || a is AddParentEntry
+            } else {
+                (b is ChildEntry || b is ParentEntry) && (a is ChildEntry || a is AddChildEntry) && (!lone || ownerOf(a) == home)
+            }
+        },
+        onMove = { key, to ->
+            val after = entries.filter { it.key != key }.getOrNull(to)
+            if (draggingParent) {
+                val others = parents.filter { it.id != key }
+                val at = (after as? ParentEntry)?.let { a -> others.indexOfFirst { it.id == a.category.id } } ?: others.size
+                parents = others.toMutableList().apply { add(at, parents.first { it.id == key }) }
+            } else {
+                val target = ownerOf(after) ?: return@update
+                val moved = children.values.flatten().first { it.id == key }.copy(parentId = target)
+                val without = children.mapValues { (_, list) -> list.filter { it.id != key } }
+                val list = without[target].orEmpty()
+                val at = (after as? ChildEntry)?.let { a -> list.indexOfFirst { it.id == a.category.id } } ?: list.size
+                children = without + (target to list.toMutableList().apply { add(at, moved) })
+            }
+        },
+        onDrop = { key ->
+            if (parents.any { it.id == key }) {
+                onReorder(mapOf(null to parents.map { it.id }))
+            } else {
+                val from = state.childrenByParent.entries.firstOrNull { e -> e.value.any { it.id == key } }?.key
+                val to = children.entries.firstOrNull { e -> e.value.any { it.id == key } }?.key
+                onReorder(listOfNotNull(from, to).distinct().associate { id -> id to children[id].orEmpty().map { it.id } })
+            }
+        },
+    )
+
+    // A lifted child hovering over a folded parent unfolds it, so it can drop inside.
+    val currentByKey by rememberUpdatedState(byKey)
+    val currentExpanded by rememberUpdatedState(expanded)
+    val currentOnToggle by rememberUpdatedState(onToggle)
+    LaunchedEffect(dragged, draggingParent) {
+        if (dragged == null || draggingParent) return@LaunchedEffect
+        snapshotFlow { reorder.hoveredKey() }.collectLatest { key ->
+            if (currentByKey[key] is ParentEntry && key !in currentExpanded) {
+                delay(HOVER_EXPAND_MS)
+                currentOnToggle(key as Long)
+            }
+        }
+    }
+
+    // A lifted row's release also ends a tap on it: that tap must not open the editor.
+    val edit = { target: EditTarget -> if (reorder.draggingKey == null) onEdit(target) }
     LazyColumn(
         state = listState,
         modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        items(state.parents, key = { it.id }) { parent ->
-            val isExpanded = parent.id in expanded
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                CategoryRow(
-                    category = parent,
-                    budget = state.budgetsByCategory[parent.id],
-                    onRowClick = { onEdit(EditTarget.Edit(parent)) },
-                    trailing = {
-                        Icon(
-                            painter = painterResource(if (isExpanded) R.drawable.ph_caret_down else R.drawable.ph_caret_right),
-                            contentDescription = null,
-                            modifier = Modifier
-                                .clickable { onToggle(parent.id) }
-                                .padding(8.dp),
-                        )
-                    },
-                )
-                if (isExpanded) {
-                    state.childrenByParent[parent.id].orEmpty().forEach { child ->
-                        CategoryRow(
-                            category = child,
-                            budget = state.budgetsByCategory[child.id],
-                            onRowClick = { onEdit(EditTarget.Edit(child)) },
-                            modifier = Modifier.padding(start = 20.dp),
-                        )
-                    }
-                    PlusRow(
-                        onClick = { onEdit(EditTarget.NewChild(parent.id, parent.color)) },
-                        modifier = Modifier
-                            .padding(start = 20.dp)
-                            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
+        items(entries, key = { it.key }, contentType = { it::class }) { entry ->
+            when (entry) {
+                is ParentEntry -> {
+                    val parent = entry.category
+                    CategoryRow(
+                        category = parent,
+                        budget = state.budgetsByCategory[parent.id],
+                        onRowClick = { edit(EditTarget.Edit(parent)) },
+                        modifier = reorderableItem(reorder, entry.key),
+                        trailing = {
+                            Icon(
+                                painter = painterResource(
+                                    if (parent.id in shownExpanded) R.drawable.ph_caret_down else R.drawable.ph_caret_right,
+                                ),
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .clickable { onToggle(parent.id) }
+                                    .padding(8.dp),
+                            )
+                        },
                     )
                 }
+                is ChildEntry -> CategoryRow(
+                    category = entry.category,
+                    budget = state.budgetsByCategory[entry.category.id],
+                    onRowClick = { edit(EditTarget.Edit(entry.category)) },
+                    modifier = Modifier.padding(start = 20.dp).then(reorderableItem(reorder, entry.key)),
+                )
+                is AddChildEntry -> PlusRow(
+                    onClick = { edit(EditTarget.NewChild(entry.parent.id, entry.parent.color)) },
+                    modifier = Modifier
+                        .animateItem()
+                        .padding(start = 20.dp)
+                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
+                )
+                AddParentEntry -> PlusRow(
+                    onClick = { edit(EditTarget.NewParent) },
+                    modifier = Modifier
+                        .animateItem()
+                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
+                )
             }
-        }
-        item {
-            PlusRow(
-                onClick = { onEdit(EditTarget.NewParent) },
-                modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
-            )
         }
     }
 }
