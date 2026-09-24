@@ -27,11 +27,15 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import app.outgo.R
+import app.outgo.ui.home.compactAmount
 import app.outgo.ui.theme.ExpenseRed
 import app.outgo.ui.theme.IncomeGreen
 import app.outgo.ui.theme.TransferBlue
+import java.util.Locale
 import kotlin.math.atan2
 import kotlin.math.hypot
 import kotlin.math.min
@@ -154,41 +158,112 @@ private fun sliceAt(rings: List<DonutUi>, tap: Offset, width: Float, height: Flo
 
 // ------------------------------------------------------------------ section 4
 
+/**
+ * Cumulative spend (or income) day by day, against the same run of the previous month. The value
+ * axis rescales to whichever kind the mode switch shows, so a single kind always fills the chart.
+ */
 @Composable
 fun PaceChart(pace: PaceUi, mode: AnalysisMode, progress: Float, modifier: Modifier = Modifier) {
     val gridColor = MaterialTheme.colorScheme.outlineVariant
     val fadedColor = MaterialTheme.colorScheme.onSurfaceVariant
-
-    Box(
-        modifier = modifier.drawWithCache {
-            // Paths are built once per (data, size) — never inside the draw lambda.
-            val series = when (mode) {
-                AnalysisMode.EXPENSE -> listOf(pace.expense to ExpenseRed)
-                AnalysisMode.INCOME -> listOf(pace.income to IncomeGreen)
-                AnalysisMode.ALL -> listOf(pace.expense to ExpenseRed, pace.income to IncomeGreen)
-            }
-            val paths = series.map { (line, color) ->
-                Triple(
-                    linePath(line.current, pace.daysInMonth, size.width, size.height),
-                    linePath(line.previous, pace.daysInMonth, size.width, size.height),
-                    color,
-                )
-            }
-            onDrawBehind {
-                drawLine(gridColor, Offset(0f, size.height), Offset(size.width, size.height), strokeWidth = 1.5f)
-                paths.forEach { (current, previous, color) ->
-                    drawPath(previous, fadedColor, alpha = 0.4f, style = Stroke(width = 3f, pathEffect = DashEffect))
-                    drawPath(current, color, alpha = progress, style = Stroke(width = 5f))
-                }
-            }
-        },
+    val axisColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val style = MaterialTheme.typography.labelSmall
+    val measurer = rememberTextMeasurer()
+    val units = Triple(
+        stringResource(R.string.unit_thousand),
+        stringResource(R.string.unit_million),
+        stringResource(R.string.unit_billion),
     )
+
+    val max = pace.maxOf(mode)
+    // Axis ticks and their measured labels are computed once per (data, mode), never per frame.
+    val yTicks = remember(max, style, units) {
+        valueTicks(max).map { it to measurer.measure(compactAmount(it, units), style) }
+    }
+    val xTicks = remember(pace.daysInMonth, style) {
+        axisDays(pace.daysInMonth).map { day ->
+            day to measurer.measure(String.format(Locale.US, "%02d", day), style)
+        }
+    }
+    val series = remember(pace, mode) {
+        when (mode) {
+            AnalysisMode.EXPENSE -> listOf(pace.expense to ExpenseRed)
+            AnalysisMode.INCOME -> listOf(pace.income to IncomeGreen)
+            AnalysisMode.ALL -> listOf(pace.expense to ExpenseRed, pace.income to IncomeGreen)
+        }
+    }
+
+    Canvas(modifier = modifier) {
+        val gutter = (yTicks.maxOfOrNull { it.second.size.width } ?: 0) + AxisGap.toPx()
+        val labelHeight = (xTicks.firstOrNull()?.second?.size?.height ?: 0).toFloat() + AxisGap.toPx()
+        val plotWidth = size.width - gutter
+        val plotHeight = size.height - labelHeight
+
+        yTicks.forEach { (value, label) ->
+            val y = plotHeight - value.toFloat() / max * plotHeight
+            drawLine(gridColor, Offset(0f, y), Offset(plotWidth, y), strokeWidth = 1f)
+            drawText(
+                textLayoutResult = label,
+                color = axisColor,
+                topLeft = Offset(plotWidth + AxisGap.toPx(), y - label.size.height / 2f),
+            )
+        }
+
+        xTicks.forEachIndexed { index, (_, label) ->
+            val x = plotWidth * index / (xTicks.size - 1).coerceAtLeast(1)
+            // The first and last labels are pulled inside the plot so they are not clipped.
+            val left = (x - label.size.width / 2f).coerceIn(0f, plotWidth - label.size.width)
+            drawText(label, color = axisColor, topLeft = Offset(left, plotHeight + AxisGap.toPx()))
+        }
+
+        series.forEach { (line, color) ->
+            drawPath(
+                linePath(line.previous, pace.daysInMonth, max, plotWidth, plotHeight, LineHeadroom),
+                fadedColor,
+                alpha = 0.4f,
+                style = Stroke(width = 3f, pathEffect = DashEffect),
+            )
+            drawPath(
+                linePath(line.current, pace.daysInMonth, max, plotWidth, plotHeight, LineHeadroom),
+                color,
+                alpha = progress,
+                style = Stroke(width = 5f),
+            )
+        }
+    }
 }
 
-private fun linePath(values: List<Float>, daysInMonth: Int, width: Float, height: Float): Path {
+/** Gap between the plot and its axis labels. */
+private val AxisGap = 4.dp
+
+/** Half the widest line stroke, so a line at the maximum is drawn whole. */
+private const val LineHeadroom = 3f
+
+/** [headroom] keeps the peak's stroke from being clipped by the top edge of the plot. */
+private fun linePath(
+    values: List<Long>,
+    daysInMonth: Int,
+    max: Long,
+    width: Float,
+    height: Float,
+    headroom: Float,
+): Path {
     val path = Path()
     if (values.isEmpty()) return path
     val stepX = width / (daysInMonth - 1).coerceAtLeast(1)
+    val usable = height - headroom
+    values.forEachIndexed { index, value ->
+        val x = index * stepX
+        val y = height - value.toFloat() / max * usable
+        if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+    }
+    return path
+}
+
+private fun fractionPath(values: List<Float>, points: Int, width: Float, height: Float): Path {
+    val path = Path()
+    if (values.isEmpty()) return path
+    val stepX = width / (points - 1).coerceAtLeast(1)
     values.forEachIndexed { index, value ->
         val x = index * stepX
         val y = height - value * height
@@ -423,8 +498,8 @@ fun YoyChart(series: YoySeries, mode: AnalysisMode, progress: Float, modifier: M
     val gridColor = MaterialTheme.colorScheme.outlineVariant
     Box(
         modifier = modifier.drawWithCache {
-            val current = linePath(series.current, 12, size.width, size.height)
-            val previous = linePath(series.previous, 12, size.width, size.height)
+            val current = fractionPath(series.current, 12, size.width, size.height)
+            val previous = fractionPath(series.previous, 12, size.width, size.height)
             onDrawBehind {
                 drawLine(gridColor, Offset(0f, size.height), Offset(size.width, size.height), strokeWidth = 1.5f)
                 drawPath(previous, fadedColor, alpha = 0.4f, style = Stroke(width = 3f, pathEffect = DashEffect))

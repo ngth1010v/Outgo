@@ -457,23 +457,64 @@ internal fun buildPace(
     val incomeCurrent = runningTotals(incomeDaily, lastDay)
     val incomePrevious = runningTotals(incomePrevDaily, incomePrevDaily.size)
 
-    // One axis for both kinds and both months, so every line is comparable.
-    val max = listOf(expenseCurrent, expensePrevious, incomeCurrent, incomePrevious)
-        .maxOf { it.lastOrNull() ?: 0L }
-        .coerceAtLeast(1L)
-
+    // Each kind keeps its own peak so a single-kind view fills the chart; All mode uses both.
     fun series(current: List<Long>, previous: List<Long>) = PaceSeries(
-        current = current.map { it.toFloat() / max },
-        previous = previous.map { it.toFloat() / max },
+        current = current,
+        previous = previous,
         currentTotal = current.lastOrNull() ?: 0L,
+        max = maxOf(current.lastOrNull() ?: 0L, previous.lastOrNull() ?: 0L).coerceAtLeast(1L),
     )
 
+    val expense = series(expenseCurrent, expensePrevious)
+    val income = series(incomeCurrent, incomePrevious)
     return PaceUi(
-        expense = series(expenseCurrent, expensePrevious),
-        income = series(incomeCurrent, incomePrevious),
+        expense = expense,
+        income = income,
         daysInMonth = daily.size,
-        maxTotal = max,
+        combinedMax = maxOf(expense.max, income.max),
     )
+}
+
+/**
+ * Value-axis ticks for [max]: 0 and every multiple of a 1/2/5 x 10^k step, aiming for about
+ * [targetSteps] gaps. Pure so the chart draws a list rather than deriving one per frame.
+ */
+fun valueTicks(max: Long, targetSteps: Int = 4): List<Long> {
+    if (max <= 0L) return listOf(0L)
+    val step = niceValueStep(max, targetSteps)
+    return generateSequence(0L) { it + step }.takeWhile { it <= max }.toList()
+}
+
+/** Smallest 1/2/5 x 10^k step that splits [max] into at most [targetSteps] gaps. */
+internal fun niceValueStep(max: Long, targetSteps: Int): Long {
+    val base = longArrayOf(1, 2, 5)
+    var step = 1L
+    var index = 0
+    var power = 0
+    while (max / step > targetSteps) {
+        index++
+        if (index == base.size) {
+            index = 0
+            power++
+        }
+        // Long overflows past ~9.2e18; no real amount reaches it, but stop rather than wrap.
+        if (power > 18) return step
+        var scale = 1L
+        repeat(power) { scale *= 10 }
+        step = base[index] * scale
+    }
+    return step
+}
+
+/**
+ * [count] day labels spread evenly across a month of [daysInMonth], always including day 1 and
+ * the last day. The gaps are equal on screen; the labelled day is the one under each position.
+ */
+fun axisDays(daysInMonth: Int, count: Int = 5): List<Int> {
+    if (daysInMonth <= 1 || count <= 1) return listOf(1)
+    return (0 until count).map { i ->
+        1 + Math.round((daysInMonth - 1).toFloat() * i / (count - 1))
+    }
 }
 
 private fun runningTotals(daily: LongArray, days: Int): List<Long> {

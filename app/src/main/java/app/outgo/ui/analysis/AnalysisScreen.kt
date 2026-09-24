@@ -2,6 +2,9 @@ package app.outgo.ui.analysis
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -162,7 +165,7 @@ private fun AnalysisHeader(
     val yearlyIndex = yearlyPageIndex(pages, year)
     val nowIndex = currentMonthIndex(pages, currentMonth)
 
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp)) {
         HeaderRow(
             label = year.toString(),
             labelStyle = MaterialTheme.typography.titleMedium,
@@ -204,7 +207,10 @@ private fun HeaderRow(
     actionIndex: Int?,
     onGoTo: (Int) -> Unit,
 ) {
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        modifier = Modifier.fillMaxWidth().height(HeaderRowHeight),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
             ArrowButton(previousIndex, previousDescription, rotation = 180f, onGoTo = onGoTo)
             Text(label, style = labelStyle, fontWeight = FontWeight.Bold)
@@ -213,24 +219,29 @@ private fun HeaderRow(
         TextButton(
             onClick = { actionIndex?.let(onGoTo) },
             enabled = actionIndex != null,
-            modifier = Modifier.alpha(if (actionIndex != null) 1f else 0.3f),
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+            modifier = Modifier.height(HeaderRowHeight).alpha(if (actionIndex != null) 1f else 0.3f),
         ) {
             Text(actionLabel, style = MaterialTheme.typography.labelLarge)
         }
     }
 }
 
+/** 0.7x the 48dp default, so the two picker rows cost one normal app bar between them. */
+private val HeaderRowHeight = 34.dp
+private val HeaderIconSize = 20.dp
+
 @Composable
 private fun ArrowButton(target: Int?, description: String, rotation: Float, onGoTo: (Int) -> Unit) {
     IconButton(
         onClick = { target?.let(onGoTo) },
         enabled = target != null,
-        modifier = Modifier.alpha(if (target != null) 1f else 0.3f),
+        modifier = Modifier.size(HeaderRowHeight).alpha(if (target != null) 1f else 0.3f),
     ) {
         Icon(
             painter = painterResource(R.drawable.ph_caret_right),
             contentDescription = description,
-            modifier = Modifier.rotate(rotation),
+            modifier = Modifier.size(HeaderIconSize).rotate(rotation),
         )
     }
 }
@@ -282,7 +293,7 @@ private fun MonthPage(
             }
         }
         item(key = "donut", contentType = "donut") {
-            StageSection(stats, stringResource(R.string.analysis_by_category_title), DonutHeight) {
+            StageSection(stats, categoryTitle(mode), DonutHeight) {
                 DonutSection(it.expense, it.income, mode, selection, animate)
             }
         }
@@ -292,7 +303,7 @@ private fun MonthPage(
             }
         }
         item(key = "pace", contentType = "pace") {
-            StageSection(trades, stringResource(R.string.analysis_pace_title), PaceHeight + 24.dp) {
+            StageSection(trades, paceTitle(mode), PaceHeight + 24.dp) {
                 PaceSection(it.pace, mode, animate)
             }
         }
@@ -324,8 +335,8 @@ private fun MonthPage(
             }
         }
         item(key = "largest", contentType = "largest") {
-            StageSection(trades, stringResource(R.string.analysis_largest_title), 220.dp) {
-                LargestSection(it.largestOf(mode), onOpenTrade)
+            StageSection(trades, largestTitle(mode), 220.dp) {
+                LargestSection(it.largestOf(mode), mode, onOpenTrade)
             }
         }
         item(key = "transfers", contentType = "transfers") {
@@ -373,7 +384,7 @@ private fun YearPage(
             }
         }
         item(key = "year-donut", contentType = "donut") {
-            StageSection(stats, stringResource(R.string.analysis_by_category_title), DonutHeight) {
+            StageSection(stats, categoryTitle(mode), DonutHeight) {
                 DonutSection(it.expense, it.income, mode, selection, animate)
             }
         }
@@ -388,8 +399,8 @@ private fun YearPage(
             }
         }
         item(key = "year-largest", contentType = "largest") {
-            StageSection(trades, stringResource(R.string.analysis_largest_title), 220.dp) {
-                LargestSection(it.largestOf(mode), onOpenTrade)
+            StageSection(trades, largestTitle(mode), 220.dp) {
+                LargestSection(it.largestOf(mode), mode, onOpenTrade)
             }
         }
         item(key = "year-transfers", contentType = "transfers") {

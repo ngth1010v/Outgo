@@ -5,7 +5,7 @@ Update it at the end of every phase, and whenever a phase is interrupted.
 
 - Branch: `feat/analysis-v2` (off `feat/analysis-rebuild`)
 - Verify with: `gradlew.bat :app:assembleDebug` and `gradlew.bat :app:testDebugUnitTest`
-- Last verified: assembleDebug OK, 45 unit tests green, and run on an API 36 emulator —
+- Last verified: assembleDebug OK, 48 unit tests green, and run on an API 36 emulator —
   month page, year page, all three modes, transfers and the raw-trade sections all render
 
 ## Phase status
@@ -58,6 +58,18 @@ Update it at the end of every phase, and whenever a phase is interrupted.
   killed the app the moment the Analysis tab was opened. Keys are now `AnalysisPage.key`, a plain
   `Int` (`yyyyMM` for a month, `yyyy00` for a year, which months can never collide with).
   Regression test in `AnalysisPageTest`.
+
+**Follow-up polish (after the second device run)**
+- Header rows shrunk to 34dp (0.7x the 48dp default), with 20dp arrow icons and a tight text button.
+- Titles that named a kind now follow the mode: "Spending pace" / "Income pace" / "Cash flow pace",
+  "Largest purchases" / "Largest income" / "Largest movements", and "By category" in All mode. The
+  skeleton and the loaded section share one title helper, so they can never disagree.
+  Content descriptions that said "spent" were made kind-neutral.
+- Pace chart: each kind now scales to its own peak (All mode to both), so a single kind fills the
+  chart instead of sitting at a fraction of it. `PaceSeries` keeps amounts rather than fractions.
+- Pace chart axes: 5 day labels across the bottom (always day 1 and the last day, evenly spaced,
+  `%02d`) and a 1/2/5 x 10^k value axis with gridlines down the right, sharing `compactAmount`
+  with the Home chart rather than a second copy.
 
 **Phase 7 — cleanup**
 - Two strings that v2 stopped using (`analysis_month_label`, `analysis_income_and_net`) removed from

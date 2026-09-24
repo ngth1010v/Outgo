@@ -82,6 +82,37 @@ class AnalysisSelection {
 @Composable
 fun monthName(monthKey: Int): String = stringArrayResource(R.array.month_full)[(monthKey % 100) - 1]
 
+/**
+ * Section titles that name a kind. A title must not say "spending" while the switch is on Income,
+ * and the skeleton has to use the same title as the loaded section, so both go through here.
+ */
+@Composable
+fun paceTitle(mode: AnalysisMode): String = stringResource(
+    when (mode) {
+        AnalysisMode.EXPENSE -> R.string.analysis_pace_title
+        AnalysisMode.INCOME -> R.string.analysis_pace_title_income
+        AnalysisMode.ALL -> R.string.analysis_pace_title_all
+    },
+)
+
+@Composable
+fun categoryTitle(mode: AnalysisMode): String = stringResource(
+    when (mode) {
+        AnalysisMode.EXPENSE -> R.string.analysis_by_category_title
+        AnalysisMode.INCOME -> R.string.analysis_by_category_income_title
+        AnalysisMode.ALL -> R.string.analysis_by_category_all_title
+    },
+)
+
+@Composable
+fun largestTitle(mode: AnalysisMode): String = stringResource(
+    when (mode) {
+        AnalysisMode.EXPENSE -> R.string.analysis_largest_title
+        AnalysisMode.INCOME -> R.string.analysis_largest_income_title
+        AnalysisMode.ALL -> R.string.analysis_largest_all_title
+    },
+)
+
 /** More of a kind is red for expense and green for income; less is the other way round. */
 @Composable
 internal fun deltaColor(delta: Long, kind: Int = CategoryKind.EXPENSE): Color {
@@ -257,9 +288,7 @@ fun DonutSection(
     animate: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val title = stringResource(
-        if (mode == AnalysisMode.INCOME) R.string.analysis_by_category_income_title else R.string.analysis_by_category_title,
-    )
+    val title = categoryTitle(mode)
     val shown = if (mode == AnalysisMode.INCOME) income else expense
     val total = when (mode) {
         AnalysisMode.ALL -> expense.donut.total
@@ -364,7 +393,7 @@ private fun BreakdownRowItem(row: BreakdownRow, selection: AnalysisSelection) {
 @Composable
 fun PaceSection(pace: PaceUi, mode: AnalysisMode, animate: Boolean, modifier: Modifier = Modifier) {
     val description = stringResource(R.string.analysis_cd_pace, Money.format(pace.of(mode).currentTotal))
-    Section(stringResource(R.string.analysis_pace_title), modifier.semantics { contentDescription = description }) {
+    Section(paceTitle(mode), modifier.semantics { contentDescription = description }) {
         Text(
             stringResource(R.string.analysis_pace_legend),
             style = MaterialTheme.typography.bodySmall,
@@ -542,8 +571,13 @@ private fun bucketLabel(bucket: SizeBucket): String = when {
 // ----------------------------------------------------------------- section 10
 
 @Composable
-fun LargestSection(items: List<LargestItem>, onOpenTrade: (Long) -> Unit, modifier: Modifier = Modifier) {
-    Section(stringResource(R.string.analysis_largest_title), modifier) {
+fun LargestSection(
+    items: List<LargestItem>,
+    mode: AnalysisMode,
+    onOpenTrade: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Section(largestTitle(mode), modifier) {
         Box(modifier = Modifier.fillMaxWidth().height(RowHeight * LARGEST_COUNT)) {
             if (items.isEmpty()) {
                 EmptyBox(RowHeight * LARGEST_COUNT)

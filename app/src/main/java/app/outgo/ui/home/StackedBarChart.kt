@@ -268,7 +268,7 @@ private fun pow10(power: Int): Long {
 }
 
 /** "950", "2.5M", "-12M" — never more than 5 characters, always a '.' decimal point, no currency. */
-private fun compactAmount(value: Long, units: Triple<String, String, String>): String {
+internal fun compactAmount(value: Long, units: Triple<String, String, String>): String {
     if (value < 0) return "-" + compactAmount(-value, units)
     val (divisor, suffix) = when {
         value >= 1_000_000_000L -> 1_000_000_000.0 to units.third

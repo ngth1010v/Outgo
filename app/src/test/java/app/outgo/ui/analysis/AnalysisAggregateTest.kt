@@ -122,10 +122,8 @@ class AnalysisAggregateTest {
         assertEquals(10, pace.expense.current.size)
         assertEquals(1000L, pace.expense.currentTotal)
         assertEquals(31, pace.daysInMonth)
-        // Fractions of the max total: 100, 500, 1000 on days 1, 3, 10.
-        assertEquals(0.1f, pace.expense.current[0], 0.0001f)
-        assertEquals(0.5f, pace.expense.current[2], 0.0001f)
-        assertEquals(1f, pace.expense.current[9], 0.0001f)
+        assertEquals(listOf(100L, 100L, 500L), pace.expense.current.take(3))
+        assertEquals(1000L, pace.expense.current.last())
     }
 
     @Test
@@ -135,21 +133,61 @@ class AnalysisAggregateTest {
         val pace = buildPace(daily, prev, LongArray(31), LongArray(30), 202608, ZONE, millis(2026, 10, 1))
         assertEquals(31, pace.expense.current.size)
         assertEquals(30, pace.expense.previous.size)
-        assertEquals(400L, pace.maxTotal)
-        assertEquals(0.25f, pace.expense.current[30], 0.0001f)
-        assertEquals(1f, pace.expense.previous[29], 0.0001f)
+        // Both months of the same kind share a scale, so the lines are comparable.
+        assertEquals(400L, pace.expense.max)
+        assertEquals(100L, pace.expense.current.last())
+        assertEquals(400L, pace.expense.previous.last())
     }
 
     @Test
-    fun `expense and income share one pace axis`() {
+    fun `each kind scales to its own peak, and All mode to both`() {
         val expense = LongArray(31).also { it[0] = 200 }
         val income = LongArray(31).also { it[0] = 800 }
         val pace = buildPace(expense, LongArray(30), income, LongArray(30), 202608, ZONE, millis(2026, 10, 1))
-        assertEquals(800L, pace.maxTotal)
-        assertEquals(0.25f, pace.expense.current[0], 0.0001f)
-        assertEquals(1f, pace.income.current[0], 0.0001f)
+        // Expense alone fills its own chart rather than sitting at a quarter height.
+        assertEquals(200L, pace.maxOf(AnalysisMode.EXPENSE))
+        assertEquals(800L, pace.maxOf(AnalysisMode.INCOME))
+        assertEquals(800L, pace.maxOf(AnalysisMode.ALL))
         assertEquals(200L, pace.expense.currentTotal)
         assertEquals(800L, pace.income.currentTotal)
+    }
+
+    @Test
+    fun `an empty kind still has a usable scale`() {
+        val pace = buildPace(LongArray(31), LongArray(30), LongArray(31), LongArray(30), 202608, ZONE, millis(2026, 10, 1))
+        // Never 0: the chart divides by this.
+        assertEquals(1L, pace.maxOf(AnalysisMode.EXPENSE))
+        assertEquals(1L, pace.maxOf(AnalysisMode.ALL))
+    }
+
+    // ------------------------------------------------------------------- chart axes
+
+    @Test
+    fun `value ticks walk a one-two-five step and stop at the max`() {
+        assertEquals(listOf(0L, 500L, 1000L, 1500L, 2000L), valueTicks(2_000))
+        // 200 would leave 5 gaps, one too many, so the ladder steps up to 500.
+        assertEquals(listOf(0L, 500L, 1000L), valueTicks(1_000))
+        assertEquals(listOf(0L), valueTicks(0))
+        // At most targetSteps gaps, whatever the magnitude.
+        listOf(7L, 93L, 1_234L, 987_654L).forEach { max ->
+            assertTrue("$max", valueTicks(max).size <= 6)
+            assertTrue("$max", valueTicks(max).last() <= max)
+        }
+    }
+
+    @Test
+    fun `day labels include the first and last day and are evenly spread`() {
+        assertEquals(listOf(1, 9, 16, 24, 31), axisDays(31))
+        assertEquals(listOf(1, 8, 16, 23, 30), axisDays(30))
+        assertEquals(listOf(1, 8, 15, 22, 29), axisDays(29))
+        assertEquals(listOf(1, 8, 15, 21, 28), axisDays(28))
+        // Always exactly `count` labels, always starting at 1 and ending on the last day.
+        listOf(28, 29, 30, 31).forEach { days ->
+            val labels = axisDays(days)
+            assertEquals(5, labels.size)
+            assertEquals(1, labels.first())
+            assertEquals(days, labels.last())
+        }
     }
 
     // ------------------------------------------------------------------- movers sort
@@ -315,7 +353,7 @@ class AnalysisAggregateTest {
         val data = (trades(rows, 202608) as Stage.Ready).data
         assertEquals(1, data.expenseLargest.size)
         assertEquals(100L, data.pace.expense.currentTotal)
-        assertEquals(900L, data.pace.maxTotal)
+        assertEquals(900L, data.pace.expense.max)
     }
 
     @Test

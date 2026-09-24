@@ -83,19 +83,35 @@ data class SliceSet(val donut: DonutUi, val rows: List<BreakdownRow>)
 
 // ---------------------------------------------------------------- section 4
 
-/** Running totals per day, as fractions of the shared [PaceUi.maxTotal]; index 0 == day 1. */
+/**
+ * Running totals per day, index 0 == day 1. Kept as amounts rather than fractions so the chart
+ * can rescale to whichever kind the mode switch is showing, and label its value axis.
+ */
 @Immutable
-data class PaceSeries(val current: List<Float>, val previous: List<Float>, val currentTotal: Long)
+data class PaceSeries(
+    val current: List<Long>,
+    val previous: List<Long>,
+    val currentTotal: Long,
+    /** Biggest running total of this kind across both months. */
+    val max: Long,
+)
 
 @Immutable
 data class PaceUi(
     val expense: PaceSeries,
     val income: PaceSeries,
     val daysInMonth: Int,
-    /** Both kinds and both months share one axis, so the lines are comparable. */
-    val maxTotal: Long,
+    /** Shared axis for All mode, where both kinds are drawn together. */
+    val combinedMax: Long,
 ) {
     fun of(mode: AnalysisMode): PaceSeries = if (mode == AnalysisMode.INCOME) income else expense
+
+    /** A single kind scales to its own peak; All mode scales to both, so the two stay comparable. */
+    fun maxOf(mode: AnalysisMode): Long = when (mode) {
+        AnalysisMode.EXPENSE -> expense.max
+        AnalysisMode.INCOME -> income.max
+        AnalysisMode.ALL -> combinedMax
+    }
 }
 
 // ------------------------------------------------------------- sections 5, Y2
