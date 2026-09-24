@@ -73,8 +73,12 @@ private val RowHeight = 44.dp
 private val MoverRowHeight = 36.dp
 private val MoverLabelHeight = 22.dp
 
-/** Both half labels plus the full row budget, so the section never changes height. */
-val MoversContentHeight = MoverLabelHeight * 2 + MoverRowHeight * MOVER_COUNT
+/**
+ * The full row budget, plus both half labels in All mode. Constant for a given mode, so the
+ * skeleton, the empty state and the loaded section are the same height.
+ */
+fun moversContentHeight(mode: AnalysisMode): Dp =
+    MoverRowHeight * MOVER_COUNT + if (mode == AnalysisMode.ALL) MoverLabelHeight * 2 else 0.dp
 private val BucketRowHeight = 52.dp
 
 /** Which slice/row the user tapped; read through `derivedStateOf` at the call sites. */
@@ -453,16 +457,25 @@ fun BarsSection(
 // ------------------------------------------------------------------ section 6
 
 /**
- * Two halves, expense and income, ranked together and split. A half with no movers keeps one
- * placeholder row, so the section is always [MOVER_COUNT] rows tall whatever the data says.
+ * A single-kind mode lists that kind's own top movers; All mode splits the ranking into an expense
+ * half and an income half, each half keeping a placeholder row when it has nothing.
  */
 @Composable
-fun MoversSection(movers: MoversUi, animate: Boolean, modifier: Modifier = Modifier) {
+fun MoversSection(movers: MoversUi, mode: AnalysisMode, animate: Boolean, modifier: Modifier = Modifier) {
     val description = stringResource(R.string.analysis_cd_movers)
     Section(stringResource(R.string.analysis_movers_title), modifier.semantics { contentDescription = description }) {
-        Column(modifier = Modifier.fillMaxWidth().height(MoversContentHeight)) {
-            MoverHalf(stringResource(R.string.trade_expense), movers.expense, animate)
-            MoverHalf(stringResource(R.string.trade_income), movers.income, animate)
+        Column(modifier = Modifier.fillMaxWidth().height(moversContentHeight(mode))) {
+            if (mode == AnalysisMode.ALL) {
+                MoverHalf(stringResource(R.string.trade_expense), movers.all.expense, animate)
+                MoverHalf(stringResource(R.string.trade_income), movers.all.income, animate)
+            } else {
+                val rows = movers.of(mode)
+                if (rows.isEmpty()) {
+                    EmptyBox(MoverRowHeight * MOVER_COUNT)
+                } else {
+                    rows.forEach { mover -> MoverRowItem(mover, animate) }
+                }
+            }
         }
     }
 }

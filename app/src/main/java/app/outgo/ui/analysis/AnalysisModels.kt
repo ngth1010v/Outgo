@@ -149,10 +149,24 @@ data class BarsUi(
 
 // ---------------------------------------------------------------- section 6
 
-/** The top movers of both kinds, each side never empty — see [buildMovers]. */
+/** The two halves All mode shows, ranked together and split — see [buildMovers]. */
 @Immutable
-data class MoversUi(val expense: List<MoverRow>, val income: List<MoverRow>) {
+data class MoverSplit(val expense: List<MoverRow>, val income: List<MoverRow>) {
+    /** Counting the placeholder row an empty half still draws. */
     val rowCount: Int get() = maxOf(expense.size, 1) + maxOf(income.size, 1)
+}
+
+/**
+ * A single-kind mode shows that kind's own top movers, scaled to its own biggest move; All mode
+ * shows [all], where both kinds are ranked together and share one scale.
+ */
+@Immutable
+data class MoversUi(
+    val expense: List<MoverRow>,
+    val income: List<MoverRow>,
+    val all: MoverSplit,
+) {
+    fun of(mode: AnalysisMode): List<MoverRow> = if (mode == AnalysisMode.INCOME) income else expense
 }
 
 @Immutable

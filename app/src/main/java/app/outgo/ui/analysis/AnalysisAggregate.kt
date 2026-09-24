@@ -300,13 +300,15 @@ private fun rawYoy(byMonth: Map<Int, List<MonthCategoryTotal>>, year: Int, month
 }
 
 /**
- * The [MOVER_COUNT] biggest movers of either kind, ranked together by amount moved and then split
- * into an expense half and an income half.
+ * Movers for all three modes.
  *
- * Both halves are meant to say something, so a kind that exists in the data always gets at least
- * one row: if the top six are all expense, the smallest of them gives up its place to the biggest
- * income mover. When a kind has no movers at all, its half renders a single placeholder row, and
- * the other half is capped one row shorter so the section still totals at most [MOVER_COUNT] rows.
+ * A single-kind mode gets that kind's [MOVER_COUNT] biggest moves, scaled to its own biggest, so
+ * the bars fill the chart. All mode gets [MoversUi.all]: both kinds ranked together, split into an
+ * expense half and an income half on one shared scale. There, both halves are meant to say
+ * something, so a kind that exists in the data always gets at least one row — if the top six are
+ * all expense, the smallest of them gives up its place to the biggest income mover. When a kind
+ * has no movers at all, its half renders a single placeholder row and the other half is capped one
+ * row shorter, so the section still totals at most [MOVER_COUNT] rows.
  */
 internal fun buildMovers(current: List<MonthCategoryTotal>, previous: List<MonthCategoryTotal>): MoversUi {
     val prevByRoot = previous.associateBy { it.rootId }
@@ -318,13 +320,22 @@ internal fun buildMovers(current: List<MonthCategoryTotal>, previous: List<Month
         val delta = (curByRoot[rootId]?.total ?: 0L) - (prevByRoot[rootId]?.total ?: 0L)
         if (delta == 0L) null else row to delta
     }
-    if (deltas.isEmpty()) return MoversUi(emptyList(), emptyList())
+    if (deltas.isEmpty()) return MoversUi(emptyList(), emptyList(), MoverSplit(emptyList(), emptyList()))
 
     // Sorted by amount moved, never by percent: a 300% jump on a tiny category is noise.
     val ranked = deltas.sortedByDescending { abs(it.second) }
     val expenseAll = ranked.filter { it.first.type == CategoryKind.EXPENSE }
     val incomeAll = ranked.filter { it.first.type == CategoryKind.INCOME }
-    val max = abs(ranked.first().second).coerceAtLeast(1L)
+
+    fun rows(rows: List<Pair<MonthCategoryTotal, Long>>, max: Long) = rows.map { (row, delta) ->
+        MoverRow(row.rootId, row.type, row.name, row.iconId, row.color, delta, abs(delta).toFloat() / max)
+    }
+
+    fun ownScale(rows: List<Pair<MonthCategoryTotal, Long>>): List<MoverRow> {
+        val top = rows.take(MOVER_COUNT)
+        val max = top.firstOrNull()?.let { abs(it.second) }?.coerceAtLeast(1L) ?: return emptyList()
+        return rows(top, max)
+    }
 
     // A missing kind still costs a row, for its placeholder.
     val limit = if (expenseAll.isEmpty() || incomeAll.isEmpty()) MOVER_COUNT - 1 else MOVER_COUNT
@@ -335,14 +346,14 @@ internal fun buildMovers(current: List<MonthCategoryTotal>, previous: List<Month
     if (incomeAll.isNotEmpty() && top.none { it.first.type == CategoryKind.INCOME }) {
         top = top.dropLast(1) + incomeAll.first()
     }
+    val sharedMax = abs(ranked.first().second).coerceAtLeast(1L)
+    fun half(kind: Int) = rows(top.filter { it.first.type == kind }.sortedByDescending { abs(it.second) }, sharedMax)
 
-    fun rows(kind: Int) = top.filter { it.first.type == kind }
-        .sortedByDescending { abs(it.second) }
-        .map { (row, delta) ->
-            MoverRow(row.rootId, row.type, row.name, row.iconId, row.color, delta, abs(delta).toFloat() / max)
-        }
-
-    return MoversUi(expense = rows(CategoryKind.EXPENSE), income = rows(CategoryKind.INCOME))
+    return MoversUi(
+        expense = ownScale(expenseAll),
+        income = ownScale(incomeAll),
+        all = MoverSplit(expense = half(CategoryKind.EXPENSE), income = half(CategoryKind.INCOME)),
+    )
 }
 
 // -------------------------------------------------------------------- TRADES

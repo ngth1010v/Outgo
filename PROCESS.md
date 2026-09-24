@@ -5,7 +5,7 @@ Update it at the end of every phase, and whenever a phase is interrupted.
 
 - Branch: `feat/analysis-v2` (off `feat/analysis-rebuild`)
 - Verify with: `gradlew.bat :app:assembleDebug` and `gradlew.bat :app:testDebugUnitTest`
-- Last verified: assembleDebug OK, 55 unit tests green, and run on an API 36 emulator —
+- Last verified: assembleDebug OK, 57 unit tests green, and run on an API 36 emulator —
   month page, year page, all three modes, transfers and the raw-trade sections all render
 
 ## Phase status
@@ -58,6 +58,13 @@ Update it at the end of every phase, and whenever a phase is interrupted.
   killed the app the moment the Analysis tab was opened. Keys are now `AnalysisPage.key`, a plain
   `Int` (`yyyyMM` for a month, `yyyy00` for a year, which months can never collide with).
   Regression test in `AnalysisPageTest`.
+
+**Movers follow the mode again**
+- Expense mode lists the 6 biggest expense movers, Income mode the 6 biggest income ones, each
+  scaled to its own biggest move so the bars fill the chart. All mode keeps the split halves on one
+  shared scale, with the displacement and placeholder rules.
+- `MoversUi` now holds `expense`, `income` and `all: MoverSplit`; the section height depends on the
+  mode (the half labels only exist in All), and the skeleton uses the same `moversContentHeight`.
 
 **Transfers section**
 - Month page: the section only appears in All mode. It moves money without spending or earning it,

@@ -313,8 +313,8 @@ private fun MonthPage(
             }
         }
         item(key = "movers", contentType = "movers") {
-            StageSection(stats, stringResource(R.string.analysis_movers_title), MoversContentHeight) {
-                MoversSection(it.movers, animate)
+            StageSection(stats, stringResource(R.string.analysis_movers_title), moversContentHeight(mode)) {
+                MoversSection(it.movers, mode, animate)
             }
         }
         if (showExpenseOnly) {
