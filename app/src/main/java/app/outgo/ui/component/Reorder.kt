@@ -48,6 +48,7 @@ private val RowShape = RoundedCornerShape(12.dp)
 private val EdgeZone = 56.dp
 /** Per second, so the pace is the same at any refresh rate (12dp a frame at 60 Hz). */
 private val MaxScrollSpeed = 720.dp
+private const val MaxFrameSeconds = 1 / 30f
 
 /** A lifted row trails the finger sideways at this fraction of its distance: a hint of freedom, not a move. */
 private const val FollowX = 0.15f
@@ -165,8 +166,12 @@ class ReorderState internal constructor(
         judge()
     }
 
-    internal fun end() {
-        val key = draggingKey ?: return
+    /**
+     * Drops the row lifted by [key]. Every row's gesture calls this on cancel, even one only waiting
+     * for a touch (its handler is reset when the list recycles its node), so it must not drop another.
+     */
+    internal fun end(key: Any) {
+        if (key != draggingKey) return
         edgeScroll?.cancel()
         val offset = offsetOf(key)
         val offsetX = offsetXOf(key)
@@ -205,10 +210,19 @@ class ReorderState internal constructor(
             val bottom = visible[rest[last]] ?: return null
             return (top.offset + bottom.offset + bottom.size) / 2f
         }
+        // Not into a slot wholly off screen: bringing the row back there is a jump that snaps every
+        // sliding row. The edge scroll brings the slot in. Its new top is where the passed rows start or end.
+        val start = listState.layoutInfo.viewportStartOffset
+        val end = listState.layoutInfo.viewportEndOffset
         val down = (from + 1..rest.size).firstOrNull { slot(it) }
-        if (down != null && middle(from, down - 1)?.let { center > it } == true) return move(key, down)
+        if (down != null && middle(from, down - 1)?.let { center > it } == true) {
+            val last = visible.getValue(rest[down - 1])
+            if (last.offset + last.size - itemSize < end) return move(key, down)
+        }
         val up = (from - 1 downTo 0).firstOrNull { slot(it) }
-        if (up != null && middle(up, from - 1)?.let { center < it } == true) move(key, up)
+        if (up != null && middle(up, from - 1)?.let { center < it } == true) {
+            if (visible.getValue(rest[up]).offset + itemSize > start) move(key, up)
+        }
     }
 
     private fun move(key: Any, to: Int) {
@@ -223,7 +237,8 @@ class ReorderState internal constructor(
         var last = withFrameNanos { it }
         while (draggingKey == key) {
             val now = withFrameNanos { it }
-            val seconds = (now - last) / 1e9f
+            // Capped, so a slow frame (a chart composing) never turns into one big jump.
+            val seconds = ((now - last) / 1e9f).coerceAtMost(MaxFrameSeconds)
             last = now
             if (draggingKey != key) return
             if (find(key) == null) {
@@ -294,8 +309,8 @@ fun LazyItemScope.reorderableItem(state: ReorderState, key: Any): Modifier {
                     change.consume()
                     state.drag(amount.y, rootX(change.position))
                 },
-                onDragEnd = state::end,
-                onDragCancel = state::end,
+                onDragEnd = { state.end(key) },
+                onDragCancel = { state.end(key) },
             )
         }
 }
