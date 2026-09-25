@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.ModalBottomSheet
@@ -415,7 +416,11 @@ private fun ChartList(
                 }
             }
             item(key = "add", contentType = "add") {
-                FilledTonalButton(onClick = { showAdd = true }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
+                FilledTonalButton(
+                    onClick = { showAdd = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.filledTonalButtonColors(containerColor = cardColor()),
+                ) {
                     Icon(painterResource(R.drawable.ph_plus), contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.analysis_add_chart))
@@ -491,10 +496,10 @@ private fun AddChartSheet(slot: LayoutSlot, onSelect: (ChartType) -> Unit, onDis
                 Column {
                     Text(stringResource(group.title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium)
                     Spacer(Modifier.height(8.dp))
-                    group.charts.chunked(4).forEach { row ->
+                    group.charts.chunked(5).forEach { row ->
                         Row(modifier = Modifier.fillMaxWidth()) {
                             row.forEach { type -> ChartCell(type, { onSelect(type) }, Modifier.weight(1f)) }
-                            repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
+                            repeat(5 - row.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
                 }
@@ -507,17 +512,17 @@ private fun AddChartSheet(slot: LayoutSlot, onSelect: (ChartType) -> Unit, onDis
 private fun ChartCell(type: ChartType, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier.clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick).padding(vertical = 8.dp, horizontal = 4.dp),
+        modifier = modifier.clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick).padding(vertical = 8.dp, horizontal = 2.dp),
     ) {
         Box(
-            modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape),
+            modifier = Modifier.size(40.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 painter = painterResource(type.icon),
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(20.dp),
             )
         }
         Spacer(Modifier.height(6.dp))
