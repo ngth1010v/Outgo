@@ -583,3 +583,50 @@ fun YoyChart(series: YoySeries, year: Int, mode: AnalysisMode, progress: Float, 
 fun ColorDot(color: Color, modifier: Modifier = Modifier, size: Dp = 10.dp) {
     Canvas(modifier = modifier.size(size)) { drawCircle(color) }
 }
+
+// ------------------------------------------------------------------ accounts
+
+/** One line per account through its month-end balances; the axis runs from a negative low to the high. */
+@Composable
+fun BalanceChart(balance: BalanceTrendUi, labels: List<String>, progress: Float, modifier: Modifier = Modifier) {
+    val gridColor = MaterialTheme.colorScheme.outlineVariant
+    val axisColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val style = MaterialTheme.typography.labelSmall
+    val measurer = rememberTextMeasurer()
+    val yTicks = rememberAxisLabels(remember(balance.min, balance.max) { rangeTicks(balance.min, balance.max) })
+    val xLabels = remember(labels, style) { labels.map { measurer.measure(it, style) } }
+
+    Canvas(modifier = modifier) {
+        val gutter = gutterOf(yTicks)
+        val plotWidth = size.width - gutter
+        val plotHeight = size.height - (xLabels.firstOrNull()?.size?.height ?: 0) - AxisGap.toPx()
+        val usable = plotHeight - LineHeadroom * 2
+        val span = (balance.max - balance.min).toFloat()
+        fun y(value: Long) = LineHeadroom + usable - (value - balance.min) / span * usable
+        // Inset by half a label so the first and last months sit centred under their points.
+        val inset = (xLabels.maxOfOrNull { it.size.width } ?: 0) / 2f
+        val step = (plotWidth - inset * 2) / (balance.months.size - 1).coerceAtLeast(1)
+        fun x(index: Int) = inset + index * step
+
+        yTicks.forEach { (value, label) ->
+            val lineY = y(value)
+            drawLine(gridColor, Offset(0f, lineY), Offset(plotWidth, lineY), strokeWidth = if (value == 0L) 2f else 1f)
+            drawText(label, color = axisColor, topLeft = Offset(plotWidth + AxisGap.toPx(), lineY - label.size.height / 2f))
+        }
+        xLabels.forEachIndexed { index, label ->
+            drawText(label, color = axisColor, topLeft = Offset(x(index) - label.size.width / 2f, plotHeight + AxisGap.toPx()))
+        }
+        balance.lines.forEach { line ->
+            val color = Color(line.color)
+            if (line.values.size == 1) {
+                drawCircle(color, radius = 5f, center = Offset(x(0), y(line.values[0])), alpha = progress)
+                return@forEach
+            }
+            val path = Path()
+            line.values.forEachIndexed { index, value ->
+                if (index == 0) path.moveTo(x(index), y(value)) else path.lineTo(x(index), y(value))
+            }
+            drawPath(path, color, alpha = progress, style = Stroke(width = 4f))
+        }
+    }
+}

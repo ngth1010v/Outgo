@@ -70,27 +70,29 @@ internal fun MacrobenchmarkScope.animationJourney() {
     tap(By.text("Income"))
     tap(By.text("Expense"))
 
-    // Analysis: every mode of the switch, a scroll through the month sections, a step back a
-    // month and the year page — that is what compiles the hand-drawn charts.
+    // Analysis: both tabs scrolled through on a month page and on the year page, plus a step back
+    // a month — that is what compiles the hand-drawn charts.
     tap(By.desc("Analysis"))
-    tap(By.text("All"))
-    tap(By.text("Income"))
-    tap(By.text("Expense"))
-    device.findObject(By.scrollable(true))?.let {
-        it.fling(Direction.DOWN)
-        device.waitForIdle()
-        it.fling(Direction.UP)
-        device.waitForIdle()
-    }
+    flingDownAndUp()
+    tap(By.text("Accounts"))
+    flingDownAndUp()
+    tap(By.text("Categories"))
     tap(By.desc("Previous month"))
     tap(By.text("Yearly analysis"))
+    flingDownAndUp()
+    tap(By.text("Accounts"))
+    flingDownAndUp()
+    tap(By.text("Categories"))
+    tap(By.text("Now"))
+}
+
+private fun MacrobenchmarkScope.flingDownAndUp() {
     device.findObject(By.scrollable(true))?.let {
         it.fling(Direction.DOWN)
         device.waitForIdle()
         it.fling(Direction.UP)
         device.waitForIdle()
     }
-    tap(By.text("Now"))
 }
 
 private fun MacrobenchmarkScope.tap(selector: BySelector) {

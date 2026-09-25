@@ -169,7 +169,7 @@ private fun TabContent(route: String, shown: Boolean, navController: NavHostCont
  * Measures the content either way (so showing it needs no new layout pass) but places it only
  * when [shown]. Unplaced content is not drawn, gets no touches, and is not in the accessibility tree.
  */
-private fun Modifier.placedIf(shown: Boolean) = layout { measurable, constraints ->
+internal fun Modifier.placedIf(shown: Boolean) = layout { measurable, constraints ->
     val placeable = measurable.measure(constraints)
     layout(placeable.width, placeable.height) { if (shown) placeable.place(0, 0) }
 }

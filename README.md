@@ -85,12 +85,13 @@ Open the app and you are already on the "add expense" screen. Log a purchase in 
 <img src="docs/analysis.png" align="right" width="240" alt="Analysis" />
 
 - **One page per month and one per year**, swiped through or stepped with the year and month pickers in the top bar. Swipe right off December to reach that year's summary.
-- **Expense / Income / All**, one switch that drives every chart on the page. All mode draws both kinds together rather than a single net figure.
+- **Categories / Accounts**, two tabs under the pickers. Each is a list of charts you arrange: long-press a chart to drag it, drop it on the red strip at the right edge to remove it (with undo), and add charts back from the + button at the bottom. Month and year pages keep separate lists, saved in the database so they travel with backups.
+- **Expense / Income / All** is picked per chart, from the chip in its title. All draws both kinds together rather than a single net figure.
 - **Month summary:** the total signed as money flows (spending −, income +, net in All mode), the change against last month in amount and percent, the average per day, and money moved between accounts.
 - **Where the money went:** a donut and a category breakdown, a 6-month trend, and the biggest movers against last month.
 - **When it went:** a cumulative spending pace line against last month, a daily heatmap that opens that day's history, and the average spend per weekday.
 - **What it went on:** the mix of purchase sizes around the month's median, and the five largest movements.
-- **Transfers** between your own accounts, summed per account pair.
+- **Accounts tab:** spending and income per account (donut and breakdown), each account's net flow, month-end balance lines, transfers summed per account pair, and the largest movements of one chosen account.
 - **Yearly analysis:** year summary, month-by-month bars, category totals for the year, and this year against last year. A part-finished year is compared against the same months a year earlier, never against a full twelve.
 
 <br clear="right" />

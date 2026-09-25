@@ -56,7 +56,8 @@ interface TradeDao {
      */
     @Query(
         """
-        SELECT id, type, amount, occurred_at AS occurredAt, category_id AS categoryId, note
+        SELECT id, type, amount, occurred_at AS occurredAt, category_id AS categoryId, note,
+               account_id AS accountId
         FROM trade
         WHERE type IN (:types) AND month_key IN (:monthKeys)
         """,
@@ -75,6 +76,40 @@ interface TradeDao {
         """,
     )
     suspend fun transferTotalsForMonths(monthKeys: List<Int>): List<TransferTotal>
+
+    /**
+     * Analysis accounts: per month, per account, per type, the summed amount. A transfer's
+     * receiving end comes back as [FLOW_TRANSFER_IN], so every row is one account's own movement.
+     */
+    @Query(
+        """
+        SELECT month_key AS monthKey, account_id AS accountId, type, SUM(amount) AS total
+        FROM trade
+        WHERE month_key BETWEEN :fromMonth AND :toMonth
+        GROUP BY month_key, account_id, type
+        UNION ALL
+        SELECT month_key, to_account_id, 5, SUM(amount)
+        FROM trade
+        WHERE type = 4 AND to_account_id IS NOT NULL AND month_key BETWEEN :fromMonth AND :toMonth
+        GROUP BY month_key, to_account_id
+        """,
+    )
+    suspend fun accountFlows(fromMonth: Int, toMonth: Int): List<AccountFlow>
+
+    /** Every account's balance at the start of [monthKey], summed the way the balance triggers do. */
+    @Query(
+        """
+        SELECT accountId, SUM(delta) AS balance FROM (
+            SELECT account_id AS accountId, CASE WHEN type IN (1,2) THEN amount ELSE -amount END AS delta
+            FROM trade WHERE month_key < :monthKey
+            UNION ALL
+            SELECT to_account_id, amount FROM trade
+            WHERE type = 4 AND to_account_id IS NOT NULL AND month_key < :monthKey
+        )
+        GROUP BY accountId
+        """,
+    )
+    suspend fun balancesBefore(monthKey: Int): List<AccountBalance>
 
     @Query("SELECT * FROM trade WHERE account_id = :accountId ORDER BY occurred_at DESC, id DESC LIMIT :limit")
     suspend fun firstPageForAccount(accountId: Long, limit: Int): List<TradeEntity>

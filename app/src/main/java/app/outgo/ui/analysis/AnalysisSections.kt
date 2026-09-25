@@ -13,14 +13,17 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -61,8 +64,8 @@ import java.util.Locale
  * for its chart area and a fixed row count for its lists, so the skeleton, the empty state and the
  * loaded state are all exactly as tall — nothing on the page moves when data arrives.
  *
- * ★ sections read [AnalysisMode]; the heatmap, weekday and size-mix sections are expense-only and
- * are hidden entirely in Income mode rather than shown with nothing in them.
+ * Sections that read [AnalysisMode] get it from their own card's chip; the heatmap, weekday and
+ * size-mix sections are expense-only and have no chip.
  */
 
 // Heights are shared by the real content, the empty state and the skeleton.
@@ -71,6 +74,7 @@ val PaceHeight = 140.dp
 val BarsHeight = 140.dp
 val WeekdayHeight = 140.dp
 val YoyHeight = 140.dp
+val BalanceHeight = 160.dp
 private val RowHeight = 44.dp
 private val MoverRowHeight = 36.dp
 private val MoverLabelHeight = 22.dp
@@ -138,13 +142,83 @@ internal fun deltaColor(delta: Long, kind: Int = CategoryKind.EXPENSE): Color {
     }
 }
 
+/**
+ * Drawn at the end of a section's title row: the card's chips. Provided by the chart list around
+ * each card, so the skeleton, the empty state and the loaded section all carry it.
+ */
+val LocalSectionAction = compositionLocalOf<(@Composable () -> Unit)?> { null }
+
 @Composable
 fun Section(title: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    val action = LocalSectionAction.current
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        Row(modifier = Modifier.fillMaxWidth().height(SectionTitleHeight), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            action?.invoke()
+        }
         content()
     }
 }
+
+/** Fits a chip, so a card with one is as tall as a card without. */
+private val SectionTitleHeight = 28.dp
+
+/** A compact dropdown in a section's title row: the current choice and a caret. */
+@Composable
+fun <T> ChoiceChip(label: String, options: List<Pair<T, String>>, onSelect: (T) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { open = true }
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 120.dp),
+            )
+            Icon(
+                painter = painterResource(R.drawable.ph_caret_down),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = 2.dp).size(12.dp),
+            )
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            options.forEach { (value, text) ->
+                DropdownMenuItem(
+                    text = { Text(text) },
+                    onClick = {
+                        open = false
+                        onSelect(value)
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun modeLabel(mode: AnalysisMode): String = stringResource(
+    when (mode) {
+        AnalysisMode.EXPENSE -> R.string.trade_expense
+        AnalysisMode.INCOME -> R.string.trade_income
+        AnalysisMode.ALL -> R.string.analysis_mode_all
+    },
+)
 
 /** Same height as the loaded section, with a neutral block instead of the chart. */
 @Composable
@@ -189,28 +263,6 @@ fun <T> StageSection(
         is Stage.Loading -> SectionSkeleton(title, height, modifier)
         is Stage.Empty -> SectionEmpty(title, height, modifier)
         is Stage.Ready -> content(stage.data)
-    }
-}
-
-// ------------------------------------------------------------------ section 0
-
-@Composable
-fun ModeSwitch(mode: AnalysisMode, onSelect: (AnalysisMode) -> Unit, modifier: Modifier = Modifier) {
-    val labels = listOf(
-        AnalysisMode.EXPENSE to stringResource(R.string.trade_expense),
-        AnalysisMode.INCOME to stringResource(R.string.trade_income),
-        AnalysisMode.ALL to stringResource(R.string.analysis_mode_all),
-    )
-    SingleChoiceSegmentedButtonRow(modifier = modifier.fillMaxWidth()) {
-        labels.forEachIndexed { index, (value, label) ->
-            SegmentedButton(
-                selected = mode == value,
-                onClick = { onSelect(value) },
-                shape = SegmentedButtonDefaults.itemShape(index = index, count = labels.size),
-            ) {
-                Text(label)
-            }
-        }
     }
 }
 
@@ -296,8 +348,12 @@ private fun changeLabel(delta: Long, percent: Int, yearly: Boolean): String =
 
 private fun signedPercent(percent: Int): String = (if (percent > 0) "+" else "") + "$percent%"
 
-// ------------------------------------------------------------------ section 2
+// -------------------------------------------------------------- sections 2, 3
 
+/** Skeleton height of the donut card, whose list length depends on the data. */
+val DonutCardSkeletonHeight = DonutHeight + RowHeight * 3
+
+/** The donut and its breakdown list in one card: a slice and its row share one selection. */
 @Composable
 fun DonutSection(
     expense: SliceSet,
@@ -306,8 +362,8 @@ fun DonutSection(
     selection: AnalysisSelection,
     animate: Boolean,
     modifier: Modifier = Modifier,
+    title: String = categoryTitle(mode),
 ) {
-    val title = categoryTitle(mode)
     val shown = if (mode == AnalysisMode.INCOME) income else expense
     // All mode's centre shows the net of both rings, signed and coloured like the summary.
     val net = income.donut.total - expense.donut.total
@@ -341,28 +397,14 @@ fun DonutSection(
                 progress = introProgress(animate),
                 modifier = Modifier.fillMaxWidth().height(DonutHeight),
             )
+            // All mode lists expense first, then income — the stated priority, not interleaved by amount.
+            val rows = when (mode) {
+                AnalysisMode.EXPENSE -> expense.rows
+                AnalysisMode.INCOME -> income.rows
+                AnalysisMode.ALL -> expense.rows + income.rows
+            }
+            Column { rows.forEach { BreakdownRowItem(it, selection) } }
         }
-    }
-}
-
-// ------------------------------------------------------------------ section 3
-
-@Composable
-fun BreakdownSection(
-    expense: SliceSet,
-    income: SliceSet,
-    mode: AnalysisMode,
-    selection: AnalysisSelection,
-    modifier: Modifier = Modifier,
-) {
-    // All mode lists expense first, then income — the stated priority, not interleaved by amount.
-    val rows = when (mode) {
-        AnalysisMode.EXPENSE -> expense.rows
-        AnalysisMode.INCOME -> income.rows
-        AnalysisMode.ALL -> expense.rows + income.rows
-    }
-    Section(stringResource(R.string.analysis_breakdown_title), modifier) {
-        if (rows.isEmpty()) EmptyBox(RowHeight) else rows.forEach { BreakdownRowItem(it, selection) }
     }
 }
 
@@ -493,16 +535,9 @@ fun BarsSection(
 @Composable
 fun MoversSection(movers: MoversUi, mode: AnalysisMode, animate: Boolean, modifier: Modifier = Modifier) {
     val description = stringResource(R.string.analysis_cd_movers)
-    // The delta column is as wide as its widest label in every row, so all bars share one zero line.
-    val style = MaterialTheme.typography.bodySmall
-    val measurer = rememberTextMeasurer()
-    val density = LocalDensity.current
-    val deltaWidth = remember(movers, mode, style, density) {
-        val rows = if (mode == AnalysisMode.ALL) movers.all.expense + movers.all.income else movers.of(mode)
-        with(density) {
-            (rows.maxOfOrNull { measurer.measure(Money.formatSignedNoCurrency(it.delta), style).size.width } ?: 0).toDp()
-        }
-    }
+    val deltaWidth = rememberDeltaWidth(
+        remember(movers, mode) { if (mode == AnalysisMode.ALL) movers.all.expense + movers.all.income else movers.of(mode) },
+    )
     Section(stringResource(R.string.analysis_movers_title), modifier.semantics { contentDescription = description }) {
         Column(modifier = Modifier.fillMaxWidth().height(moversContentHeight(mode))) {
             if (mode == AnalysisMode.ALL) {
@@ -516,6 +551,19 @@ fun MoversSection(movers: MoversUi, mode: AnalysisMode, animate: Boolean, modifi
                     rows.forEach { mover -> MoverRowItem(mover, deltaWidth, animate) }
                 }
             }
+        }
+    }
+}
+
+/** The delta column is as wide as its widest label in every row, so all bars share one zero line. */
+@Composable
+private fun rememberDeltaWidth(rows: List<MoverRow>): Dp {
+    val style = MaterialTheme.typography.bodySmall
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    return remember(rows, style, density) {
+        with(density) {
+            (rows.maxOfOrNull { measurer.measure(Money.formatSignedNoCurrency(it.delta), style).size.width } ?: 0).toDp()
         }
     }
 }
@@ -843,6 +891,62 @@ fun YearSummarySection(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+    }
+}
+
+// ------------------------------------------------------------------- accounts
+
+@Composable
+fun accountTitle(mode: AnalysisMode): String = stringResource(
+    when (mode) {
+        AnalysisMode.EXPENSE -> R.string.analysis_by_account_title
+        AnalysisMode.INCOME -> R.string.analysis_by_account_income_title
+        AnalysisMode.ALL -> R.string.analysis_by_account_all_title
+    },
+)
+
+/** Skeleton height for the net-flow list, whose row count depends on the data. */
+val NetFlowSkeletonHeight = MoverRowHeight * 3
+
+/** Each account's balance change over the period, transfers and adjustments included. */
+@Composable
+fun NetFlowSection(rows: List<MoverRow>, animate: Boolean, modifier: Modifier = Modifier) {
+    val deltaWidth = rememberDeltaWidth(rows)
+    val description = stringResource(R.string.analysis_cd_net_flow)
+    Section(stringResource(R.string.analysis_net_flow_title), modifier.semantics { contentDescription = description }) {
+        if (rows.isEmpty()) {
+            EmptyBox(MoverRowHeight)
+        } else {
+            Column { rows.forEach { MoverRowItem(it, deltaWidth, animate) } }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun BalanceTrendSection(balance: BalanceTrendUi, animate: Boolean, modifier: Modifier = Modifier) {
+    val months = stringArrayResource(R.array.month_abbrev)
+    val labels = remember(balance.months, months) { balance.months.map { months[(it % 100) - 1] } }
+    val description = stringResource(R.string.analysis_cd_balance, balance.lines.size)
+    Section(stringResource(R.string.analysis_balance_title), modifier.semantics { contentDescription = description }) {
+        if (balance.lines.isEmpty()) {
+            EmptyBox(BalanceHeight)
+        } else {
+            BalanceChart(balance, labels, introProgress(animate), Modifier.fillMaxWidth().height(BalanceHeight))
+            // Wraps: there can be more accounts than one row holds.
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                balance.lines.forEach { line ->
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Box(Modifier.size(10.dp).background(Color(line.color), RoundedCornerShape(2.dp)))
+                        Text(line.name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
         }
     }
 }

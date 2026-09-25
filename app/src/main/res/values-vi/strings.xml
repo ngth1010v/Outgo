@@ -134,7 +134,6 @@
     <string name="analysis_vs_last_month_percent">%1$s (%2$d%%) so với tháng trước</string>
     <string name="analysis_by_category_title">Chi theo danh mục</string>
     <string name="analysis_by_category_income_title">Thu theo danh mục</string>
-    <string name="analysis_breakdown_title">Chi tiết danh mục</string>
     <string name="analysis_pace_title">Nhịp chi tiêu</string>
     <string name="analysis_this_month">Tháng này</string>
     <string name="analysis_last_month">Tháng trước</string>
@@ -234,4 +233,21 @@
     <string name="unit_thousand">K</string>
     <string name="unit_million">Tr</string>
     <string name="unit_billion">T</string>
+    <string name="analysis_tab_categories">Danh mục</string>
+    <string name="analysis_tab_accounts">Tài khoản</string>
+    <string name="analysis_add_chart">Thêm biểu đồ</string>
+    <string name="analysis_delete_chart">Thả vào đây để xoá biểu đồ</string>
+    <string name="analysis_chart_deleted">Đã xoá biểu đồ</string>
+    <string name="analysis_chart_pace">Nhịp độ</string>
+    <string name="analysis_chart_account_largest">Lớn nhất theo tài khoản</string>
+    <string name="analysis_by_account_title">Chi tiêu theo tài khoản</string>
+    <string name="analysis_by_account_income_title">Thu nhập theo tài khoản</string>
+    <string name="analysis_by_account_all_title">Theo tài khoản</string>
+    <string name="analysis_net_flow_title">Dòng tiền ròng theo tài khoản</string>
+    <string name="analysis_balance_title">Xu hướng số dư</string>
+    <string name="analysis_cd_net_flow">Số dư mỗi tài khoản đã thay đổi bao nhiêu trong kỳ này</string>
+    <string name="analysis_cd_balance">Số dư cuối tháng của %1$d tài khoản</string>
+    <string name="analysis_group_overview">Tổng quan</string>
+    <string name="analysis_group_over_time">Theo thời gian</string>
+    <string name="analysis_group_details">Chi tiết</string>
 </resources>

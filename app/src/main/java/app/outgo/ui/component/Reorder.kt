@@ -21,10 +21,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.LocalPinnableContainer
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.IntOffset
@@ -56,6 +59,7 @@ class ReorderState internal constructor(
     private val scope: CoroutineScope,
     private val edgeZone: Float,
     private val maxScroll: Float,
+    private val followX: Float,
 ) {
     private var keys: List<Any> = emptyList()
     private var canDrag: (Any) -> Boolean = { false }
@@ -70,9 +74,15 @@ class ReorderState internal constructor(
     var draggingKey: Any? by mutableStateOf(null)
         private set
 
+    /** The finger's x in the root, for a drop zone at an edge; kept after a drop for onDrop to read. */
+    var fingerX by mutableFloatStateOf(0f)
+        private set
+    private var startX = 0f
+
     /** The row gliding from the finger into its slot after a drop. */
     private var settlingKey: Any? by mutableStateOf(null)
     private val settle = Animatable(0f)
+    private val settleX = Animatable(0f)
 
     /** Where the lifted row was when it lifted, in the viewport; the finger has moved it [dragY] since. */
     private var startTop = 0f
@@ -118,22 +128,32 @@ class ReorderState internal constructor(
         else -> 0f
     }
 
+    /** Sideways the lifted row trails the finger at [followX] of its distance, then glides back. */
+    internal fun offsetXOf(key: Any): Float = when (key) {
+        draggingKey -> (fingerX - startX) * followX
+        settlingKey -> settleX.value
+        else -> 0f
+    }
+
     private fun find(key: Any) = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == key }
 
-    internal fun start(key: Any): Boolean {
+    internal fun start(key: Any, x: Float): Boolean {
         if (draggingKey != null || !canDrag(key)) return false
         val info = find(key) ?: return false
         startTop = info.offset.toFloat()
         itemSize = info.size
         dragY = 0f
+        startX = x
+        fingerX = x
         moving = false
         draggingKey = key
         edgeScroll = scope.launch { followEdges(key) }
         return true
     }
 
-    internal fun drag(dy: Float) {
+    internal fun drag(dy: Float, x: Float) {
         if (draggingKey == null) return
+        fingerX = x
         dragY += dy
         judge()
     }
@@ -142,10 +162,13 @@ class ReorderState internal constructor(
         val key = draggingKey ?: return
         edgeScroll?.cancel()
         val offset = offsetOf(key)
+        val offsetX = offsetXOf(key)
         // Undispatched, so the glide starts from the finger in the frame the row is let go.
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
             settle.snapTo(offset)
+            settleX.snapTo(offsetX)
             settlingKey = key
+            launch { settleX.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow)) }
             draggingKey = null
             onDrop(key)
             try {
@@ -212,11 +235,11 @@ class ReorderState internal constructor(
 }
 
 @Composable
-fun rememberReorderState(listState: LazyListState): ReorderState {
+fun rememberReorderState(listState: LazyListState, followX: Float = 0f): ReorderState {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
-    return remember(listState, density) {
-        with(density) { ReorderState(listState, scope, EdgeZone.toPx(), MaxScrollPerFrame.toPx()) }
+    return remember(listState, density, followX) {
+        with(density) { ReorderState(listState, scope, EdgeZone.toPx(), MaxScrollPerFrame.toPx(), followX) }
     }
 }
 
@@ -237,21 +260,26 @@ fun LazyItemScope.reorderableItem(state: ReorderState, key: Any): Modifier {
         val handle = if (dragging) pinnable?.pin() else null
         onDispose { handle?.release() }
     }
+    // The row's own coordinates move with its layer, so the finger is tracked in root space.
+    val coords = remember { arrayOfNulls<LayoutCoordinates>(1) }
+    fun rootX(local: Offset) = coords[0]?.takeIf { it.isAttached }?.localToRoot(local)?.x ?: local.x
     return slideItem(lifted)
         .zIndex(if (lifted) 1f else 0f)
         .graphicsLayer {
             translationY = state.offsetOf(key)
+            translationX = state.offsetXOf(key)
             scaleX = 1f + LiftScale * lift
             scaleY = scaleX
             shadowElevation = LiftElevation.toPx() * lift
             shape = RowShape
         }
+        .onGloballyPositioned { coords[0] = it }
         .pointerInput(state, key) {
             detectDragGesturesAfterLongPress(
-                onDragStart = { if (state.start(key)) haptic.performHapticFeedback(HapticFeedbackType.LongPress) },
+                onDragStart = { if (state.start(key, rootX(it))) haptic.performHapticFeedback(HapticFeedbackType.LongPress) },
                 onDrag = { change, amount ->
                     change.consume()
-                    state.drag(amount.y)
+                    state.drag(amount.y, rootX(change.position))
                 },
                 onDragEnd = state::end,
                 onDragCancel = state::end,

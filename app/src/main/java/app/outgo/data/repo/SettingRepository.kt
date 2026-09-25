@@ -49,4 +49,8 @@ class SettingRepository(private val context: Context, private val settingDao: Se
     private suspend fun setFlag(key: String, value: Boolean) {
         settingDao.set(SettingEntity(key, if (value) "1" else "0"))
     }
+
+    suspend fun get(key: String): String? = settingDao.get(key)
+
+    suspend fun set(key: String, value: String) = settingDao.set(SettingEntity(key, value))
 }

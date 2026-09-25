@@ -141,7 +141,6 @@
     <string name="analysis_vs_last_month_percent">%1$s (%2$d%%) vs last month</string>
     <string name="analysis_by_category_title">Expense by category</string>
     <string name="analysis_by_category_income_title">Income by category</string>
-    <string name="analysis_breakdown_title">Category breakdown</string>
     <string name="analysis_pace_title">Spending pace</string>
     <string name="analysis_this_month">This month</string>
     <string name="analysis_last_month">Last month</string>
@@ -247,4 +246,21 @@
     <string name="unit_thousand">K</string>
     <string name="unit_million">M</string>
     <string name="unit_billion">B</string>
+    <string name="analysis_tab_categories">Categories</string>
+    <string name="analysis_tab_accounts">Accounts</string>
+    <string name="analysis_add_chart">Add chart</string>
+    <string name="analysis_delete_chart">Drop here to remove the chart</string>
+    <string name="analysis_chart_deleted">Chart removed</string>
+    <string name="analysis_chart_pace">Pace</string>
+    <string name="analysis_chart_account_largest">Largest per account</string>
+    <string name="analysis_by_account_title">Expense by account</string>
+    <string name="analysis_by_account_income_title">Income by account</string>
+    <string name="analysis_by_account_all_title">By account</string>
+    <string name="analysis_net_flow_title">Net flow per account</string>
+    <string name="analysis_balance_title">Balance trend</string>
+    <string name="analysis_cd_net_flow">How much each account\'s balance changed in this period</string>
+    <string name="analysis_cd_balance">Month-end balances of %1$d accounts</string>
+    <string name="analysis_group_overview">Overview</string>
+    <string name="analysis_group_over_time">Over time</string>
+    <string name="analysis_group_details">Details</string>
 </resources>

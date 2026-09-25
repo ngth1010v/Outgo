@@ -7,11 +7,11 @@ import androidx.compose.runtime.Immutable
  * [buildTrades], [buildYearStats] and [buildYearTrades]. Composables only read these — no summing,
  * sorting or percentage maths happens inside a composition or a draw lambda.
  *
- * Every model carries **both** kinds at once rather than being rebuilt per mode, so flipping the
- * Expense/Income/All switch picks a precomputed series instead of re-querying.
+ * Every model carries **both** kinds at once rather than being rebuilt per mode, so flipping a
+ * card's Expense/Income/All chip picks a precomputed series instead of re-querying.
  */
 
-/** The page-wide switch. Transfers are never part of it — they have their own section. */
+/** A card's kind chip. Transfers are never part of it — they have their own chart. */
 enum class AnalysisMode { EXPENSE, INCOME, ALL }
 
 /** One section's data is either still loading, known-empty, or ready. */
@@ -282,6 +282,43 @@ data class YoyUi(val expense: YoySeries, val income: YoySeries, val maxTotal: Lo
     fun of(mode: AnalysisMode): YoySeries = if (mode == AnalysisMode.INCOME) income else expense
 }
 
+// ------------------------------------------------------------------- accounts
+
+/** One account's balance at the end of each month of [BalanceTrendUi.months]. */
+@Immutable
+data class BalanceLine(val accountId: Long, val name: String, val color: Int, val values: List<Long>)
+
+@Immutable
+data class BalanceTrendUi(
+    val months: List<Int>,
+    val lines: List<BalanceLine>,
+    /** The value axis runs from [min] to [max]; both include 0. */
+    val min: Long,
+    val max: Long,
+)
+
+@Immutable
+data class LargestSet(val expense: List<LargestItem>, val income: List<LargestItem>, val all: List<LargestItem>) {
+    fun of(mode: AnalysisMode): List<LargestItem> = when (mode) {
+        AnalysisMode.EXPENSE -> expense
+        AnalysisMode.INCOME -> income
+        AnalysisMode.ALL -> all
+    }
+}
+
+/**
+ * The Accounts page. [expense]/[income] reuse the category donut's shape with an account id as
+ * `rootId`; [netFlow] reuses the movers' row, signed like income (up is green).
+ */
+@Immutable
+data class AccountsUi(
+    val expense: SliceSet,
+    val income: SliceSet,
+    val netFlow: List<MoverRow>,
+    val balance: BalanceTrendUi,
+    val largest: Map<Long, LargestSet>,
+)
+
 // ------------------------------------------------------------------- stages
 
 @Immutable
@@ -306,6 +343,7 @@ data class TradesData(
     val incomeLargest: List<LargestItem>,
     val allLargest: List<LargestItem>,
     val transfers: TransfersUi,
+    val accounts: AccountsUi,
 ) {
     fun largestOf(mode: AnalysisMode): List<LargestItem> = when (mode) {
         AnalysisMode.EXPENSE -> expenseLargest
@@ -328,6 +366,7 @@ data class YearStatsData(
 @Immutable
 data class YearTradesData(
     val transfers: TransfersUi,
+    val accounts: AccountsUi,
     val expenseLargest: List<LargestItem>,
     val incomeLargest: List<LargestItem>,
     val allLargest: List<LargestItem>,

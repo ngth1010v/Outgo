@@ -52,6 +52,7 @@ data class TradeSlim(
     val occurredAt: Long,
     val categoryId: Long?,
     val note: String?,
+    val accountId: Long = 0,
 )
 
 /**
@@ -63,4 +64,20 @@ data class TransferTotal(
     val toAccountId: Long?,
     val count: Int,
     val total: Long,
+)
+
+/** [type] is a [app.outgo.domain.TradeType], or [FLOW_TRANSFER_IN] for a transfer's receiving end. */
+data class AccountFlow(
+    val monthKey: Int,
+    val accountId: Long,
+    val type: Int,
+    val total: Long,
+)
+
+/** Pseudo trade type: the receiving account's side of a transfer. */
+const val FLOW_TRANSFER_IN = 5
+
+data class AccountBalance(
+    val accountId: Long,
+    val balance: Long,
 )

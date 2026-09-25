@@ -1,5 +1,8 @@
 package app.outgo.ui.analysis
 
+import app.outgo.data.db.dao.AccountBalance
+import app.outgo.data.db.dao.AccountFlow
+import app.outgo.data.db.dao.FLOW_TRANSFER_IN
 import app.outgo.data.db.dao.MonthCategoryTotal
 import app.outgo.data.db.dao.TradeSlim
 import app.outgo.data.db.dao.TransferTotal
@@ -88,10 +91,8 @@ fun buildYearStats(
 ): Stage<YearStatsData> {
     val byMonth = totals.groupBy { it.monthKey }
     val months = monthsOfYear(year)
-    val today = Instant.ofEpochMilli(nowMillis).atZone(zone).toLocalDate()
-    val partial = today.year == year
-    // A partial year is compared against the same months of last year, never against 12.
-    val monthsCounted = if (partial) today.monthValue else 12
+    val partial = Instant.ofEpochMilli(nowMillis).atZone(zone).year == year
+    val monthsCounted = countedMonths(year, zone, nowMillis)
     val counted = months.take(monthsCounted)
     val previousCounted = monthsOfYear(year - 1).take(monthsCounted)
 
@@ -128,6 +129,12 @@ fun buildYearStats(
             yoy = buildYoy(byMonth, year, monthsCounted),
         ),
     )
+}
+
+/** A partial (current) year is compared against the same months of last year, never against 12. */
+fun countedMonths(year: Int, zone: ZoneId, nowMillis: Long = System.currentTimeMillis()): Int {
+    val today = Instant.ofEpochMilli(nowMillis).atZone(zone).toLocalDate()
+    return if (today.year == year) today.monthValue else 12
 }
 
 /** Days the month's average divides by: elapsed so far for the live month, else its full length. */
@@ -174,7 +181,7 @@ private fun summaryOf(
     )
 }
 
-private fun buildSliceSet(
+internal fun buildSliceSet(
     current: List<MonthCategoryTotal>,
     previous: List<MonthCategoryTotal>,
     kind: Int,
@@ -379,6 +386,7 @@ fun buildTrades(
     accounts: Map<Long, Triple<String, Long?, Int>>,
     zone: ZoneId = ZoneId.systemDefault(),
     nowMillis: Long = System.currentTimeMillis(),
+    accountsUi: AccountsUi = EmptyAccounts,
 ): Stage<TradesData> {
     val ym = yearMonthOf(month)
     val prevYm = ym.minusMonths(1)
@@ -421,6 +429,7 @@ fun buildTrades(
             incomeLargest = largestOf(currentRows, TradeType.INCOME, categories),
             allLargest = largestOf(currentRows, null, categories),
             transfers = transfersUi,
+            accounts = accountsUi,
         ),
     )
 }
@@ -433,6 +442,7 @@ fun buildYearTrades(
     categories: Map<Long, Triple<String, Long?, Int>>,
     accounts: Map<Long, Triple<String, Long?, Int>>,
     zone: ZoneId = ZoneId.systemDefault(),
+    accountsUi: AccountsUi = EmptyAccounts,
 ): Stage<YearTradesData> {
     val months = monthsOfYear(year).toSet()
     val inYear = rows.filter { monthKeyOf(it.occurredAt, zone) in months }
@@ -441,6 +451,7 @@ fun buildYearTrades(
     return Stage.Ready(
         YearTradesData(
             transfers = transfersUi,
+            accounts = accountsUi,
             expenseLargest = largestOf(inYear, TradeType.EXPENSE, categories),
             incomeLargest = largestOf(inYear, TradeType.INCOME, categories),
             allLargest = largestOf(inYear, null, categories),
@@ -470,6 +481,92 @@ internal fun largestOf(
             note = row.note,
         )
     }
+
+// ------------------------------------------------------------------ ACCOUNTS
+
+private val EmptySlices = SliceSet(DonutUi(emptyList(), 0L), emptyList(), 0L, 0L, 0)
+val EmptyAccounts = AccountsUi(EmptySlices, EmptySlices, emptyList(), BalanceTrendUi(emptyList(), emptyList(), 0L, 1L), emptyMap())
+
+/** What a flow row does to its account's balance — the same signs as the balance triggers. */
+private fun signed(flow: AccountFlow): Long = when (flow.type) {
+    TradeType.INCOME, TradeType.ADJUST_IN, FLOW_TRANSFER_IN -> flow.total
+    else -> -flow.total
+}
+
+/**
+ * The Accounts page for one period. [flows] must cover [previous], [period] and [trend];
+ * [opening] is every balance at the start of `trend.first()`. [rows] are the period's expense and
+ * income trades, for the per-account largest lists. [accounts] is in the user's account order.
+ */
+fun buildAccounts(
+    flows: List<AccountFlow>,
+    opening: List<AccountBalance>,
+    period: List<Int>,
+    previous: List<Int>,
+    trend: List<Int>,
+    rows: List<TradeSlim>,
+    accounts: Map<Long, Triple<String, Long?, Int>>,
+    categories: Map<Long, Triple<String, Long?, Int>>,
+    otherName: String,
+): AccountsUi {
+    fun totals(months: List<Int>, kind: Int): List<MonthCategoryTotal> {
+        val set = months.toSet()
+        return flows.filter { it.type == kind && it.monthKey in set }.groupBy { it.accountId }.map { (id, group) ->
+            val account = accounts[id]
+            MonthCategoryTotal(
+                monthKey = 0,
+                rootId = id,
+                type = kind,
+                name = account?.first.orEmpty(),
+                color = account?.third ?: OTHER_COLOR,
+                iconId = account?.second,
+                total = group.sumOf { it.total },
+            )
+        }
+    }
+
+    val periodSet = period.toSet()
+    val net = flows.filter { it.monthKey in periodSet }
+        .groupBy { it.accountId }
+        .mapValues { (_, group) -> group.sumOf(::signed) }
+        .filterValues { it != 0L }
+    val maxNet = net.values.maxOfOrNull { abs(it) }?.coerceAtLeast(1L) ?: 1L
+    val netFlow = net.entries.sortedByDescending { abs(it.value) }.map { (id, delta) ->
+        val account = accounts[id]
+        MoverRow(id, CategoryKind.INCOME, account?.first.orEmpty(), account?.second, account?.third ?: OTHER_COLOR, delta, abs(delta).toFloat() / maxNet)
+    }
+
+    val start = opening.associate { it.accountId to it.balance }
+    val monthly = flows.groupBy { it.accountId }
+        .mapValues { (_, group) -> group.groupBy { it.monthKey }.mapValues { (_, m) -> m.sumOf(::signed) } }
+    val order = accounts.keys.withIndex().associate { (i, id) -> id to i }
+    val lines = (start.keys + monthly.keys).sortedBy { order[it] ?: Int.MAX_VALUE }.mapNotNull { id ->
+        var running = start[id] ?: 0L
+        val values = trend.map { month ->
+            running += monthly[id]?.get(month) ?: 0L
+            running
+        }
+        val account = accounts[id]
+        if (values.all { it == 0L }) null else BalanceLine(id, account?.first.orEmpty(), account?.third ?: OTHER_COLOR, values)
+    }
+    val all = lines.flatMap { it.values }
+    val min = minOf(0L, all.minOrNull() ?: 0L)
+    val max = maxOf(0L, all.maxOrNull() ?: 0L).coerceAtLeast(min + 1)
+
+    return AccountsUi(
+        expense = buildSliceSet(totals(period, CategoryKind.EXPENSE), totals(previous, CategoryKind.EXPENSE), CategoryKind.EXPENSE, otherName),
+        income = buildSliceSet(totals(period, CategoryKind.INCOME), totals(previous, CategoryKind.INCOME), CategoryKind.INCOME, otherName),
+        netFlow = netFlow,
+        balance = BalanceTrendUi(trend, lines, min, max),
+        largest = rows.groupBy { it.accountId }.mapValues { (_, group) ->
+            LargestSet(
+                expense = largestOf(group, TradeType.EXPENSE, categories),
+                income = largestOf(group, TradeType.INCOME, categories),
+                all = largestOf(group, null, categories),
+            )
+        },
+    )
+}
 
 /** [accounts] maps an account id to its (name, iconId, color). */
 internal fun buildTransfers(totals: List<TransferTotal>, accounts: Map<Long, Triple<String, Long?, Int>>): TransfersUi {
@@ -538,6 +635,15 @@ fun valueTicks(max: Long, targetSteps: Int = 4): List<Long> {
     if (max <= 0L) return listOf(0L)
     val step = niceValueStep(max, targetSteps)
     return generateSequence(0L) { it + step }.takeWhile { it <= max }.toList()
+}
+
+/** Like [valueTicks] for an axis that may dip below zero: every step multiple within [min, max]. */
+fun rangeTicks(min: Long, max: Long, targetSteps: Int = 4): List<Long> {
+    if (max <= min) return listOf(min)
+    val step = niceValueStep(max - min, targetSteps)
+    // Integer division truncates toward zero, so a negative start stays at or above min.
+    val first = min / step * step
+    return generateSequence(first) { it + step }.takeWhile { it <= max }.toList()
 }
 
 /** Smallest 1/2/5 x 10^k step that splits [max] into at most [targetSteps] gaps. */

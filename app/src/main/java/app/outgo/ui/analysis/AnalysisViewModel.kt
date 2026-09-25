@@ -6,6 +6,7 @@ import app.outgo.data.db.dao.MonthCategoryTotal
 import app.outgo.data.db.dao.StatDao
 import app.outgo.data.repo.AccountRepository
 import app.outgo.data.repo.CategoryRepository
+import app.outgo.data.repo.SettingRepository
 import app.outgo.data.repo.TradeRepository
 import app.outgo.domain.CategoryKind
 import app.outgo.domain.TradeType
@@ -45,6 +46,10 @@ data class AnalysisUiState(
     val monthTrades: Map<Int, Stage<TradesData>> = emptyMap(),
     val yearStats: Map<Int, Stage<YearStatsData>> = emptyMap(),
     val yearTrades: Map<Int, Stage<YearTradesData>> = emptyMap(),
+    /** Empty until the saved layouts are read, which draws a page with no charts for that moment. */
+    val layouts: Map<LayoutSlot, List<ChartCard>> = emptyMap(),
+    /** (id, name) in the user's order, for the per-account chart's picker. */
+    val accounts: List<Pair<Long, String>> = emptyList(),
 )
 
 class AnalysisViewModel(
@@ -52,6 +57,7 @@ class AnalysisViewModel(
     private val tradeRepository: TradeRepository,
     categoryRepository: CategoryRepository,
     accountRepository: AccountRepository,
+    private val settingRepository: SettingRepository,
     private val otherName: String,
 ) : ViewModel() {
 
@@ -79,6 +85,11 @@ class AnalysisViewModel(
     /** Pages whose charts have already played their intro animation. */
     private val animated = HashSet<AnalysisPage>()
 
+    private var nextCardId = 0L
+
+    /** Layout writes chain onto the previous one, so the last edit is always the one saved. */
+    private var saveJob: Job? = null
+
     init {
         viewModelScope.launch {
             val earliest = statDao.earliestMonth() ?: currentMonth
@@ -98,7 +109,14 @@ class AnalysisViewModel(
         viewModelScope.launch {
             accountRepository.observeAll().collect { list ->
                 accounts = list.associate { it.id to Triple(it.name, it.iconId, it.color) }
+                _state.update { state -> state.copy(accounts = list.filter { !it.archived }.map { it.id to it.name }) }
             }
+        }
+        viewModelScope.launch {
+            val layouts = LayoutSlot.entries.associateWith { slot ->
+                decodeLayout(settingRepository.get(slot.settingKey), slot, nextCardId).also { nextCardId += it.size }
+            }
+            _state.update { it.copy(layouts = layouts) }
         }
         viewModelScope.launch { observeStats() }
         viewModelScope.launch {
@@ -200,8 +218,16 @@ class AnalysisViewModel(
                     val months = MonthKey.lastN(page.monthKey, 3)
                     val rows = tradeRepository.amountsAndTimesForMonths(months, TRADE_TYPES)
                     val transfers = tradeRepository.transferTotalsForMonths(listOf(page.monthKey))
+                    val trend = MonthKey.lastN(page.monthKey, TREND_MONTH_COUNT)
+                    val flows = tradeRepository.accountFlows(trend.first(), page.monthKey)
+                    val opening = tradeRepository.balancesBefore(trend.first())
                     val stage = withContext(Dispatchers.Default) {
-                        buildTrades(rows, rows, transfers, page.monthKey, categories, accounts, zone)
+                        val current = rows.filter { monthKeyOf(it.occurredAt, zone) == page.monthKey }
+                        val previous = listOf(MonthKey.minus(page.monthKey, 1))
+                        val accountsUi = buildAccounts(
+                            flows, opening, listOf(page.monthKey), previous, trend, current, accounts, categories, otherName,
+                        )
+                        buildTrades(rows, rows, transfers, page.monthKey, categories, accounts, zone, accountsUi = accountsUi)
                     }
                     monthTradesCache[page.monthKey] = stage
                 }
@@ -209,8 +235,17 @@ class AnalysisViewModel(
                     val months = monthsOfYear(page.year)
                     val rows = tradeRepository.amountsAndTimesForMonths(months, TRADE_TYPES)
                     val transfers = tradeRepository.transferTotalsForMonths(months)
+                    val counted = countedMonths(page.year, zone)
+                    val trend = months.take(counted)
+                    val previous = monthsOfYear(page.year - 1).take(counted)
+                    val flows = tradeRepository.accountFlows(previous.first(), trend.last())
+                    val opening = tradeRepository.balancesBefore(trend.first())
                     val stage = withContext(Dispatchers.Default) {
-                        buildYearTrades(rows, transfers, page.year, categories, accounts, zone)
+                        val inYear = rows.filter { monthKeyOf(it.occurredAt, zone) in trend }
+                        val accountsUi = buildAccounts(
+                            flows, opening, trend, previous, trend, inYear, accounts, categories, otherName,
+                        )
+                        buildYearTrades(rows, transfers, page.year, categories, accounts, zone, accountsUi)
                     }
                     yearTradesCache[page.year] = stage
                 }
@@ -262,6 +297,42 @@ class AnalysisViewModel(
             }
         }
         keep.forEach { loadTrades(it) }
+    }
+
+    // ------------------------------------------------------------------ layout
+
+    /** A drag step: in memory only, [saveLayout] writes it once the card is dropped. */
+    fun moveCard(slot: LayoutSlot, id: Long, to: Int) = editLayout(slot, save = false) { cards ->
+        val card = cards.first { it.id == id }
+        (cards - card).toMutableList().apply { add(to.coerceIn(0, size), card) }
+    }
+
+    fun saveLayout(slot: LayoutSlot) = editLayout(slot) { it }
+
+    fun addCard(slot: LayoutSlot, type: ChartType) = editLayout(slot) { it + ChartCard(nextCardId++, type) }
+
+    fun updateCard(slot: LayoutSlot, card: ChartCard) =
+        editLayout(slot) { cards -> cards.map { if (it.id == card.id) card else it } }
+
+    /** Returns the index the card had, for [restoreCard]. */
+    fun removeCard(slot: LayoutSlot, id: Long): Int {
+        val index = _state.value.layouts[slot]?.indexOfFirst { it.id == id } ?: -1
+        editLayout(slot) { cards -> cards.filter { it.id != id } }
+        return index
+    }
+
+    fun restoreCard(slot: LayoutSlot, index: Int, card: ChartCard) =
+        editLayout(slot) { it.toMutableList().apply { add(index.coerceIn(0, size), card) } }
+
+    private fun editLayout(slot: LayoutSlot, save: Boolean = true, edit: (List<ChartCard>) -> List<ChartCard>) {
+        val cards = edit(_state.value.layouts[slot] ?: return)
+        _state.update { it.copy(layouts = it.layouts + (slot to cards)) }
+        if (!save) return
+        val previous = saveJob
+        saveJob = viewModelScope.launch {
+            previous?.join()
+            settingRepository.set(slot.settingKey, encodeLayout(cards))
+        }
     }
 
     /** True the first time a page's charts are drawn, so a revisit doesn't re-animate. */
