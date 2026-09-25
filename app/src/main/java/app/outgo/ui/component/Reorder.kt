@@ -44,9 +44,10 @@ private val LiftElevation = 8.dp
 private const val LiftScale = -0.03f
 private val RowShape = RoundedCornerShape(12.dp)
 
-/** Rows lifted within this distance of an edge scroll the list, faster the deeper they go. */
+/** A finger within this distance of an edge scrolls the list, faster the deeper it goes. */
 private val EdgeZone = 56.dp
-private val MaxScrollPerFrame = 12.dp
+/** Per second, so the pace is the same at any refresh rate (12dp a frame at 60 Hz). */
+private val MaxScrollSpeed = 720.dp
 
 /** A lifted row trails the finger sideways at this fraction of its distance: a hint of freedom, not a move. */
 private const val FollowX = 0.15f
@@ -89,6 +90,8 @@ class ReorderState internal constructor(
 
     /** Where the lifted row was when it lifted, in the viewport; the finger has moved it [dragY] since. */
     private var startTop = 0f
+    /** Where the finger holds the row, from its top: tall rows reach an edge long before the finger. */
+    private var grabY = 0f
     private var dragY by mutableFloatStateOf(0f)
     private var itemSize = 0
     private var edgeScroll: Job? = null
@@ -140,12 +143,13 @@ class ReorderState internal constructor(
 
     private fun find(key: Any) = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == key }
 
-    internal fun start(key: Any, x: Float): Boolean {
+    internal fun start(key: Any, x: Float, y: Float): Boolean {
         if (draggingKey != null || !canDrag(key)) return false
         val info = find(key) ?: return false
         startTop = info.offset.toFloat()
         itemSize = info.size
         dragY = 0f
+        grabY = y
         startX = x
         fingerX = x
         moving = false
@@ -209,12 +213,18 @@ class ReorderState internal constructor(
 
     private fun move(key: Any, to: Int) {
         moving = true
+        // Keep the first visible index in place, not its key: when the move swaps that row the list
+        // would otherwise jump to follow it, and the rows above snap instead of sliding.
+        listState.requestScrollToItem(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset)
         onMove(key, to)
     }
 
     private suspend fun followEdges(key: Any) {
+        var last = withFrameNanos { it }
         while (draggingKey == key) {
-            withFrameNanos {}
+            val now = withFrameNanos { it }
+            val seconds = (now - last) / 1e9f
+            last = now
             if (draggingKey != key) return
             if (find(key) == null) {
                 // A move or a fold put the row off screen (it stays composed, pinned): bring it back under the finger.
@@ -223,14 +233,14 @@ class ReorderState internal constructor(
                 continue
             }
             val height = listState.layoutInfo.viewportSize.height
-            val bottom = visualTop + itemSize
+            val finger = visualTop + grabY
             val depth = when {
-                visualTop < edgeZone -> visualTop - edgeZone
-                bottom > height - edgeZone -> bottom - (height - edgeZone)
+                finger < edgeZone -> finger - edgeZone
+                finger > height - edgeZone -> finger - (height - edgeZone)
                 else -> 0f
             }
             if (depth != 0f) {
-                listState.scrollBy((depth / edgeZone).coerceIn(-1f, 1f) * maxScroll)
+                listState.scrollBy((depth / edgeZone).coerceIn(-1f, 1f) * maxScroll * seconds)
                 judge()
             }
         }
@@ -242,7 +252,7 @@ fun rememberReorderState(listState: LazyListState): ReorderState {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     return remember(listState, density) {
-        with(density) { ReorderState(listState, scope, EdgeZone.toPx(), MaxScrollPerFrame.toPx()) }
+        with(density) { ReorderState(listState, scope, EdgeZone.toPx(), MaxScrollSpeed.toPx()) }
     }
 }
 
@@ -279,7 +289,7 @@ fun LazyItemScope.reorderableItem(state: ReorderState, key: Any): Modifier {
         .onGloballyPositioned { coords[0] = it }
         .pointerInput(state, key) {
             detectDragGesturesAfterLongPress(
-                onDragStart = { if (state.start(key, rootX(it))) haptic.performHapticFeedback(HapticFeedbackType.LongPress) },
+                onDragStart = { if (state.start(key, rootX(it), it.y)) haptic.performHapticFeedback(HapticFeedbackType.LongPress) },
                 onDrag = { change, amount ->
                     change.consume()
                     state.drag(amount.y, rootX(change.position))
