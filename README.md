@@ -85,13 +85,15 @@ Open the app and you are already on the "add expense" screen. Log a purchase in 
 <img src="docs/analysis.png" align="right" width="240" alt="Analysis" />
 
 - **One page per month and one per year**, swiped through or stepped with the year and month pickers in the top bar. Swipe right off December to reach that year's summary.
-- **Categories / Accounts**, two tabs under the pickers. Each is a list of charts you arrange: long-press a chart to drag it, drop it on the red strip at the right edge to remove it (with undo), and add charts back from the + button at the bottom. Month and year pages keep separate lists, saved in the database so they travel with backups.
-- **Expense / Income / All** is picked per chart, from the chip in its title. All draws both kinds together rather than a single net figure.
+- **Categories / Accounts:** two tabs under the pickers. Categories covers where your spending and income went; Accounts covers each account.
+- **Your own layout:** every page is a list of chart cards you arrange. Long-press a card to lift it, drag it to a new place and let go. To remove a card, drag it to the right edge: a red strip opens as your finger gets close, and dropping on it removes the card (with **Undo**).
+- **Add chart:** the button at the bottom of the list opens a sheet of the charts that page offers, grouped and shown with icons. Month and year pages keep separate layouts, saved in the database so they travel with backups.
+- **Expense / Income / All** is picked per chart, from the chip in its title. New charts start on All, which draws both kinds together rather than a single net figure.
 - **Month summary:** the total signed as money flows (spending −, income +, net in All mode), the change against last month in amount and percent, the average per day, and money moved between accounts.
-- **Where the money went:** a donut and a category breakdown, a 6-month trend, and the biggest movers against last month.
-- **When it went:** a cumulative spending pace line against last month, a daily heatmap that opens that day's history, and the average spend per weekday.
+- **Where the money went:** a donut with its category breakdown in one chart (tap a slice to highlight its row), a 6-month trend, and the biggest movers against last month.
+- **When it went:** a cumulative pace line against last month, a daily heatmap that opens that day's history, and the average spend per weekday.
 - **What it went on:** the mix of purchase sizes around the month's median, and the five largest movements.
-- **Accounts tab:** spending and income per account (donut and breakdown), each account's net flow, month-end balance lines, transfers summed per account pair, and the largest movements of one chosen account.
+- **Accounts tab:** spending and income per account (donut and breakdown in one chart), each account's net flow, month-end balance lines, transfers summed per account pair, and the largest movements of one account you pick.
 - **Yearly analysis:** year summary, month-by-month bars, category totals for the year, and this year against last year. A part-finished year is compared against the same months a year earlier, never against a full twelve.
 
 <br clear="right" />
