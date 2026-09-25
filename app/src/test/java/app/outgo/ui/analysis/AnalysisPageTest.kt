@@ -4,7 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/** Page order and caret rules — §3 of `docs/analysis-v2-plan.md`. */
+/** Page order and caret rules of the Analysis pager (see AnalysisPage.kt). */
 class AnalysisPageTest {
 
     private val pages = buildPages(earliestMonth = 202511, currentMonth = 202603)
