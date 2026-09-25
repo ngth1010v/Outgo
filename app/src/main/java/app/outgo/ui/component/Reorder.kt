@@ -40,12 +40,16 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 private val LiftElevation = 8.dp
-private const val LiftScale = 0.03f
+/** Negative: a lifted row shrinks slightly, reading as picked up rather than zoomed. */
+private const val LiftScale = -0.03f
 private val RowShape = RoundedCornerShape(12.dp)
 
 /** Rows lifted within this distance of an edge scroll the list, faster the deeper they go. */
 private val EdgeZone = 56.dp
 private val MaxScrollPerFrame = 12.dp
+
+/** A lifted row trails the finger sideways at this fraction of its distance: a hint of freedom, not a move. */
+private const val FollowX = 0.15f
 
 /**
  * Long-press-and-drag reordering for a LazyColumn. The screen owns the order: [update] tells this
@@ -59,7 +63,6 @@ class ReorderState internal constructor(
     private val scope: CoroutineScope,
     private val edgeZone: Float,
     private val maxScroll: Float,
-    private val followX: Float,
 ) {
     private var keys: List<Any> = emptyList()
     private var canDrag: (Any) -> Boolean = { false }
@@ -128,9 +131,9 @@ class ReorderState internal constructor(
         else -> 0f
     }
 
-    /** Sideways the lifted row trails the finger at [followX] of its distance, then glides back. */
+    /** Sideways the lifted row trails the finger at [FollowX] of its distance, then glides back. */
     internal fun offsetXOf(key: Any): Float = when (key) {
-        draggingKey -> (fingerX - startX) * followX
+        draggingKey -> (fingerX - startX) * FollowX
         settlingKey -> settleX.value
         else -> 0f
     }
@@ -235,11 +238,11 @@ class ReorderState internal constructor(
 }
 
 @Composable
-fun rememberReorderState(listState: LazyListState, followX: Float = 0f): ReorderState {
+fun rememberReorderState(listState: LazyListState): ReorderState {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
-    return remember(listState, density, followX) {
-        with(density) { ReorderState(listState, scope, EdgeZone.toPx(), MaxScrollPerFrame.toPx(), followX) }
+    return remember(listState, density) {
+        with(density) { ReorderState(listState, scope, EdgeZone.toPx(), MaxScrollPerFrame.toPx()) }
     }
 }
 

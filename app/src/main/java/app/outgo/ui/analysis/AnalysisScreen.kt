@@ -42,6 +42,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -126,7 +127,7 @@ fun AnalysisScreen(onOpenTrade: (Long) -> Unit, onOpenDay: (Long) -> Unit) {
     val onDeleted: (LayoutSlot, Int, ChartCard) -> Unit = { slot, index, card ->
         scope.launch {
             snackbar.currentSnackbarData?.dismiss()
-            if (snackbar.showSnackbar(deletedLabel, actionLabel = undoLabel) == SnackbarResult.ActionPerformed) {
+            if (snackbar.showSnackbar(deletedLabel, actionLabel = undoLabel, duration = SnackbarDuration.Short) == SnackbarResult.ActionPerformed) {
                 viewModel.restoreCard(slot, index, card)
             }
         }
@@ -251,7 +252,7 @@ private fun AnalysisHeader(
     }
 }
 
-private val TabSwitchHeight = 28.dp
+private val TabSwitchHeight = 34.dp
 
 @Composable
 private fun TabSwitch(tab: AnalysisTab, onSelect: (AnalysisTab) -> Unit) {
@@ -259,13 +260,13 @@ private fun TabSwitch(tab: AnalysisTab, onSelect: (AnalysisTab) -> Unit) {
         AnalysisTab.CATEGORIES to stringResource(R.string.analysis_tab_categories),
         AnalysisTab.ACCOUNTS to stringResource(R.string.analysis_tab_accounts),
     )
-    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(start = 8.dp, top = 4.dp, end = 8.dp, bottom = 4.dp)) {
         labels.forEachIndexed { index, (value, label) ->
             SegmentedButton(
                 selected = tab == value,
                 onClick = { onSelect(value) },
                 shape = SegmentedButtonDefaults.itemShape(index = index, count = labels.size),
-                // 0.7x the 40dp default, overriding its minimum height.
+                // Below the 40dp default, overriding its minimum height.
                 modifier = Modifier.height(TabSwitchHeight),
                 // The default 18dp check and the text's padded slot don't fit 28dp: smaller check,
                 // and the label keeps its own height, centred in the button.
@@ -313,8 +314,8 @@ private fun HeaderRow(
     }
 }
 
-/** 0.7x the 48dp default, so the two picker rows cost one normal app bar between them. */
-private val HeaderRowHeight = 34.dp
+/** Well under the 48dp default, so the two picker rows sit close together. */
+private val HeaderRowHeight = 30.dp
 private val HeaderIconSize = 20.dp
 
 @Composable
@@ -348,9 +349,6 @@ private val DeleteZoneWidth = 45.dp
 /** A thin hint of the zone while the finger is still far from it. */
 private val DeleteZoneCollapsed = 6.dp
 
-/** A lifted card trails the finger sideways at this fraction of its distance. */
-private const val CardFollowX = 0.15f
-
 /** A shade off the page background, in both themes, so cards read as cards. */
 @Composable
 private fun cardColor(): Color =
@@ -370,7 +368,7 @@ private fun ChartList(
     onDeleted: (LayoutSlot, Int, ChartCard) -> Unit,
     chart: @Composable (ChartCard) -> Unit,
 ) {
-    val reorder = rememberReorderState(listState, followX = CardFollowX)
+    val reorder = rememberReorderState(listState)
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     var pageRight by remember { mutableFloatStateOf(0f) }

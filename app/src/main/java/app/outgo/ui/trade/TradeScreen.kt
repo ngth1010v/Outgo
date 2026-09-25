@@ -34,6 +34,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -106,7 +107,7 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit) {
         viewModel.events.collectLatest { event ->
             when (event) {
                 is TradeEvent.Saved -> {
-                    val result = snackbarHostState.showSnackbar(savedLabel, actionLabel = undoLabel)
+                    val result = snackbarHostState.showSnackbar(savedLabel, actionLabel = undoLabel, duration = SnackbarDuration.Short)
                     if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) {
                         viewModel.undo(event.tradeId)
                     }

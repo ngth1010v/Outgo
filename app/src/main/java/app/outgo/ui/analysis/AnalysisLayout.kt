@@ -103,7 +103,7 @@ private val AccountGroups
 data class ChartCard(
     val id: Long,
     val type: ChartType,
-    val mode: AnalysisMode = AnalysisMode.EXPENSE,
+    val mode: AnalysisMode = AnalysisMode.ALL,
     /** Only for [ChartType.hasAccount]; null follows the first account. */
     val accountId: Long? = null,
 )
@@ -121,7 +121,7 @@ fun decodeLayout(value: String?, slot: LayoutSlot, firstId: Long): List<ChartCar
     return value.split(';').filter { it.isNotEmpty() }.mapNotNull { entry ->
         val parts = entry.split('.')
         val type = ChartType.entries.firstOrNull { it.name == parts[0] } ?: return@mapNotNull null
-        val mode = AnalysisMode.entries.firstOrNull { it.name == parts.getOrNull(1) } ?: AnalysisMode.EXPENSE
+        val mode = AnalysisMode.entries.firstOrNull { it.name == parts.getOrNull(1) } ?: AnalysisMode.ALL
         ChartCard(0, type, mode, parts.getOrNull(2)?.toLongOrNull())
     }.mapIndexed { i, card -> card.copy(id = firstId + i) }
 }
