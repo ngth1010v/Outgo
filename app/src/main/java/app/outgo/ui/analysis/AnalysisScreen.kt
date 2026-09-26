@@ -401,7 +401,7 @@ private fun ChartList(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             items(cards, key = { it.id }, contentType = { it.type }) { card ->
-                val action: (@Composable () -> Unit)? = if (card.type.hasMode || card.type.hasAccount) {
+                val action: (@Composable () -> Unit)? = if (card.type.hasMode || card.type.hasAccount || card.type.hasZero) {
                     { CardChips(card, accounts) { viewModel.updateCard(slot, it) } }
                 } else {
                     null
@@ -455,6 +455,10 @@ private fun CardChips(card: ChartCard, accounts: List<Pair<Long, String>>, onCha
         }
         if (card.type.hasMode) {
             ChoiceChip(modeLabel(card.mode), AnalysisMode.entries.map { it to modeLabel(it) }) { onChange(card.copy(mode = it)) }
+        }
+        if (card.type.hasZero) {
+            val options = listOf(false to stringResource(R.string.analysis_axis_fit), true to stringResource(R.string.analysis_axis_zero))
+            ChoiceChip(options.first { it.first == card.zero }.second, options) { onChange(card.copy(zero = it)) }
         }
     }
 }
@@ -636,10 +640,10 @@ private fun MonthPage(
                 DonutSection(it.expense, it.income, mode, selection, animate)
             }
             ChartType.PACE -> StageSection(trades, paceTitle(mode), PaceHeight + 24.dp) {
-                PaceSection(it.pace, mode, animate)
+                PaceSection(it.pace, mode, card.zero, animate)
             }
             ChartType.TREND -> StageSection(stats, stringResource(R.string.analysis_trend_title), BarsHeight + 24.dp) {
-                BarsSection(it.bars, mode, stringResource(R.string.analysis_trend_title), onSelectMonth, animate)
+                BarsSection(it.bars, mode, card.zero, stringResource(R.string.analysis_trend_title), onSelectMonth, animate)
             }
             ChartType.MOVERS -> StageSection(stats, stringResource(R.string.analysis_movers_title), moversContentHeight(mode)) {
                 MoversSection(it.movers, mode, animate)
@@ -648,7 +652,7 @@ private fun MonthPage(
                 HeatmapSection(it.heatmap, onOpenDay)
             }
             ChartType.WEEKDAY -> StageSection(trades, stringResource(R.string.analysis_weekday_title), WeekdayHeight) {
-                WeekdaySection(it.weekday, animate)
+                WeekdaySection(it.weekday, card.zero, animate)
             }
             ChartType.BUCKETS -> StageSection(trades, stringResource(R.string.analysis_buckets_title), 232.dp) {
                 BucketsSection(it.buckets, animate)
@@ -690,13 +694,13 @@ private fun YearPage(
                 YearSummarySection(it.summary, mode, trades.dataOrNull?.transfers)
             }
             ChartType.YEAR_BARS -> StageSection(stats, stringResource(R.string.analysis_year_bars_title), BarsHeight + 24.dp) {
-                BarsSection(it.bars, mode, stringResource(R.string.analysis_year_bars_title), onSelectMonth, animate)
+                BarsSection(it.bars, mode, card.zero, stringResource(R.string.analysis_year_bars_title), onSelectMonth, animate)
             }
             ChartType.DONUT -> StageSection(stats, categoryTitle(mode), DonutCardSkeletonHeight) {
                 DonutSection(it.expense, it.income, mode, selection, animate)
             }
             ChartType.YOY -> StageSection(stats, stringResource(R.string.analysis_year_yoy_title), YoyHeight + 24.dp) {
-                YoySection(it.yoy, page.year, mode, animate)
+                YoySection(it.yoy, page.year, mode, card.zero, animate)
             }
             ChartType.LARGEST -> StageSection(trades, largestTitle(mode), 220.dp) {
                 LargestSection(it.largestOf(mode), mode, onOpenTrade)
@@ -728,10 +732,10 @@ private fun AccountChart(
             NetFlowSection(it.netFlow, animate)
         }
         ChartType.BALANCE_TREND -> StageSection(accounts, stringResource(R.string.analysis_balance_title), BalanceHeight + 24.dp) {
-            BalanceTrendSection(it.balance, animate)
+            BalanceTrendSection(it.balance, card.zero, animate)
         }
         ChartType.DAILY_BALANCE -> StageSection(accounts, stringResource(R.string.analysis_daily_balance_title), BalanceHeight + 24.dp) {
-            DailyBalanceSection(it.daily, card.accountId, animate)
+            DailyBalanceSection(it.daily, card.accountId, card.zero, animate)
         }
         ChartType.TRANSFERS -> StageSection(transfers, stringResource(R.string.analysis_transfers_title), 244.dp) {
             TransfersSection(it, animate)

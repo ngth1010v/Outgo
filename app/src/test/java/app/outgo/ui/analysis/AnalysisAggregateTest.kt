@@ -170,19 +170,6 @@ class AnalysisAggregateTest {
     // ------------------------------------------------------------------- chart axes
 
     @Test
-    fun `value ticks walk a one-two-five step and stop at the max`() {
-        assertEquals(listOf(0L, 500L, 1000L, 1500L, 2000L), valueTicks(2_000))
-        // 200 would leave 5 gaps, one too many, so the ladder steps up to 500.
-        assertEquals(listOf(0L, 500L, 1000L), valueTicks(1_000))
-        assertEquals(listOf(0L), valueTicks(0))
-        // At most targetSteps gaps, whatever the magnitude.
-        listOf(7L, 93L, 1_234L, 987_654L).forEach { max ->
-            assertTrue("$max", valueTicks(max).size <= 6)
-            assertTrue("$max", valueTicks(max).last() <= max)
-        }
-    }
-
-    @Test
     fun `day labels include the first and last day and are evenly spread`() {
         assertEquals(listOf(1, 9, 16, 24, 31), axisDays(31))
         assertEquals(listOf(1, 8, 16, 23, 30), axisDays(30))
@@ -366,7 +353,7 @@ class AnalysisAggregateTest {
     }
 
     @Test
-    fun `bars carry both kinds on one shared scale`() {
+    fun `bars carry both kinds`() {
         val totals = listOf(
             stat(202608, 1, 400), stat(202607, 1, 200),
             stat(202608, 2, 800, CategoryKind.INCOME),
@@ -376,9 +363,6 @@ class AnalysisAggregateTest {
         val august = bars.bars.single { it.monthKey == 202608 }
         assertEquals(400L, august.expense)
         assertEquals(800L, august.income)
-        // Scaled against 800, the biggest value of either kind.
-        assertEquals(0.5f, august.expenseFraction, 0.0001f)
-        assertEquals(1f, august.incomeFraction, 0.0001f)
         assertTrue(august.selected)
         assertFalse(bars.bars.single { it.monthKey == 202607 }.selected)
         assertEquals(600L / 6, bars.expenseAverage)
@@ -542,7 +526,7 @@ class AnalysisAggregateTest {
     }
 
     @Test
-    fun `year-over-year lines are cumulative and share one axis`() {
+    fun `year-over-year lines are cumulative`() {
         val thisYear = (1..3).map { stat(202600 + it, 1, 1_000) }
         val lastYear = (1..12).map { stat(202500 + it, 1, 500) }
         val yoy = (buildYearStats(thisYear + lastYear, 2026, "Other", ZONE, millis(2026, 3, 31)) as Stage.Ready)
@@ -551,9 +535,8 @@ class AnalysisAggregateTest {
         assertEquals(12, yoy.expense.previous.size)
         assertEquals(3_000L, yoy.expense.currentTotal)
         assertEquals(6_000L, yoy.expense.previousTotal)
-        assertEquals(6_000L, yoy.maxTotal)
-        assertEquals(0.5f, yoy.expense.current[2], 0.0001f)
-        assertEquals(1f, yoy.expense.previous[11], 0.0001f)
+        assertEquals(3_000L, yoy.expense.current[2])
+        assertEquals(6_000L, yoy.expense.previous[11])
     }
 
     @Test

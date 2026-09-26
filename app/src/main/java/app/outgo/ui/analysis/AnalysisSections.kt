@@ -457,10 +457,10 @@ private fun BreakdownRowItem(row: BreakdownRow, selection: AnalysisSelection) {
 // ------------------------------------------------------------------ section 4
 
 @Composable
-fun PaceSection(pace: PaceUi, mode: AnalysisMode, animate: Boolean, modifier: Modifier = Modifier) {
+fun PaceSection(pace: PaceUi, mode: AnalysisMode, zero: Boolean, animate: Boolean, modifier: Modifier = Modifier) {
     val description = stringResource(R.string.analysis_cd_pace, Money.format(pace.of(mode).currentTotal))
     Section(paceTitle(mode), modifier.semantics { contentDescription = description }) {
-        PaceChart(pace, mode, introProgress(animate), Modifier.fillMaxWidth().height(PaceHeight))
+        PaceChart(pace, mode, zero, introProgress(animate), Modifier.fillMaxWidth().height(PaceHeight))
         ChartLegend(
             listOf(
                 stringResource(R.string.analysis_this_month) to
@@ -499,6 +499,7 @@ private fun ChartLegend(items: List<Pair<String, List<Color>>>, modifier: Modifi
 fun BarsSection(
     bars: BarsUi,
     mode: AnalysisMode,
+    zero: Boolean,
     title: String,
     onSelectMonth: (Int) -> Unit,
     animate: Boolean,
@@ -517,8 +518,8 @@ fun BarsSection(
             bars = bars.bars,
             labels = labels,
             mode = mode,
-            max = bars.max,
-            averageFraction = bars.averageFractionOf(mode),
+            average = bars.averageOf(mode),
+            zero = zero,
             onSelect = onSelectMonth,
             progress = introProgress(animate),
             modifier = Modifier.fillMaxWidth().height(BarsHeight),
@@ -543,12 +544,15 @@ fun MoversSection(movers: MoversUi, mode: AnalysisMode, animate: Boolean, modifi
             if (mode == AnalysisMode.ALL) {
                 MoverHalf(stringResource(R.string.trade_expense), movers.all.expense, deltaWidth, animate)
                 MoverHalf(stringResource(R.string.trade_income), movers.all.income, deltaWidth, animate)
+                // An empty half already shows its one "no data" row.
+                NoMoreRows(MOVER_COUNT - maxOf(movers.all.expense.size, 1) - maxOf(movers.all.income.size, 1), MoverRowHeight)
             } else {
                 val rows = movers.of(mode)
                 if (rows.isEmpty()) {
                     EmptyBox(MoverRowHeight * MOVER_COUNT)
                 } else {
                     rows.forEach { mover -> MoverRowItem(mover, deltaWidth, animate) }
+                    NoMoreRows(MOVER_COUNT - rows.size, MoverRowHeight)
                 }
             }
         }
@@ -589,6 +593,19 @@ private fun MoverHalf(label: String, rows: List<MoverRow>, deltaWidth: Dp, anima
         }
     } else {
         rows.forEach { mover -> MoverRowItem(mover, deltaWidth, animate) }
+    }
+}
+
+@Composable
+/** Fills the [count] rows a short list is missing with one "no data remains" line, so the card keeps its height. */
+private fun NoMoreRows(count: Int, rowHeight: Dp) {
+    if (count <= 0) return
+    Box(modifier = Modifier.fillMaxWidth().height(rowHeight * count), contentAlignment = Alignment.Center) {
+        Text(
+            stringResource(R.string.analysis_no_more_data),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -659,13 +676,13 @@ private const val HEATMAP_ROWS = 6
 // ------------------------------------------------------------------ section 8
 
 @Composable
-fun WeekdaySection(bars: List<WeekdayBar>, animate: Boolean, modifier: Modifier = Modifier) {
+fun WeekdaySection(bars: List<WeekdayBar>, zero: Boolean, animate: Boolean, modifier: Modifier = Modifier) {
     val labels = remember(bars) {
         bars.map { DayOfWeek.of(it.weekday).getDisplayName(TextStyle.SHORT, Locale.getDefault()) }
     }
     val description = stringResource(R.string.analysis_cd_weekday)
     Section(stringResource(R.string.analysis_weekday_title), modifier.semantics { contentDescription = description }) {
-        WeekdayBars(bars, labels, introProgress(animate), Modifier.fillMaxWidth().height(WeekdayHeight))
+        WeekdayBars(bars, labels, zero, introProgress(animate), Modifier.fillMaxWidth().height(WeekdayHeight))
     }
 }
 
@@ -771,6 +788,7 @@ fun LargestSection(
                             )
                         }
                     }
+                    NoMoreRows(LARGEST_COUNT - items.size, RowHeight)
                 }
             }
         }
@@ -818,6 +836,7 @@ fun TransfersSection(transfers: TransfersUi, animate: Boolean, modifier: Modifie
                             Text(Money.format(pair.total), style = MaterialTheme.typography.bodyMedium)
                         }
                     }
+                    NoMoreRows(TRANSFER_PAIR_COUNT - transfers.pairs.size, RowHeight)
                 }
             }
         }
@@ -844,7 +863,7 @@ private val TransferIconSize = 24.dp
 // ----------------------------------------------------------------- section Y4
 
 @Composable
-fun YoySection(yoy: YoyUi, year: Int, mode: AnalysisMode, animate: Boolean, modifier: Modifier = Modifier) {
+fun YoySection(yoy: YoyUi, year: Int, mode: AnalysisMode, zero: Boolean, animate: Boolean, modifier: Modifier = Modifier) {
     val series = yoy.of(mode)
     val description = stringResource(
         R.string.analysis_cd_yoy,
@@ -852,7 +871,7 @@ fun YoySection(yoy: YoyUi, year: Int, mode: AnalysisMode, animate: Boolean, modi
         Money.format(series.previousTotal),
     )
     Section(stringResource(R.string.analysis_year_yoy_title), modifier.semantics { contentDescription = description }) {
-        YoyChart(series, year, mode, introProgress(animate), Modifier.fillMaxWidth().height(YoyHeight))
+        YoyChart(series, year, mode, zero, introProgress(animate), Modifier.fillMaxWidth().height(YoyHeight))
         ChartLegend(
             listOf(
                 "$year ${Money.format(series.currentTotal)}" to listOf(colorOf(mode)),
@@ -924,7 +943,7 @@ fun NetFlowSection(rows: List<MoverRow>, animate: Boolean, modifier: Modifier = 
 }
 
 @Composable
-fun BalanceTrendSection(balance: BalanceTrendUi, animate: Boolean, modifier: Modifier = Modifier) {
+fun BalanceTrendSection(balance: BalanceTrendUi, zero: Boolean, animate: Boolean, modifier: Modifier = Modifier) {
     val months = stringArrayResource(R.array.month_abbrev)
     val labels = remember(balance.months, months) { balance.months.map { months[(it % 100) - 1] } }
     val description = stringResource(R.string.analysis_cd_balance, balance.lines.size)
@@ -932,7 +951,7 @@ fun BalanceTrendSection(balance: BalanceTrendUi, animate: Boolean, modifier: Mod
         if (balance.lines.isEmpty()) {
             EmptyBox(BalanceHeight)
         } else {
-            BalanceChart(balance, labels, introProgress(animate), Modifier.fillMaxWidth().height(BalanceHeight))
+            BalanceChart(balance, labels, zero, introProgress(animate), Modifier.fillMaxWidth().height(BalanceHeight))
             AccountLegend(balance.lines)
         }
     }
@@ -940,14 +959,14 @@ fun BalanceTrendSection(balance: BalanceTrendUi, animate: Boolean, modifier: Mod
 
 /** [accountId] picks one account's line; null draws them all. */
 @Composable
-fun DailyBalanceSection(daily: DailyBalanceUi, accountId: Long?, animate: Boolean, modifier: Modifier = Modifier) {
+fun DailyBalanceSection(daily: DailyBalanceUi, accountId: Long?, zero: Boolean, animate: Boolean, modifier: Modifier = Modifier) {
     val lines = remember(daily, accountId) { if (accountId == null) daily.lines else daily.lines.filter { it.accountId == accountId } }
     val description = stringResource(R.string.analysis_cd_daily_balance, lines.size)
     Section(stringResource(R.string.analysis_daily_balance_title), modifier.semantics { contentDescription = description }) {
         if (lines.isEmpty()) {
             EmptyBox(BalanceHeight)
         } else {
-            DailyBalanceChart(lines, daily.daysInMonth, introProgress(animate), Modifier.fillMaxWidth().height(BalanceHeight))
+            DailyBalanceChart(lines, daily.daysInMonth, zero, introProgress(animate), Modifier.fillMaxWidth().height(BalanceHeight))
             AccountLegend(lines)
         }
     }

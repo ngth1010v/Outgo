@@ -129,8 +129,6 @@ data class MonthBar(
     val monthKey: Int,
     val expense: Long,
     val income: Long,
-    val expenseFraction: Float,
-    val incomeFraction: Float,
     val selected: Boolean,
 )
 
@@ -139,14 +137,8 @@ data class BarsUi(
     val bars: List<MonthBar>,
     val expenseAverage: Long,
     val incomeAverage: Long,
-    val expenseAverageFraction: Float,
-    val incomeAverageFraction: Float,
-    /** The amount a fraction of 1f stands for; labels the value axis. */
-    val max: Long,
 ) {
     fun averageOf(mode: AnalysisMode): Long = if (mode == AnalysisMode.INCOME) incomeAverage else expenseAverage
-    fun averageFractionOf(mode: AnalysisMode): Float =
-        if (mode == AnalysisMode.INCOME) incomeAverageFraction else expenseAverageFraction
 }
 
 // ---------------------------------------------------------------- section 6
@@ -205,7 +197,6 @@ data class WeekdayBar(
     /** 1 = Monday … 7 = Sunday, matching [java.time.DayOfWeek.getValue]. */
     val weekday: Int,
     val average: Long,
-    val fraction: Float,
 )
 
 // ---------------------------------------------------------------- section 9
@@ -273,12 +264,12 @@ data class YearSummaryUi(
     val smallestAmount: Long,
 )
 
-/** Cumulative totals per month, as fractions of the shared [YoyUi.maxTotal]; index 0 == January. */
+/** Cumulative totals per month; index 0 == January. */
 @Immutable
-data class YoySeries(val current: List<Float>, val previous: List<Float>, val currentTotal: Long, val previousTotal: Long)
+data class YoySeries(val current: List<Long>, val previous: List<Long>, val currentTotal: Long, val previousTotal: Long)
 
 @Immutable
-data class YoyUi(val expense: YoySeries, val income: YoySeries, val maxTotal: Long) {
+data class YoyUi(val expense: YoySeries, val income: YoySeries) {
     fun of(mode: AnalysisMode): YoySeries = if (mode == AnalysisMode.INCOME) income else expense
 }
 
@@ -289,13 +280,7 @@ data class YoyUi(val expense: YoySeries, val income: YoySeries, val maxTotal: Lo
 data class BalanceLine(val accountId: Long, val name: String, val color: Int, val values: List<Long>)
 
 @Immutable
-data class BalanceTrendUi(
-    val months: List<Int>,
-    val lines: List<BalanceLine>,
-    /** The value axis runs from [min] to [max]; both include 0. */
-    val min: Long,
-    val max: Long,
-)
+data class BalanceTrendUi(val months: List<Int>, val lines: List<BalanceLine>)
 
 /**
  * Each account's balance at the end of every day of one month, index 0 == the 1st. The live

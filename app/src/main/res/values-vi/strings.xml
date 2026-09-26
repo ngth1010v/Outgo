@@ -103,6 +103,7 @@
     <string name="analysis_previous_month">Tháng trước</string>
     <string name="analysis_next_month">Tháng sau</string>
     <string name="analysis_no_data">Tháng này chưa có dữ liệu</string>
+    <string name="analysis_no_more_data">Không còn dữ liệu</string>
     <string name="analysis_pace_title_income">Nhịp thu nhập</string>
     <string name="analysis_pace_title_all">Nhịp dòng tiền</string>
     <string name="analysis_by_category_all_title">Theo danh mục</string>
@@ -247,6 +248,8 @@
     <string name="analysis_balance_title">Xu hướng số dư theo tháng</string>
     <string name="analysis_daily_balance_title">Xu hướng theo ngày</string>
     <string name="analysis_accounts_all">Tất cả</string>
+    <string name="analysis_axis_fit">Tự động</string>
+    <string name="analysis_axis_zero">Gồm 0</string>
     <string name="analysis_cd_net_flow">Số dư mỗi tài khoản đã thay đổi bao nhiêu trong kỳ này</string>
     <string name="analysis_cd_balance">Số dư cuối tháng của %1$d tài khoản</string>
     <string name="analysis_cd_daily_balance">Số dư từng ngày của %1$d tài khoản</string>

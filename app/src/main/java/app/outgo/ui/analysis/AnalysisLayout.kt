@@ -22,30 +22,32 @@ enum class ChartType(
     val hasAccount: Boolean = false,
     /** The account chip also offers "All"; a null account means all of them instead of the first. */
     val allAccounts: Boolean = false,
+    /** A chart whose value axis can be pinned to reach 0; see [ChartCard.zero]. */
+    val hasZero: Boolean = false,
 ) {
     // Categories, month
     SUMMARY(R.drawable.ph_receipt),
     /** Donut and breakdown list in one card. */
     DONUT(R.drawable.ph_chart_pie_slice),
-    PACE(R.drawable.ph_chart_line_up),
-    TREND(R.drawable.ph_chart_bar),
+    PACE(R.drawable.ph_chart_line_up, hasZero = true),
+    TREND(R.drawable.ph_chart_bar, hasZero = true),
     MOVERS(R.drawable.ph_arrows_down_up),
     HEATMAP(R.drawable.ph_calendar_dots, hasMode = false),
-    WEEKDAY(R.drawable.ph_chart_bar_horizontal, hasMode = false),
+    WEEKDAY(R.drawable.ph_chart_bar_horizontal, hasMode = false, hasZero = true),
     BUCKETS(R.drawable.ph_coins, hasMode = false),
     LARGEST(R.drawable.ph_sort_descending),
 
     // Categories, year
     YEAR_SUMMARY(R.drawable.ph_receipt),
-    YEAR_BARS(R.drawable.ph_chart_bar),
-    YOY(R.drawable.ph_chart_line),
+    YEAR_BARS(R.drawable.ph_chart_bar, hasZero = true),
+    YOY(R.drawable.ph_chart_line, hasZero = true),
 
     // Accounts
     ACCOUNT_DONUT(R.drawable.ph_chart_donut),
     NET_FLOW(R.drawable.ph_arrows_down_up, hasMode = false),
-    BALANCE_TREND(R.drawable.ph_chart_line_up, hasMode = false),
+    BALANCE_TREND(R.drawable.ph_chart_line_up, hasMode = false, hasZero = true),
     /** Month pages only: a year has no single month to draw day by day. */
-    DAILY_BALANCE(R.drawable.ph_chart_line, hasMode = false, hasAccount = true, allAccounts = true),
+    DAILY_BALANCE(R.drawable.ph_chart_line, hasMode = false, hasAccount = true, allAccounts = true, hasZero = true),
     TRANSFERS(R.drawable.ph_arrows_left_right, hasMode = false),
     ACCOUNT_LARGEST(R.drawable.ph_sort_descending, hasAccount = true),
 }
@@ -119,11 +121,13 @@ data class ChartCard(
     val mode: AnalysisMode = AnalysisMode.ALL,
     /** Only for [ChartType.hasAccount]; null follows the first account. */
     val accountId: Long? = null,
+    /** Only for [ChartType.hasZero]: the value axis always takes in 0, instead of fitting the data. */
+    val zero: Boolean = false,
 )
 
-/** `TYPE.MODE.accountId` per card, `;`-separated. */
+/** `TYPE.MODE.accountId.zero` per card, `;`-separated; zero is `0` when on, empty when off. */
 fun encodeLayout(cards: List<ChartCard>): String =
-    cards.joinToString(";") { "${it.type.name}.${it.mode.name}.${it.accountId ?: ""}" }
+    cards.joinToString(";") { "${it.type.name}.${it.mode.name}.${it.accountId ?: ""}.${if (it.zero) "0" else ""}" }
 
 /**
  * Null [value] (never saved) gives the slot's default list. Unknown charts — from a newer
@@ -135,6 +139,6 @@ fun decodeLayout(value: String?, slot: LayoutSlot, firstId: Long): List<ChartCar
         val parts = entry.split('.')
         val type = ChartType.entries.firstOrNull { it.name == parts[0] } ?: return@mapNotNull null
         val mode = AnalysisMode.entries.firstOrNull { it.name == parts.getOrNull(1) } ?: AnalysisMode.ALL
-        ChartCard(0, type, mode, parts.getOrNull(2)?.toLongOrNull())
+        ChartCard(0, type, mode, parts.getOrNull(2)?.toLongOrNull(), parts.getOrNull(3) == "0")
     }.mapIndexed { i, card -> card.copy(id = firstId + i) }
 }

@@ -15,6 +15,10 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
 import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
+import kotlin.math.log10
+import kotlin.math.pow
 import kotlin.math.sign
 
 /**
@@ -254,7 +258,6 @@ private fun buildBars(byMonth: Map<Int, List<MonthCategoryTotal>>, months: List<
     fun sum(month: Int, kind: Int) = byMonth[month].orEmpty().filter { it.type == kind }.sumOf { it.total }
     val expense = months.map { sum(it, CategoryKind.EXPENSE) }
     val income = months.map { sum(it, CategoryKind.INCOME) }
-    val max = (expense + income).max().coerceAtLeast(1L)
     val expenseAverage = expense.sum() / months.size
     val incomeAverage = income.sum() / months.size
     return BarsUi(
@@ -263,44 +266,23 @@ private fun buildBars(byMonth: Map<Int, List<MonthCategoryTotal>>, months: List<
                 monthKey = m,
                 expense = expense[i],
                 income = income[i],
-                expenseFraction = expense[i].toFloat() / max,
-                incomeFraction = income[i].toFloat() / max,
                 selected = m == selected,
             )
         },
         expenseAverage = expenseAverage,
         incomeAverage = incomeAverage,
-        expenseAverageFraction = expenseAverage.toFloat() / max,
-        incomeAverageFraction = incomeAverage.toFloat() / max,
-        max = max,
     )
 }
 
 /** Cumulative month-by-month totals for [year] against the same months of the year before. */
 private fun buildYoy(byMonth: Map<Int, List<MonthCategoryTotal>>, year: Int, monthsCounted: Int): YoyUi {
-    val expense = rawYoy(byMonth, year, monthsCounted, CategoryKind.EXPENSE)
-    val income = rawYoy(byMonth, year, monthsCounted, CategoryKind.INCOME)
-    // Both kinds and both years share one axis.
-    val max = maxOf(expense.max(), income.max()).coerceAtLeast(1L)
-    return YoyUi(expense = expense.toSeries(max), income = income.toSeries(max), maxTotal = max)
-}
-
-private class YoySeriesRaw(
-    val current: List<Long>,
-    val previous: List<Long>,
-    val currentTotal: Long,
-    val previousTotal: Long,
-) {
-    fun max(): Long = maxOf(currentTotal, previousTotal)
-    fun toSeries(max: Long): YoySeries = YoySeries(
-        current = current.map { it.toFloat() / max },
-        previous = previous.map { it.toFloat() / max },
-        currentTotal = currentTotal,
-        previousTotal = previousTotal,
+    return YoyUi(
+        expense = yoySeries(byMonth, year, monthsCounted, CategoryKind.EXPENSE),
+        income = yoySeries(byMonth, year, monthsCounted, CategoryKind.INCOME),
     )
 }
 
-private fun rawYoy(byMonth: Map<Int, List<MonthCategoryTotal>>, year: Int, monthsCounted: Int, kind: Int): YoySeriesRaw {
+private fun yoySeries(byMonth: Map<Int, List<MonthCategoryTotal>>, year: Int, monthsCounted: Int, kind: Int): YoySeries {
     fun cumulative(months: List<Int>): List<Long> {
         var running = 0L
         return months.map { m ->
@@ -310,7 +292,7 @@ private fun rawYoy(byMonth: Map<Int, List<MonthCategoryTotal>>, year: Int, month
     }
     val current = cumulative(monthsOfYear(year).take(monthsCounted))
     val previous = cumulative(monthsOfYear(year - 1))
-    return YoySeriesRaw(current, previous, current.lastOrNull() ?: 0L, previous.lastOrNull() ?: 0L)
+    return YoySeries(current, previous, current.lastOrNull() ?: 0L, previous.lastOrNull() ?: 0L)
 }
 
 /**
@@ -486,7 +468,7 @@ internal fun largestOf(
 // ------------------------------------------------------------------ ACCOUNTS
 
 private val EmptySlices = SliceSet(DonutUi(emptyList(), 0L), emptyList(), 0L, 0L, 0)
-val EmptyAccounts = AccountsUi(EmptySlices, EmptySlices, emptyList(), BalanceTrendUi(emptyList(), emptyList(), 0L, 1L), emptyMap())
+val EmptyAccounts = AccountsUi(EmptySlices, EmptySlices, emptyList(), BalanceTrendUi(emptyList(), emptyList()), emptyMap())
 
 /** What a flow row does to its account's balance — the same signs as the balance triggers. */
 private fun signed(flow: AccountFlow): Long = when (flow.type) {
@@ -550,15 +532,12 @@ fun buildAccounts(
         val account = accounts[id]
         if (values.all { it == 0L }) null else BalanceLine(id, account?.first.orEmpty(), account?.third ?: OTHER_COLOR, values)
     }
-    val all = lines.flatMap { it.values }
-    val min = minOf(0L, all.minOrNull() ?: 0L)
-    val max = maxOf(0L, all.maxOrNull() ?: 0L).coerceAtLeast(min + 1)
 
     return AccountsUi(
         expense = buildSliceSet(totals(period, CategoryKind.EXPENSE), totals(previous, CategoryKind.EXPENSE), CategoryKind.EXPENSE, otherName),
         income = buildSliceSet(totals(period, CategoryKind.INCOME), totals(previous, CategoryKind.INCOME), CategoryKind.INCOME, otherName),
         netFlow = netFlow,
-        balance = BalanceTrendUi(trend, lines, min, max),
+        balance = BalanceTrendUi(trend, lines),
         largest = rows.groupBy { it.accountId }.mapValues { (_, group) ->
             LargestSet(
                 expense = largestOf(group, TradeType.EXPENSE, categories),
@@ -666,64 +645,41 @@ internal fun buildPace(
     )
 }
 
-/**
- * Value-axis ticks for [max]: 0 and every multiple of a 1/2/5 x 10^k step, aiming for about
- * [targetSteps] gaps. Pure so the chart draws a list rather than deriving one per frame.
- */
-fun valueTicks(max: Long, targetSteps: Int = 4): List<Long> {
-    if (max <= 0L) return listOf(0L)
-    val step = niceValueStep(max, targetSteps)
-    return generateSequence(0L) { it + step }.takeWhile { it <= max }.toList()
-}
-
-/** Like [valueTicks] for an axis that may dip below zero: every step multiple within [min, max]. */
-fun rangeTicks(min: Long, max: Long, targetSteps: Int = 4): List<Long> {
-    if (max <= min) return listOf(min)
-    val step = niceValueStep(max - min, targetSteps)
-    // Integer division truncates toward zero, so a negative start stays at or above min.
-    val first = min / step * step
-    return generateSequence(first) { it + step }.takeWhile { it <= max }.toList()
-}
+/** The [low]..[high] a value axis spans, and the tick values inside it. */
+data class ValueAxis(val low: Double, val high: Double, val ticks: List<Long>)
 
 /**
- * A value axis that hugs [min]..[max] instead of always reaching down to 0: both ends are
- * rounded out to a multiple of a 1/2/5 x 10^k step, and every multiple between them is a tick.
- * A flat range is widened to reach 0, or to one unit when it sits at 0.
+ * Value axis for data spanning [min]..[max] on a plot [heightPx] tall. The range is the data
+ * padded by a tenth of its span each side; with [zero] it always takes in 0, and an end that sits
+ * on 0 is not padded past it. Ticks sit on the smallest 1/2/5 x 10^k step that keeps them at
+ * least [minGapPx] apart. No ticks until the plot has a height.
  */
-fun snappedTicks(min: Long, max: Long, targetSteps: Int = 4): List<Long> {
-    var low = min
-    var high = max
-    if (low == high) {
-        low = minOf(low, 0L)
-        high = maxOf(high, 0L)
-        if (low == high) high = 1L
-    }
-    val step = niceValueStep(high - low, targetSteps)
-    val first = Math.floorDiv(low, step) * step
-    val last = -Math.floorDiv(-high, step) * step
-    return generateSequence(first) { it + step }.takeWhile { it <= last }.toList()
-}
-
-/** Smallest 1/2/5 x 10^k step that splits [max] into at most [targetSteps] gaps. */
-internal fun niceValueStep(max: Long, targetSteps: Int): Long {
-    val base = longArrayOf(1, 2, 5)
-    var step = 1L
+fun valueAxis(min: Long, max: Long, heightPx: Float, minGapPx: Float, zero: Boolean): ValueAxis {
+    val dataMin = (if (zero) minOf(min, 0L) else min).toDouble()
+    val dataMax = (if (zero) maxOf(max, 0L) else max).toDouble()
+    val delta = (dataMax - dataMin).takeIf { it > 0.0 } ?: abs(dataMax).takeIf { it > 0.0 } ?: 1.0
+    val low = if (zero && dataMin == 0.0) 0.0 else dataMin - delta / 10
+    val high = if (zero && dataMax == 0.0 && dataMin < 0.0) 0.0 else dataMax + delta / 10
+    if (heightPx <= 0f) return ValueAxis(low, high, emptyList())
+    val span = high - low
+    // Amounts are whole minor units, so the step never goes below 1.
+    var scale = 10.0.pow(floor(log10(span)) - 3).toLong().coerceAtLeast(1L)
     var index = 0
-    var power = 0
-    while (max / step > targetSteps) {
+    var step = scale
+    // Long overflows past ~9.2e18; no real amount reaches it, but stop rather than wrap.
+    while (step / span * heightPx < minGapPx && scale < Long.MAX_VALUE / 100) {
         index++
-        if (index == base.size) {
+        if (index == NiceBases.size) {
             index = 0
-            power++
+            scale *= 10
         }
-        // Long overflows past ~9.2e18; no real amount reaches it, but stop rather than wrap.
-        if (power > 18) return step
-        var scale = 1L
-        repeat(power) { scale *= 10 }
-        step = base[index] * scale
+        step = NiceBases[index] * scale
     }
-    return step
+    val first = ceil(low / step).toLong() * step
+    return ValueAxis(low, high, generateSequence(first) { it + step }.takeWhile { it <= high }.toList())
 }
+
+private val NiceBases = longArrayOf(1, 2, 5)
 
 /**
  * [count] day labels spread evenly across a month of [daysInMonth], always including day 1 and
@@ -791,8 +747,7 @@ internal fun buildWeekday(rows: List<TradeSlim>, month: Int, zone: ZoneId, nowMi
     }
 
     val averages = (1..7).map { weekday -> if (counts[weekday] == 0) 0L else totals[weekday] / counts[weekday] }
-    val max = averages.max().coerceAtLeast(1L)
-    return (1..7).map { weekday -> WeekdayBar(weekday, averages[weekday - 1], averages[weekday - 1].toFloat() / max) }
+    return (1..7).map { weekday -> WeekdayBar(weekday, averages[weekday - 1]) }
 }
 
 /** Buckets relative to the month's median purchase: <0.5x, 0.5–2x, 2–5x, >5x. */

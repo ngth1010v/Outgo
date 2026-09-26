@@ -36,23 +36,21 @@ class AnalysisLayoutTest {
     }
 
     @Test
-    fun `round trip keeps order, mode and account, skips unknown charts`() {
+    fun `round trip keeps order, mode, account and zero, skips unknown charts`() {
         val cards = listOf(
             ChartCard(0, ChartType.ACCOUNT_LARGEST, AnalysisMode.INCOME, 7),
             ChartCard(1, ChartType.NET_FLOW),
             ChartCard(2, ChartType.ACCOUNT_DONUT, AnalysisMode.ALL),
+            ChartCard(3, ChartType.BALANCE_TREND, zero = true),
         )
         val encoded = encodeLayout(cards)
         assertEquals(cards, decodeLayout(encoded, LayoutSlot.MONTH_ACCOUNTS, 0))
         val withFuture = "FUTURE_CHART.ALL.;$encoded"
         assertEquals(cards, decodeLayout(withFuture, LayoutSlot.MONTH_ACCOUNTS, 0))
+        // Saved before the zero option existed.
+        assertEquals(listOf(ChartCard(0, ChartType.NET_FLOW)), decodeLayout("NET_FLOW.ALL.", LayoutSlot.MONTH_ACCOUNTS, 0))
     }
 
-    @Test
-    fun `range ticks cross zero`() {
-        assertEquals(listOf(-200L, 0L, 200L, 400L, 600L), rangeTicks(-250, 700))
-        assertEquals(listOf(0L, 5L, 10L), rangeTicks(0, 10))
-    }
 
     @Test
     fun `accounts split kinds, sign net flow and build balances from the opening`() {
@@ -86,18 +84,22 @@ class AnalysisLayoutTest {
         // Bank +1000 -200, Cash -300 +200.
         assertEquals(listOf(2L to 800L, 1L to -100L), ui.netFlow.map { it.rootId to it.delta })
         assertEquals(listOf(listOf(400L, 300L), listOf(0L, 800L)), ui.balance.lines.map { it.values })
-        assertEquals(0L, ui.balance.min)
-        assertEquals(800L, ui.balance.max)
         assertEquals(listOf(1L), ui.largest.getValue(1).expense.map { it.tradeId })
         assertEquals(listOf(2L), ui.largest.getValue(2).all.map { it.tradeId })
     }
 
     @Test
-    fun `snapped ticks hug the range on a nice step`() {
-        assertEquals(listOf(1_000L, 1_020L, 1_040L, 1_060L, 1_080L), snappedTicks(1_003, 1_071))
-        assertEquals(listOf(-200L, 0L, 200L, 400L, 600L, 800L), snappedTicks(-150, 700))
-        // A flat line is widened to reach 0.
-        assertEquals(listOf(0L, 200L, 400L, 600L), snappedTicks(500, 500))
+    fun `value axis pads the data, or takes in 0, with ticks at least the gap apart`() {
+        // 1000..1100 padded by 10 each side; 50 is the smallest 1/2/5 step 20px apart on 100px.
+        assertEquals(ValueAxis(990.0, 1110.0, listOf(1_000L, 1_050L, 1_100L)), valueAxis(1_000, 1_100, 100f, 20f, zero = false))
+        // Pinned to 0 at the bottom, padded only at the top.
+        assertEquals(ValueAxis(0.0, 1210.0, listOf(0L, 500L, 1_000L)), valueAxis(1_000, 1_100, 100f, 20f, zero = true))
+        // All below 0: pinned at the top instead.
+        assertEquals(0.0, valueAxis(-500, -100, 100f, 20f, zero = true).high, 0.0)
+        // A flat line is widened by a tenth of its value.
+        assertEquals(ValueAxis(450.0, 550.0, listOf(460L, 480L, 500L, 520L, 540L)), valueAxis(500, 500, 100f, 20f, zero = false))
+        // No height yet, no ticks.
+        assertEquals(emptyList<Long>(), valueAxis(0, 10, 0f, 20f, zero = false).ticks)
     }
 
     @Test

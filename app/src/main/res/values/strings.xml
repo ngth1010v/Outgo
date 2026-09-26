@@ -110,6 +110,7 @@
     <string name="analysis_previous_month">Previous month</string>
     <string name="analysis_next_month">Next month</string>
     <string name="analysis_no_data">No data for this month</string>
+    <string name="analysis_no_more_data">No data remains</string>
     <string name="analysis_pace_title_income">Income pace</string>
     <string name="analysis_pace_title_all">Cash flow pace</string>
     <string name="analysis_by_category_all_title">By category</string>
@@ -260,6 +261,8 @@
     <string name="analysis_balance_title">Monthly balance trend</string>
     <string name="analysis_daily_balance_title">Daily trend</string>
     <string name="analysis_accounts_all">All</string>
+    <string name="analysis_axis_fit">Auto</string>
+    <string name="analysis_axis_zero">With 0</string>
     <string name="analysis_cd_net_flow">How much each account\'s balance changed in this period</string>
     <string name="analysis_cd_balance">Month-end balances of %1$d accounts</string>
     <string name="analysis_cd_daily_balance">Daily balances of %1$d accounts</string>
