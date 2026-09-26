@@ -81,3 +81,10 @@ data class AccountBalance(
     val accountId: Long,
     val balance: Long,
 )
+
+/** One trade's effect on one account's balance; a transfer comes back as two moves. */
+data class AccountMove(
+    val accountId: Long,
+    val occurredAt: Long,
+    val delta: Long,
+)

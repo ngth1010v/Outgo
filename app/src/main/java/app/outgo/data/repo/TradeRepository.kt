@@ -2,6 +2,7 @@ package app.outgo.data.repo
 
 import app.outgo.data.db.dao.AccountBalance
 import app.outgo.data.db.dao.AccountFlow
+import app.outgo.data.db.dao.AccountMove
 import app.outgo.data.db.dao.TradeDao
 import app.outgo.data.db.dao.TradeSlim
 import app.outgo.data.db.dao.TransferTotal
@@ -120,4 +121,7 @@ class TradeRepository(private val tradeDao: TradeDao) {
 
     suspend fun balancesBefore(monthKey: Int): List<AccountBalance> =
         withContext(Dispatchers.IO) { tradeDao.balancesBefore(monthKey) }
+
+    suspend fun accountMovesForMonth(monthKey: Int): List<AccountMove> =
+        withContext(Dispatchers.IO) { tradeDao.accountMovesForMonth(monthKey) }
 }

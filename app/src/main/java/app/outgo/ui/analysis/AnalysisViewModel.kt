@@ -221,12 +221,13 @@ class AnalysisViewModel(
                     val trend = MonthKey.lastN(page.monthKey, TREND_MONTH_COUNT)
                     val flows = tradeRepository.accountFlows(trend.first(), page.monthKey)
                     val opening = tradeRepository.balancesBefore(trend.first())
+                    val moves = tradeRepository.accountMovesForMonth(page.monthKey)
                     val stage = withContext(Dispatchers.Default) {
                         val current = rows.filter { monthKeyOf(it.occurredAt, zone) == page.monthKey }
                         val previous = listOf(MonthKey.minus(page.monthKey, 1))
                         val accountsUi = buildAccounts(
                             flows, opening, listOf(page.monthKey), previous, trend, current, accounts, categories, otherName,
-                        )
+                        ).copy(daily = buildDailyBalance(opening, flows, moves, page.monthKey, accounts, zone))
                         buildTrades(rows, rows, transfers, page.monthKey, categories, accounts, zone, accountsUi = accountsUi)
                     }
                     monthTradesCache[page.monthKey] = stage

@@ -297,6 +297,13 @@ data class BalanceTrendUi(
     val max: Long,
 )
 
+/**
+ * Each account's balance at the end of every day of one month, index 0 == the 1st. The live
+ * month's lines stop at today, so they can be shorter than [daysInMonth].
+ */
+@Immutable
+data class DailyBalanceUi(val daysInMonth: Int, val lines: List<BalanceLine>)
+
 @Immutable
 data class LargestSet(val expense: List<LargestItem>, val income: List<LargestItem>, val all: List<LargestItem>) {
     fun of(mode: AnalysisMode): List<LargestItem> = when (mode) {
@@ -317,6 +324,8 @@ data class AccountsUi(
     val netFlow: List<MoverRow>,
     val balance: BalanceTrendUi,
     val largest: Map<Long, LargestSet>,
+    /** Month pages only; a year page leaves it empty. */
+    val daily: DailyBalanceUi = DailyBalanceUi(0, emptyList()),
 )
 
 // ------------------------------------------------------------------- stages

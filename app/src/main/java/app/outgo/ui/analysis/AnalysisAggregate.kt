@@ -2,6 +2,7 @@ package app.outgo.ui.analysis
 
 import app.outgo.data.db.dao.AccountBalance
 import app.outgo.data.db.dao.AccountFlow
+import app.outgo.data.db.dao.AccountMove
 import app.outgo.data.db.dao.FLOW_TRANSFER_IN
 import app.outgo.data.db.dao.MonthCategoryTotal
 import app.outgo.data.db.dao.TradeSlim
@@ -568,6 +569,44 @@ fun buildAccounts(
     )
 }
 
+/**
+ * Every account's end-of-day balance through [month]. [opening] is every balance at the start of
+ * some earlier month, and [flows] must cover the months from there up to (not including) [month];
+ * [moves] are [month]'s own balance changes. Accounts that sit at 0 all month are left out.
+ */
+fun buildDailyBalance(
+    opening: List<AccountBalance>,
+    flows: List<AccountFlow>,
+    moves: List<AccountMove>,
+    month: Int,
+    accounts: Map<Long, Triple<String, Long?, Int>>,
+    zone: ZoneId,
+    nowMillis: Long = System.currentTimeMillis(),
+): DailyBalanceUi {
+    val daysInMonth = yearMonthOf(month).lengthOfMonth()
+    val lastDay = daysCounted(month, zone, nowMillis).coerceAtMost(daysInMonth)
+    val start = HashMap<Long, Long>()
+    opening.forEach { start[it.accountId] = it.balance }
+    flows.filter { it.monthKey < month }.forEach { start[it.accountId] = (start[it.accountId] ?: 0L) + signed(it) }
+    val perDay = HashMap<Long, LongArray>()
+    moves.forEach { move ->
+        val day = Instant.ofEpochMilli(move.occurredAt).atZone(zone).dayOfMonth
+        perDay.getOrPut(move.accountId) { LongArray(daysInMonth) }[day - 1] += move.delta
+    }
+    val order = accounts.keys.withIndex().associate { (i, id) -> id to i }
+    val lines = (start.keys + perDay.keys).sortedBy { order[it] ?: Int.MAX_VALUE }.mapNotNull { id ->
+        var running = start[id] ?: 0L
+        val days = perDay[id]
+        val values = (0 until lastDay).map { day ->
+            running += days?.get(day) ?: 0L
+            running
+        }
+        val account = accounts[id]
+        if (values.all { it == 0L }) null else BalanceLine(id, account?.first.orEmpty(), account?.third ?: OTHER_COLOR, values)
+    }
+    return DailyBalanceUi(daysInMonth, lines)
+}
+
 /** [accounts] maps an account id to its (name, iconId, color). */
 internal fun buildTransfers(totals: List<TransferTotal>, accounts: Map<Long, Triple<String, Long?, Int>>): TransfersUi {
     val total = totals.sumOf { it.total }
@@ -644,6 +683,25 @@ fun rangeTicks(min: Long, max: Long, targetSteps: Int = 4): List<Long> {
     // Integer division truncates toward zero, so a negative start stays at or above min.
     val first = min / step * step
     return generateSequence(first) { it + step }.takeWhile { it <= max }.toList()
+}
+
+/**
+ * A value axis that hugs [min]..[max] instead of always reaching down to 0: both ends are
+ * rounded out to a multiple of a 1/2/5 x 10^k step, and every multiple between them is a tick.
+ * A flat range is widened to reach 0, or to one unit when it sits at 0.
+ */
+fun snappedTicks(min: Long, max: Long, targetSteps: Int = 4): List<Long> {
+    var low = min
+    var high = max
+    if (low == high) {
+        low = minOf(low, 0L)
+        high = maxOf(high, 0L)
+        if (low == high) high = 1L
+    }
+    val step = niceValueStep(high - low, targetSteps)
+    val first = Math.floorDiv(low, step) * step
+    val last = -Math.floorDiv(-high, step) * step
+    return generateSequence(first) { it + step }.takeWhile { it <= last }.toList()
 }
 
 /** Smallest 1/2/5 x 10^k step that splits [max] into at most [targetSteps] gaps. */

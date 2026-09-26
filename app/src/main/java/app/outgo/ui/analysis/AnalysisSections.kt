@@ -923,7 +923,6 @@ fun NetFlowSection(rows: List<MoverRow>, animate: Boolean, modifier: Modifier = 
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun BalanceTrendSection(balance: BalanceTrendUi, animate: Boolean, modifier: Modifier = Modifier) {
     val months = stringArrayResource(R.array.month_abbrev)
@@ -934,18 +933,39 @@ fun BalanceTrendSection(balance: BalanceTrendUi, animate: Boolean, modifier: Mod
             EmptyBox(BalanceHeight)
         } else {
             BalanceChart(balance, labels, introProgress(animate), Modifier.fillMaxWidth().height(BalanceHeight))
-            // Wraps: there can be more accounts than one row holds.
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                balance.lines.forEach { line ->
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Box(Modifier.size(10.dp).background(Color(line.color), RoundedCornerShape(2.dp)))
-                        Text(line.name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
+            AccountLegend(balance.lines)
+        }
+    }
+}
+
+/** [accountId] picks one account's line; null draws them all. */
+@Composable
+fun DailyBalanceSection(daily: DailyBalanceUi, accountId: Long?, animate: Boolean, modifier: Modifier = Modifier) {
+    val lines = remember(daily, accountId) { if (accountId == null) daily.lines else daily.lines.filter { it.accountId == accountId } }
+    val description = stringResource(R.string.analysis_cd_daily_balance, lines.size)
+    Section(stringResource(R.string.analysis_daily_balance_title), modifier.semantics { contentDescription = description }) {
+        if (lines.isEmpty()) {
+            EmptyBox(BalanceHeight)
+        } else {
+            DailyBalanceChart(lines, daily.daysInMonth, introProgress(animate), Modifier.fillMaxWidth().height(BalanceHeight))
+            AccountLegend(lines)
+        }
+    }
+}
+
+/** A colour block and name per line; wraps, since there can be more accounts than one row holds. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AccountLegend(lines: List<BalanceLine>) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        lines.forEach { line ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Box(Modifier.size(10.dp).background(Color(line.color), RoundedCornerShape(2.dp)))
+                Text(line.name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

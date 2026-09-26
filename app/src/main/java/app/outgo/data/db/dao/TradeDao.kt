@@ -111,6 +111,19 @@ interface TradeDao {
     )
     suspend fun balancesBefore(monthKey: Int): List<AccountBalance>
 
+    /** Analysis daily balance: every balance change in [monthKey], signed the way the balance triggers do. */
+    @Query(
+        """
+        SELECT account_id AS accountId, occurred_at AS occurredAt,
+               CASE WHEN type IN (1,2) THEN amount ELSE -amount END AS delta
+        FROM trade WHERE month_key = :monthKey
+        UNION ALL
+        SELECT to_account_id, occurred_at, amount FROM trade
+        WHERE type = 4 AND to_account_id IS NOT NULL AND month_key = :monthKey
+        """,
+    )
+    suspend fun accountMovesForMonth(monthKey: Int): List<AccountMove>
+
     @Query("SELECT * FROM trade WHERE account_id = :accountId ORDER BY occurred_at DESC, id DESC LIMIT :limit")
     suspend fun firstPageForAccount(accountId: Long, limit: Int): List<TradeEntity>
 

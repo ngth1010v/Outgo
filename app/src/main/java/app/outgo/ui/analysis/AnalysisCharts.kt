@@ -630,3 +630,59 @@ fun BalanceChart(balance: BalanceTrendUi, labels: List<String>, progress: Float,
         }
     }
 }
+
+/**
+ * One line per account through its end-of-day balances. The value axis hugs the lines on a
+ * 1/2/5 step rather than reaching down to 0, so a day's movement stays visible on a large balance.
+ * Seven day labels, always the 1st and the month's last day, each under its own day.
+ */
+@Composable
+fun DailyBalanceChart(lines: List<BalanceLine>, daysInMonth: Int, progress: Float, modifier: Modifier = Modifier) {
+    val gridColor = MaterialTheme.colorScheme.outlineVariant
+    val axisColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val style = MaterialTheme.typography.labelSmall
+    val measurer = rememberTextMeasurer()
+    val ticks = remember(lines) {
+        val all = lines.flatMap { it.values }
+        snappedTicks(all.minOrNull() ?: 0L, all.maxOrNull() ?: 0L)
+    }
+    val yTicks = rememberAxisLabels(ticks)
+    val xTicks = remember(daysInMonth, style) {
+        axisDays(daysInMonth, 7).map { day -> day to measurer.measure(String.format(Locale.US, "%02d", day), style) }
+    }
+
+    Canvas(modifier = modifier) {
+        val gutter = gutterOf(yTicks)
+        val plotWidth = size.width - gutter
+        val plotHeight = size.height - (xTicks.firstOrNull()?.second?.size?.height ?: 0) - AxisGap.toPx()
+        val usable = plotHeight - LineHeadroom * 2
+        val low = ticks.first()
+        val span = (ticks.last() - low).toFloat().coerceAtLeast(1f)
+        fun y(value: Long) = LineHeadroom + usable - (value - low) / span * usable
+        // Inset by half a label so 01 and the last day sit centred under their points.
+        val inset = (xTicks.maxOfOrNull { it.second.size.width } ?: 0) / 2f
+        val step = (plotWidth - inset * 2) / (daysInMonth - 1).coerceAtLeast(1)
+        fun x(index: Int) = inset + index * step
+
+        yTicks.forEach { (value, label) ->
+            val lineY = y(value)
+            drawLine(gridColor, Offset(0f, lineY), Offset(plotWidth, lineY), strokeWidth = if (value == 0L) 2f else 1f)
+            drawText(label, color = axisColor, topLeft = Offset(plotWidth + AxisGap.toPx(), lineY - label.size.height / 2f))
+        }
+        xTicks.forEach { (day, label) ->
+            drawText(label, color = axisColor, topLeft = Offset(x(day - 1) - label.size.width / 2f, plotHeight + AxisGap.toPx()))
+        }
+        lines.forEach { line ->
+            val color = Color(line.color)
+            if (line.values.size == 1) {
+                drawCircle(color, radius = 5f, center = Offset(x(0), y(line.values[0])), alpha = progress)
+                return@forEach
+            }
+            val path = Path()
+            line.values.forEachIndexed { index, value ->
+                if (index == 0) path.moveTo(x(index), y(value)) else path.lineTo(x(index), y(value))
+            }
+            drawPath(path, color, alpha = progress, style = Stroke(width = 4f))
+        }
+    }
+}

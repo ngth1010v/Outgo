@@ -2,11 +2,14 @@ package app.outgo.ui.analysis
 
 import app.outgo.data.db.dao.AccountBalance
 import app.outgo.data.db.dao.AccountFlow
+import app.outgo.data.db.dao.AccountMove
 import app.outgo.data.db.dao.FLOW_TRANSFER_IN
 import app.outgo.data.db.dao.TradeSlim
 import app.outgo.domain.TradeType
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import java.time.LocalDate
+import java.time.ZoneOffset
 
 class AnalysisLayoutTest {
 
@@ -87,5 +90,42 @@ class AnalysisLayoutTest {
         assertEquals(800L, ui.balance.max)
         assertEquals(listOf(1L), ui.largest.getValue(1).expense.map { it.tradeId })
         assertEquals(listOf(2L), ui.largest.getValue(2).all.map { it.tradeId })
+    }
+
+    @Test
+    fun `snapped ticks hug the range on a nice step`() {
+        assertEquals(listOf(1_000L, 1_020L, 1_040L, 1_060L, 1_080L), snappedTicks(1_003, 1_071))
+        assertEquals(listOf(-200L, 0L, 200L, 400L, 600L, 800L), snappedTicks(-150, 700))
+        // A flat line is widened to reach 0.
+        assertEquals(listOf(0L, 200L, 400L, 600L), snappedTicks(500, 500))
+    }
+
+    @Test
+    fun `daily balance runs from the month's opening, stops at today on the live month`() {
+        val accounts = mapOf(1L to Triple("Cash", null, 1), 2L to Triple("Bank", null, 2))
+        fun at(day: Int) = LocalDate.of(2026, 8, day).atTime(12, 0).toInstant(ZoneOffset.UTC).toEpochMilli()
+        val moves = listOf(
+            AccountMove(1, at(2), -100),
+            // Bank -> Cash 50 on the 3rd.
+            AccountMove(2, at(3), -50),
+            AccountMove(1, at(3), 50),
+        )
+        val ui = buildDailyBalance(
+            opening = listOf(AccountBalance(1, 500)),
+            // July moved Bank to 1000 before August started.
+            flows = listOf(AccountFlow(202607, 2, TradeType.INCOME, 1_000), AccountFlow(202608, 2, TradeType.INCOME, 9)),
+            moves = moves,
+            month = 202608,
+            accounts = accounts,
+            zone = ZoneOffset.UTC,
+            nowMillis = at(4),
+        )
+        assertEquals(31, ui.daysInMonth)
+        assertEquals(listOf(1L, 2L), ui.lines.map { it.accountId })
+        assertEquals(listOf(500L, 400L, 450L, 450L), ui.lines[0].values)
+        assertEquals(listOf(1_000L, 1_000L, 950L, 950L), ui.lines[1].values)
+
+        val past = buildDailyBalance(emptyList(), emptyList(), moves, 202608, accounts, ZoneOffset.UTC, nowMillis = at(31) + 86_400_000L * 40)
+        assertEquals(31, past.lines[0].values.size)
     }
 }

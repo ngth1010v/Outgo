@@ -446,7 +446,10 @@ private fun ChartList(
 @Composable
 private fun CardChips(card: ChartCard, accounts: List<Pair<Long, String>>, onChange: (ChartCard) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        if (card.type.hasAccount) {
+        if (card.type.allAccounts) {
+            val options = listOf(null to stringResource(R.string.analysis_accounts_all)) + accounts
+            ChoiceChip(options.firstOrNull { it.first == card.accountId }?.second ?: "—", options) { onChange(card.copy(accountId = it)) }
+        } else if (card.type.hasAccount) {
             val id = card.accountId ?: accounts.firstOrNull()?.first
             ChoiceChip(accounts.firstOrNull { it.first == id }?.second ?: "—", accounts) { onChange(card.copy(accountId = it)) }
         }
@@ -555,6 +558,7 @@ private fun chartName(type: ChartType): String = stringResource(
         ChartType.ACCOUNT_DONUT -> R.string.analysis_by_account_all_title
         ChartType.NET_FLOW -> R.string.analysis_net_flow_title
         ChartType.BALANCE_TREND -> R.string.analysis_balance_title
+        ChartType.DAILY_BALANCE -> R.string.analysis_daily_balance_title
         ChartType.TRANSFERS -> R.string.analysis_transfers_title
         ChartType.ACCOUNT_LARGEST -> R.string.analysis_chart_account_largest
     },
@@ -725,6 +729,9 @@ private fun AccountChart(
         }
         ChartType.BALANCE_TREND -> StageSection(accounts, stringResource(R.string.analysis_balance_title), BalanceHeight + 24.dp) {
             BalanceTrendSection(it.balance, animate)
+        }
+        ChartType.DAILY_BALANCE -> StageSection(accounts, stringResource(R.string.analysis_daily_balance_title), BalanceHeight + 24.dp) {
+            DailyBalanceSection(it.daily, card.accountId, animate)
         }
         ChartType.TRANSFERS -> StageSection(transfers, stringResource(R.string.analysis_transfers_title), 244.dp) {
             TransfersSection(it, animate)

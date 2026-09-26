@@ -16,7 +16,13 @@ import app.outgo.R
 enum class AnalysisTab { CATEGORIES, ACCOUNTS }
 
 /** [icon] must be unique among the charts one page offers; see AnalysisLayoutTest. */
-enum class ChartType(@DrawableRes val icon: Int, val hasMode: Boolean = true, val hasAccount: Boolean = false) {
+enum class ChartType(
+    @DrawableRes val icon: Int,
+    val hasMode: Boolean = true,
+    val hasAccount: Boolean = false,
+    /** The account chip also offers "All"; a null account means all of them instead of the first. */
+    val allAccounts: Boolean = false,
+) {
     // Categories, month
     SUMMARY(R.drawable.ph_receipt),
     /** Donut and breakdown list in one card. */
@@ -38,6 +44,8 @@ enum class ChartType(@DrawableRes val icon: Int, val hasMode: Boolean = true, va
     ACCOUNT_DONUT(R.drawable.ph_chart_donut),
     NET_FLOW(R.drawable.ph_arrows_down_up, hasMode = false),
     BALANCE_TREND(R.drawable.ph_chart_line_up, hasMode = false),
+    /** Month pages only: a year has no single month to draw day by day. */
+    DAILY_BALANCE(R.drawable.ph_chart_line, hasMode = false, hasAccount = true, allAccounts = true),
     TRANSFERS(R.drawable.ph_arrows_left_right, hasMode = false),
     ACCOUNT_LARGEST(R.drawable.ph_sort_descending, hasAccount = true),
 }
@@ -65,7 +73,7 @@ enum class LayoutSlot(val settingKey: String, val charts: List<ChartType>, val g
             ChartGroup(R.string.analysis_group_details, listOf(ChartType.MOVERS, ChartType.BUCKETS, ChartType.LARGEST)),
         ),
     ),
-    MONTH_ACCOUNTS("analysis_layout_month_accounts", AccountCharts, AccountGroups),
+    MONTH_ACCOUNTS("analysis_layout_month_accounts", MonthAccountCharts, accountGroups(ChartType.DAILY_BALANCE)),
     YEAR_CATEGORIES(
         "analysis_layout_year_categories",
         listOf(ChartType.YEAR_SUMMARY, ChartType.YEAR_BARS, ChartType.DONUT, ChartType.YOY, ChartType.LARGEST),
@@ -75,7 +83,7 @@ enum class LayoutSlot(val settingKey: String, val charts: List<ChartType>, val g
             ChartGroup(R.string.analysis_group_details, listOf(ChartType.LARGEST)),
         ),
     ),
-    YEAR_ACCOUNTS("analysis_layout_year_accounts", AccountCharts, AccountGroups),
+    YEAR_ACCOUNTS("analysis_layout_year_accounts", AccountCharts, accountGroups()),
     ;
 
     companion object {
@@ -91,12 +99,17 @@ private val AccountCharts
         ChartType.ACCOUNT_DONUT, ChartType.NET_FLOW, ChartType.BALANCE_TREND, ChartType.TRANSFERS, ChartType.ACCOUNT_LARGEST,
     )
 
-private val AccountGroups
+private val MonthAccountCharts
     get() = listOf(
-        ChartGroup(R.string.analysis_group_overview, listOf(ChartType.ACCOUNT_DONUT, ChartType.NET_FLOW)),
-        ChartGroup(R.string.analysis_group_over_time, listOf(ChartType.BALANCE_TREND)),
-        ChartGroup(R.string.analysis_group_details, listOf(ChartType.TRANSFERS, ChartType.ACCOUNT_LARGEST)),
+        ChartType.ACCOUNT_DONUT, ChartType.NET_FLOW, ChartType.BALANCE_TREND, ChartType.DAILY_BALANCE,
+        ChartType.TRANSFERS, ChartType.ACCOUNT_LARGEST,
     )
+
+private fun accountGroups(vararg overTime: ChartType) = listOf(
+    ChartGroup(R.string.analysis_group_overview, listOf(ChartType.ACCOUNT_DONUT, ChartType.NET_FLOW)),
+    ChartGroup(R.string.analysis_group_over_time, listOf(ChartType.BALANCE_TREND) + overTime),
+    ChartGroup(R.string.analysis_group_details, listOf(ChartType.TRANSFERS, ChartType.ACCOUNT_LARGEST)),
+)
 
 /** [id] only lives for the session: it keys the lazy list, it is not saved. */
 @Immutable

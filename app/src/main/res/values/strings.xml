@@ -257,9 +257,12 @@
     <string name="analysis_by_account_income_title">Income by account</string>
     <string name="analysis_by_account_all_title">By account</string>
     <string name="analysis_net_flow_title">Net flow per account</string>
-    <string name="analysis_balance_title">Balance trend</string>
+    <string name="analysis_balance_title">Monthly balance trend</string>
+    <string name="analysis_daily_balance_title">Daily trend</string>
+    <string name="analysis_accounts_all">All</string>
     <string name="analysis_cd_net_flow">How much each account\'s balance changed in this period</string>
     <string name="analysis_cd_balance">Month-end balances of %1$d accounts</string>
+    <string name="analysis_cd_daily_balance">Daily balances of %1$d accounts</string>
     <string name="analysis_group_overview">Overview</string>
     <string name="analysis_group_over_time">Over time</string>
     <string name="analysis_group_details">Details</string>
