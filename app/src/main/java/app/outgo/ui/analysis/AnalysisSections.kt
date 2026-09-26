@@ -13,8 +13,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -61,8 +64,10 @@ import java.util.Locale
 
 /**
  * The Analysis sections, shared by the month page and the year page. Each one has a fixed height
- * for its chart area and a fixed row count for its lists, so the skeleton, the empty state and the
- * loaded state are all exactly as tall — nothing on the page moves when data arrives.
+ * for its chart area and a fixed row count for its lists (longer lists scroll inside their box), so
+ * the skeleton, the empty state and the loaded state are all exactly as tall — nothing on the page
+ * moves when data arrives, and every page of a pager lays its cards out identically. The whole
+ * card's height is [chartHeight].
  *
  * Sections that read [AnalysisMode] get it from their own card's chip; the heatmap, weekday and
  * size-mix sections are expense-only and have no chip.
@@ -86,6 +91,49 @@ private val MoverLabelHeight = 22.dp
 fun moversContentHeight(mode: AnalysisMode): Dp =
     MoverRowHeight * MOVER_COUNT + if (mode == AnalysisMode.ALL) MoverLabelHeight * 2 else 0.dp
 private val BucketRowHeight = 52.dp
+
+/** The donut's breakdown list and the net-flow list show this many rows and scroll for the rest. */
+private const val LIST_VISIBLE_ROWS = 5
+
+/**
+ * The height under a card's title row. Depends only on the chart and its own chip, never on the
+ * data, so a chart sits at the same place on every page and a pager switch keeps the scroll
+ * position meaningful. Text lines go through the font scale.
+ */
+@Composable
+fun chartContentHeight(type: ChartType, mode: AnalysisMode): Dp {
+    val typography = MaterialTheme.typography
+    val density = LocalDensity.current
+    fun line(style: androidx.compose.ui.text.TextStyle): Dp = with(density) { style.lineHeight.toDp() }
+    val small = line(typography.bodySmall)
+    fun summary(smallLines: Int) =
+        line(typography.headlineMedium) + line(typography.bodyMedium) + small * smallLines + SummaryLineGap * (smallLines + 1)
+    return when (type) {
+        ChartType.SUMMARY -> summary(MONTH_SUMMARY_SMALL_LINES)
+        ChartType.YEAR_SUMMARY -> summary(YEAR_SUMMARY_SMALL_LINES)
+        ChartType.DONUT, ChartType.ACCOUNT_DONUT -> DonutHeight + SectionGap + RowHeight * LIST_VISIBLE_ROWS
+        ChartType.PACE -> PaceHeight + SectionGap + small
+        ChartType.YOY -> YoyHeight + SectionGap + small
+        ChartType.TREND, ChartType.YEAR_BARS -> small + SectionGap + BarsHeight
+        ChartType.MOVERS -> moversContentHeight(mode)
+        ChartType.HEATMAP -> line(typography.labelSmall) + SectionGap + HeatmapCellSize * HEATMAP_ROWS
+        ChartType.WEEKDAY -> WeekdayHeight
+        ChartType.BUCKETS -> small + (SectionGap + BucketRowHeight) * BUCKET_COUNT
+        ChartType.LARGEST, ChartType.ACCOUNT_LARGEST -> RowHeight * LARGEST_COUNT
+        ChartType.TRANSFERS -> small + SectionGap + RowHeight * TRANSFER_PAIR_COUNT
+        ChartType.NET_FLOW -> MoverRowHeight * LIST_VISIBLE_ROWS
+        ChartType.BALANCE_TREND, ChartType.DAILY_BALANCE -> BalanceHeight + SectionGap + small
+    }
+}
+
+/** The whole card inside its padding: title row, gap, content. */
+@Composable
+fun chartHeight(type: ChartType, mode: AnalysisMode): Dp = SectionTitleHeight + SectionGap + chartContentHeight(type, mode)
+
+private val SummaryLineGap = 2.dp
+private const val MONTH_SUMMARY_SMALL_LINES = 2
+private const val YEAR_SUMMARY_SMALL_LINES = 4
+private const val BUCKET_COUNT = 4
 
 /** Which slice/row the user tapped; read through `derivedStateOf` at the call sites. */
 @Stable
@@ -151,7 +199,7 @@ val LocalSectionAction = compositionLocalOf<(@Composable () -> Unit)?> { null }
 @Composable
 fun Section(title: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     val action = LocalSectionAction.current
-    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(SectionGap)) {
         Row(modifier = Modifier.fillMaxWidth().height(SectionTitleHeight), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 title,
@@ -169,6 +217,7 @@ fun Section(title: String, modifier: Modifier = Modifier, content: @Composable (
 
 /** Fits a chip, so a card with one is as tall as a card without. */
 private val SectionTitleHeight = 28.dp
+private val SectionGap = 8.dp
 
 /** A compact dropdown in a section's title row: the current choice and a caret. */
 @Composable
@@ -276,7 +325,8 @@ fun SummarySection(
     modifier: Modifier = Modifier,
     title: String = stringResource(R.string.analysis_summary_title),
     perPeriodFormat: Int = R.string.analysis_avg_per_day,
-    subtitle: String? = null,
+    /** Extra small lines under the transfer line; always drawn, even blank, so the card keeps its height. */
+    footer: List<String> = emptyList(),
 ) {
     val kind = summary.of(mode)
     val kindType = if (mode == AnalysisMode.INCOME) CategoryKind.INCOME else CategoryKind.EXPENSE
@@ -294,10 +344,7 @@ fun SummarySection(
     val description = summaryDescription(kind, mode, summary)
 
     Section(title, modifier.semantics { contentDescription = description }) {
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            if (subtitle != null) {
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+        Column(verticalArrangement = Arrangement.spacedBy(SummaryLineGap)) {
             Text(
                 Money.formatSigned(headline),
                 style = MaterialTheme.typography.headlineMedium,
@@ -308,20 +355,26 @@ fun SummarySection(
                 changeLabel(kind.deltaAmount, kind.deltaPercent, perPeriodFormat == R.string.analysis_per_month),
                 style = MaterialTheme.typography.bodyMedium,
                 color = deltaColor(kind.deltaAmount, kindType),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                stringResource(perPeriodFormat, Money.formatSigned(perPeriod)),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                // Transfers arrive with the raw-trade stage; the line keeps its height until then.
-                stringResource(R.string.analysis_transfer_line, transfers?.total?.let { Money.format(it) } ?: "—"),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            SummaryLine(stringResource(perPeriodFormat, Money.formatSigned(perPeriod)))
+            // Transfers arrive with the raw-trade stage; the line keeps its height until then.
+            SummaryLine(stringResource(R.string.analysis_transfer_line, transfers?.total?.let { Money.format(it) } ?: "—"))
+            footer.forEach { SummaryLine(it) }
         }
     }
+}
+
+@Composable
+private fun SummaryLine(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
 }
 
 @Composable
@@ -349,9 +402,6 @@ private fun changeLabel(delta: Long, percent: Int, yearly: Boolean): String =
 private fun signedPercent(percent: Int): String = (if (percent > 0) "+" else "") + "$percent%"
 
 // -------------------------------------------------------------- sections 2, 3
-
-/** Skeleton height of the donut card, whose list length depends on the data. */
-val DonutCardSkeletonHeight = DonutHeight + RowHeight * 3
 
 /** The donut and its breakdown list in one card: a slice and its row share one selection. */
 @Composable
@@ -405,7 +455,16 @@ fun DonutSection(
                 AnalysisMode.INCOME -> income.rows
                 AnalysisMode.ALL -> expense.rows + income.rows
             }
-            Column { rows.forEach { BreakdownRowItem(it, selection, plainAmounts) } }
+            // A fixed box, so the card is as tall with 2 rows as with 14; the rest scroll inside.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(RowHeight * LIST_VISIBLE_ROWS)
+                    .verticalScroll(remember(mode) { ScrollState(0) }),
+            ) {
+                rows.forEach { BreakdownRowItem(it, selection, plainAmounts) }
+                NoMoreRows(LIST_VISIBLE_ROWS - rows.size, RowHeight)
+            }
         }
     }
 }
@@ -489,7 +548,7 @@ private fun ChartLegend(items: List<Pair<String, List<Color>>>, modifier: Modifi
         items.forEach { (label, colors) ->
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 colors.forEach { Box(Modifier.size(10.dp).background(it, RoundedCornerShape(2.dp))) }
-                Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
         }
     }
@@ -515,6 +574,7 @@ fun BarsSection(
             stringResource(R.string.analysis_average, Money.format(bars.averageOf(mode))),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
         )
         MonthBars(
             bars = bars.bars,
@@ -699,6 +759,8 @@ fun BucketsSection(buckets: BucketsUi, animate: Boolean, modifier: Modifier = Mo
                 stringResource(R.string.analysis_buckets_median, Money.format(buckets.median)),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
             ChartLegend(
@@ -808,6 +870,7 @@ fun TransfersSection(transfers: TransfersUi, animate: Boolean, modifier: Modifie
             stringResource(R.string.analysis_transfers_count, transfers.count, Money.format(transfers.total)),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
         )
         Box(modifier = Modifier.fillMaxWidth().height(RowHeight * TRANSFER_PAIR_COUNT)) {
             if (transfers.pairs.isEmpty()) {
@@ -895,25 +958,25 @@ fun YearSummarySection(
 ) {
     val months = stringArrayResource(R.array.month_abbrev)
     fun label(monthKey: Int?) = monthKey?.let { months[(it % 100) - 1] }.orEmpty()
-    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        SummarySection(
-            summary = year.summary,
-            mode = mode,
-            transfers = transfers,
-            title = stringResource(R.string.analysis_year_summary_title),
-            perPeriodFormat = R.string.analysis_per_month,
-            subtitle = if (year.partial) stringResource(R.string.analysis_year_to_date, year.monthsCounted) else null,
-        )
-        if (year.biggestMonth != null) {
-            Text(
+    SummarySection(
+        summary = year.summary,
+        mode = mode,
+        transfers = transfers,
+        modifier = modifier,
+        title = stringResource(R.string.analysis_year_summary_title),
+        perPeriodFormat = R.string.analysis_per_month,
+        // Both lines are always there, blank when they do not apply, so every year is as tall.
+        footer = listOf(
+            if (year.biggestMonth != null) {
                 stringResource(R.string.analysis_year_biggest, label(year.biggestMonth), Money.format(year.biggestAmount)) +
                     " · " +
-                    stringResource(R.string.analysis_year_smallest, label(year.smallestMonth), Money.format(year.smallestAmount)),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
+                    stringResource(R.string.analysis_year_smallest, label(year.smallestMonth), Money.format(year.smallestAmount))
+            } else {
+                ""
+            },
+            if (year.partial) stringResource(R.string.analysis_year_to_date, year.monthsCounted) else "",
+        ),
+    )
 }
 
 // ------------------------------------------------------------------- accounts
@@ -927,9 +990,6 @@ fun accountTitle(mode: AnalysisMode): String = stringResource(
     },
 )
 
-/** Skeleton height for the net-flow list, whose row count depends on the data. */
-val NetFlowSkeletonHeight = MoverRowHeight * 3
-
 /** Each account's balance change over the period, transfers and adjustments included. */
 @Composable
 fun NetFlowSection(rows: List<MoverRow>, animate: Boolean, modifier: Modifier = Modifier) {
@@ -937,9 +997,18 @@ fun NetFlowSection(rows: List<MoverRow>, animate: Boolean, modifier: Modifier = 
     val description = stringResource(R.string.analysis_cd_net_flow)
     Section(stringResource(R.string.analysis_net_flow_title), modifier.semantics { contentDescription = description }) {
         if (rows.isEmpty()) {
-            EmptyBox(MoverRowHeight)
+            EmptyBox(MoverRowHeight * LIST_VISIBLE_ROWS)
         } else {
-            Column { rows.forEach { MoverRowItem(it, deltaWidth, animate) } }
+            // One row per account: a fixed box that scrolls inside, like the donut's list.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(MoverRowHeight * LIST_VISIBLE_ROWS)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                rows.forEach { MoverRowItem(it, deltaWidth, animate) }
+                NoMoreRows(LIST_VISIBLE_ROWS - rows.size, MoverRowHeight)
+            }
         }
     }
 }
@@ -974,19 +1043,28 @@ fun DailyBalanceSection(daily: DailyBalanceUi, accountId: Long?, zero: Boolean, 
     }
 }
 
-/** A colour block and name per line; wraps, since there can be more accounts than one row holds. */
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * A colour block and name per line, on a single row that scrolls sideways when there are more
+ * accounts than fit — wrapping would make the card's height depend on the account count.
+ */
 @Composable
 private fun AccountLegend(lines: List<BalanceLine>) {
-    FlowRow(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        lines.forEach { line ->
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Box(Modifier.size(10.dp).background(Color(line.color), RoundedCornerShape(2.dp)))
-                Text(line.name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()).widthIn(min = maxWidth),
+            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            lines.forEach { line ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Box(Modifier.size(10.dp).background(Color(line.color), RoundedCornerShape(2.dp)))
+                    Text(
+                        line.name,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                    )
+                }
             }
         }
     }

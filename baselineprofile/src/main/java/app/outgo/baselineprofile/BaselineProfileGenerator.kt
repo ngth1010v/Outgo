@@ -70,19 +70,14 @@ internal fun MacrobenchmarkScope.animationJourney() {
     tap(By.text("Income"))
     tap(By.text("Expense"))
 
-    // Analysis: both tabs scrolled through on a month page and on the year page, plus a step back
-    // a month — that is what compiles the hand-drawn charts.
+    // Analysis: the month list and the year list scrolled through, plus a step back a month (the
+    // neighbour page follows the scroll position) — that is what compiles the hand-drawn charts.
     tap(By.desc("Analysis"))
     flingDownAndUp()
-    tap(By.text("Accounts"))
-    flingDownAndUp()
-    tap(By.text("Categories"))
     tap(By.desc("Previous month"))
+    flingDownAndUp()
     tap(By.text("Yearly analysis"))
     flingDownAndUp()
-    tap(By.text("Accounts"))
-    flingDownAndUp()
-    tap(By.text("Categories"))
     tap(By.text("Now"))
 }
 

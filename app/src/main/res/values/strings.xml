@@ -247,8 +247,6 @@
     <string name="unit_thousand">K</string>
     <string name="unit_million">M</string>
     <string name="unit_billion">B</string>
-    <string name="analysis_tab_categories">Categories</string>
-    <string name="analysis_tab_accounts">Accounts</string>
     <string name="analysis_add_chart">Add chart</string>
     <string name="analysis_delete_chart">Drop here to remove the chart</string>
     <string name="analysis_chart_deleted">Chart removed</string>

@@ -14,14 +14,40 @@ import java.time.ZoneOffset
 class AnalysisLayoutTest {
 
     @Test
-    fun `never saved gives the slot defaults`() {
-        val cards = decodeLayout(null, LayoutSlot.YEAR_CATEGORIES, firstId = 10)
-        assertEquals(LayoutSlot.YEAR_CATEGORIES.charts, cards.map { it.type })
+    fun `never saved anywhere gives the old category then account defaults`() {
+        val cards = decodeSlot(LayoutSlot.YEAR) { null }.withIds(10)
+        assertEquals(LayoutSlot.YEAR.charts, cards.map { it.type })
         assertEquals((10L until 10L + cards.size).toList(), cards.map { it.id })
     }
 
     @Test
-    fun `a page offers each chart once, with its own icon, and its defaults are all offered`() {
+    fun `old category and account rows are joined into one list`() {
+        val saved = mapOf(
+            "analysis_layout_month_categories" to "DONUT.EXPENSE..;LARGEST.ALL..",
+            "analysis_layout_month_accounts" to "NET_FLOW.ALL..;DAILY_BALANCE.ALL.3.0",
+        )
+        assertEquals(
+            listOf(
+                ChartCard(0, ChartType.DONUT, AnalysisMode.EXPENSE),
+                ChartCard(0, ChartType.LARGEST),
+                ChartCard(0, ChartType.NET_FLOW),
+                ChartCard(0, ChartType.DAILY_BALANCE, accountId = 3, zero = true),
+            ),
+            decodeSlot(LayoutSlot.MONTH) { saved[it] },
+        )
+        // Only one old row saved: the other falls back to its own defaults.
+        val onlyAccounts = decodeSlot(LayoutSlot.YEAR) { if (it == "analysis_layout_year_accounts") "TRANSFERS.ALL.." else null }
+        assertEquals(listOf(ChartType.YEAR_SUMMARY, ChartType.YEAR_BARS, ChartType.DONUT, ChartType.YOY, ChartType.LARGEST, ChartType.TRANSFERS), onlyAccounts.map { it.type })
+    }
+
+    @Test
+    fun `the merged row wins over the old ones`() {
+        val saved = mapOf("analysis_layout_month" to "HEATMAP.ALL..", "analysis_layout_month_categories" to "DONUT.ALL..")
+        assertEquals(listOf(ChartCard(0, ChartType.HEATMAP)), decodeSlot(LayoutSlot.MONTH) { saved[it] })
+    }
+
+    @Test
+    fun `a list offers each chart once, with its own icon, and its defaults are all offered`() {
         LayoutSlot.entries.forEach { slot ->
             val offered = slot.groups.flatMap { it.charts }
             assertEquals(slot.name, offered.size, offered.toSet().size)
@@ -32,25 +58,27 @@ class AnalysisLayoutTest {
 
     @Test
     fun `saved empty list stays empty`() {
-        assertEquals(emptyList<ChartCard>(), decodeLayout("", LayoutSlot.MONTH_CATEGORIES, 0))
+        assertEquals(emptyList<ChartCard>(), decodeSlot(LayoutSlot.MONTH) { if (it == "analysis_layout_month") "" else null })
     }
 
     @Test
-    fun `round trip keeps order, mode, account and zero, skips unknown charts`() {
+    fun `round trip keeps order, mode, account and zero, skips unknown and not-offered charts`() {
         val cards = listOf(
             ChartCard(0, ChartType.ACCOUNT_LARGEST, AnalysisMode.INCOME, 7),
-            ChartCard(1, ChartType.NET_FLOW),
-            ChartCard(2, ChartType.ACCOUNT_DONUT, AnalysisMode.ALL),
-            ChartCard(3, ChartType.BALANCE_TREND, zero = true),
+            ChartCard(0, ChartType.NET_FLOW),
+            ChartCard(0, ChartType.DONUT, AnalysisMode.ALL),
+            ChartCard(0, ChartType.BALANCE_TREND, zero = true),
         )
+        val offered = LayoutSlot.MONTH.offered
         val encoded = encodeLayout(cards)
-        assertEquals(cards, decodeLayout(encoded, LayoutSlot.MONTH_ACCOUNTS, 0))
+        assertEquals(cards, decodeLayout(encoded, emptyList(), offered))
         val withFuture = "FUTURE_CHART.ALL.;$encoded"
-        assertEquals(cards, decodeLayout(withFuture, LayoutSlot.MONTH_ACCOUNTS, 0))
+        assertEquals(cards, decodeLayout(withFuture, emptyList(), offered))
+        // A month-only chart in the year list (hand-edited backup) is dropped.
+        assertEquals(emptyList<ChartCard>(), decodeLayout("DAILY_BALANCE.ALL..", emptyList(), LayoutSlot.YEAR.offered))
         // Saved before the zero option existed.
-        assertEquals(listOf(ChartCard(0, ChartType.NET_FLOW)), decodeLayout("NET_FLOW.ALL.", LayoutSlot.MONTH_ACCOUNTS, 0))
+        assertEquals(listOf(ChartCard(0, ChartType.NET_FLOW)), decodeLayout("NET_FLOW.ALL.", emptyList(), offered))
     }
-
 
     @Test
     fun `accounts split kinds, sign net flow and build balances from the opening`() {

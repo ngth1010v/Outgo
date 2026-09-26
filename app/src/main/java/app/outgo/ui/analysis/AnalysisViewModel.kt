@@ -114,7 +114,7 @@ class AnalysisViewModel(
         }
         viewModelScope.launch {
             val layouts = LayoutSlot.entries.associateWith { slot ->
-                decodeLayout(settingRepository.get(slot.settingKey), slot, nextCardId).also { nextCardId += it.size }
+                decodeSlot(slot) { settingRepository.get(it) }.withIds(nextCardId).also { nextCardId += it.size }
             }
             _state.update { it.copy(layouts = layouts) }
         }

@@ -10,6 +10,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.Stable
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.boundsInRoot
@@ -28,7 +31,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -40,9 +42,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -53,11 +52,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
@@ -72,6 +69,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -80,11 +78,8 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import app.outgo.R
 import app.outgo.ui.LocalAppContainer
 import app.outgo.ui.component.reorderableItem
-import app.outgo.ui.nav.placedIf
 import app.outgo.ui.component.rememberReorderState
 import app.outgo.ui.theme.ExpenseRed
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
@@ -92,6 +87,11 @@ import kotlinx.coroutines.launch
  * One flat pager: every year's months, then that year's summary page. Only three pages are ever
  * composed (`beyondViewportPageCount = 1`) and the ViewModel keeps the last five pages' results,
  * so swiping back to a page already seen renders straight from cache with no skeleton.
+ *
+ * Every month page shows the same chart list, and every year page another, each card at a height
+ * that does not depend on the data (see [chartHeight]). The pages of one kind follow one scroll
+ * position ([ScrollAnchor]): a swipe or a caret lands on the next month with the same chart in the
+ * same place, and stepping over a year page keeps the months' position.
  */
 @Composable
 fun AnalysisScreen(onOpenTrade: (Long) -> Unit, onOpenDay: (Long) -> Unit) {
@@ -118,10 +118,10 @@ fun AnalysisScreen(onOpenTrade: (Long) -> Unit, onOpenDay: (Long) -> Unit) {
         initialPage = pages.indexOf(state.selected).coerceAtLeast(0),
         pageCount = { pages.size },
     )
+    val monthAnchor = remember { ScrollAnchor() }
+    val yearAnchor = remember { ScrollAnchor() }
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
-    // One switch per screen: every page shows the same tab.
-    var tab by rememberSaveable { mutableStateOf(AnalysisTab.CATEGORIES) }
     val snackbar = remember { SnackbarHostState() }
     val deletedLabel = stringResource(R.string.analysis_chart_deleted)
     val undoLabel = stringResource(R.string.trade_undo)
@@ -148,16 +148,17 @@ fun AnalysisScreen(onOpenTrade: (Long) -> Unit, onOpenDay: (Long) -> Unit) {
         }
     }
 
-    val current = pages.getOrNull(pagerState.currentPage)
+    val onSelectMonth: (Int) -> Unit = { month ->
+        val index = pages.indexOf(AnalysisPage.Month(month))
+        if (index >= 0) scope.launch { pagerState.animateScrollToPage(index) }
+    }
+
     Scaffold(
         topBar = {
             AnalysisHeader(
                 pages = pages,
                 index = pagerState.currentPage,
-                current = current,
                 currentMonth = viewModel.currentMonth,
-                tab = tab,
-                onTab = { tab = it },
                 onGoTo = { target -> scope.launch { pagerState.animateScrollToPage(target) } },
             )
         },
@@ -170,39 +171,70 @@ fun AnalysisScreen(onOpenTrade: (Long) -> Unit, onOpenDay: (Long) -> Unit) {
             // Must be a Bundle-storable type: a data class key crashes the lazy layout.
             key = { pages.getOrNull(it)?.key ?: -it },
         ) { index ->
-            when (val page = pages.getOrNull(index)) {
+            val page = pages.getOrNull(index) ?: return@HorizontalPager
+            // By page rather than index: the index shifts when the list grows backwards.
+            val listState = rememberSyncedListState(if (page is AnalysisPage.Month) monthAnchor else yearAnchor) {
+                pages.getOrNull(pagerState.settledPage) == page
+            }
+            when (page) {
                 is AnalysisPage.Month -> MonthPage(
                     page = page,
+                    listState = listState,
                     state = state,
                     viewModel = viewModel,
-                    tab = tab,
                     onDeleted = onDeleted,
                     onOpenTrade = onOpenTrade,
                     onOpenDay = onOpenDay,
-                    onSelectMonth = { month -> goToPage(scope, pagerState, pages.indexOf(AnalysisPage.Month(month))) },
+                    onSelectMonth = onSelectMonth,
                 )
                 is AnalysisPage.Year -> YearPage(
                     page = page,
+                    listState = listState,
                     state = state,
                     viewModel = viewModel,
-                    tab = tab,
                     onDeleted = onDeleted,
                     onOpenTrade = onOpenTrade,
-                    onSelectMonth = { month -> goToPage(scope, pagerState, pages.indexOf(AnalysisPage.Month(month))) },
+                    onSelectMonth = onSelectMonth,
                 )
-                null -> Unit
             }
         }
     }
 }
 
-private fun goToPage(
-    scope: CoroutineScope,
-    pagerState: androidx.compose.foundation.pager.PagerState,
-    index: Int,
-) {
-    if (index >= 0) scope.launch { pagerState.animateScrollToPage(index) }
+// ---------------------------------------------------------------- scroll sync
+
+/**
+ * The one scroll position every page of a kind (month or year) shares. The settled page writes it
+ * as it scrolls; every other composed page of that kind — the neighbours a swipe reveals, a page a
+ * caret jumps to — reads it. The cards are the same list at the same heights on every page of a
+ * kind, so the same item index and offset put the same chart at the same place.
+ */
+@Stable
+private class ScrollAnchor {
+    var index by mutableIntStateOf(0)
+    var offset by mutableIntStateOf(0)
 }
+
+@Composable
+private fun rememberSyncedListState(anchor: ScrollAnchor, isLeader: () -> Boolean): LazyListState {
+    val listState = rememberLazyListState(anchor.index, anchor.offset)
+    val leader by rememberUpdatedState(isLeader)
+    LaunchedEffect(listState, anchor) {
+        snapshotFlow {
+            SyncPoint(leader(), listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset, anchor.index, anchor.offset)
+        }.collect { point ->
+            if (point.leader) {
+                anchor.index = point.index
+                anchor.offset = point.offset
+            } else if (point.index != point.anchorIndex || point.offset != point.anchorOffset) {
+                listState.scrollToItem(point.anchorIndex, point.anchorOffset)
+            }
+        }
+    }
+    return listState
+}
+
+private data class SyncPoint(val leader: Boolean, val index: Int, val offset: Int, val anchorIndex: Int, val anchorOffset: Int)
 
 // --------------------------------------------------------------------- header
 
@@ -210,15 +242,11 @@ private fun goToPage(
 private fun AnalysisHeader(
     pages: List<AnalysisPage>,
     index: Int,
-    current: AnalysisPage?,
     currentMonth: Int,
-    tab: AnalysisTab,
-    onTab: (AnalysisTab) -> Unit,
     onGoTo: (Int) -> Unit,
 ) {
+    val current = pages.getOrNull(index)
     val year = current?.year ?: (currentMonth / 100)
-    val previousYear = yearStepTarget(pages, index, -1)
-    val nextYear = yearStepTarget(pages, index, 1)
     val yearlyIndex = yearlyPageIndex(pages, year)
     val nowIndex = currentMonthIndex(pages, currentMonth)
 
@@ -226,12 +254,12 @@ private fun AnalysisHeader(
         HeaderRow(
             label = year.toString(),
             labelStyle = MaterialTheme.typography.titleMedium,
-            previousIndex = previousYear,
-            nextIndex = nextYear,
+            previousIndex = yearStepTarget(pages, index, -1),
+            nextIndex = yearStepTarget(pages, index, 1),
             previousDescription = stringResource(R.string.analysis_previous_year),
             nextDescription = stringResource(R.string.analysis_next_year),
             actionLabel = stringResource(R.string.analysis_year_page_title),
-            actionIndex = yearlyIndex.takeIf { it >= 0 && current !is AnalysisPage.Year },
+            action = if (yearlyIndex >= 0 && current !is AnalysisPage.Year) ({ onGoTo(yearlyIndex) }) else null,
             onGoTo = onGoTo,
         )
         HeaderRow(
@@ -246,40 +274,9 @@ private fun AnalysisHeader(
             previousDescription = stringResource(R.string.analysis_previous_month),
             nextDescription = stringResource(R.string.analysis_next_month),
             actionLabel = stringResource(R.string.analysis_go_now),
-            actionIndex = nowIndex.takeIf { it >= 0 && it != index },
+            action = if (nowIndex >= 0 && nowIndex != index) ({ onGoTo(nowIndex) }) else null,
             onGoTo = onGoTo,
         )
-        TabSwitch(tab, onTab)
-    }
-}
-
-private val TabSwitchHeight = 34.dp
-
-@Composable
-private fun TabSwitch(tab: AnalysisTab, onSelect: (AnalysisTab) -> Unit) {
-    val labels = listOf(
-        AnalysisTab.CATEGORIES to stringResource(R.string.analysis_tab_categories),
-        AnalysisTab.ACCOUNTS to stringResource(R.string.analysis_tab_accounts),
-    )
-    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth().padding(start = 8.dp, top = 4.dp, end = 8.dp, bottom = 4.dp)) {
-        labels.forEachIndexed { index, (value, label) ->
-            SegmentedButton(
-                selected = tab == value,
-                onClick = { onSelect(value) },
-                shape = SegmentedButtonDefaults.itemShape(index = index, count = labels.size),
-                // Below the 40dp default, overriding its minimum height.
-                modifier = Modifier.height(TabSwitchHeight),
-                // The default 18dp check and the text's padded slot don't fit 28dp: smaller check,
-                // and the label keeps its own height, centred in the button.
-                icon = {
-                    if (tab == value) {
-                        Icon(painterResource(R.drawable.ph_check), contentDescription = null, modifier = Modifier.size(14.dp))
-                    }
-                },
-            ) {
-                Text(label, style = MaterialTheme.typography.labelLarge, modifier = Modifier.wrapContentHeight(unbounded = true))
-            }
-        }
     }
 }
 
@@ -292,7 +289,8 @@ private fun HeaderRow(
     previousDescription: String,
     nextDescription: String,
     actionLabel: String,
-    actionIndex: Int?,
+    /** Null greys the button out. */
+    action: (() -> Unit)?,
     onGoTo: (Int) -> Unit,
 ) {
     Row(
@@ -305,10 +303,10 @@ private fun HeaderRow(
             ArrowButton(nextIndex, nextDescription, rotation = 0f, onGoTo = onGoTo)
         }
         TextButton(
-            onClick = { actionIndex?.let(onGoTo) },
-            enabled = actionIndex != null,
+            onClick = { action?.invoke() },
+            enabled = action != null,
             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-            modifier = Modifier.height(HeaderRowHeight).alpha(if (actionIndex != null) 1f else 0.3f),
+            modifier = Modifier.height(HeaderRowHeight).alpha(if (action != null) 1f else 0.3f),
         ) {
             Text(actionLabel, style = MaterialTheme.typography.labelLarge)
         }
@@ -410,7 +408,9 @@ private fun ChartList(
                     modifier = reorderableItem(reorder, card.id)
                         // Opaque, so a lifted card hides what it passes over; its shadow comes from the lift.
                         .background(cardColor(), CardShape)
-                        .padding(CardPadding),
+                        .padding(CardPadding)
+                        // Fixed per chart and chip, never per data: every page lays out alike.
+                        .height(chartHeight(card.type, card.mode)),
                 ) {
                     CompositionLocalProvider(LocalSectionAction provides action) { chart(card) }
                 }
@@ -568,50 +568,12 @@ private fun chartName(type: ChartType): String = stringResource(
     },
 )
 
-/** The page's list for the current tab, each tab with its own scroll position. */
-@Composable
-private fun PageCharts(
-    page: AnalysisPage,
-    tab: AnalysisTab,
-    state: AnalysisUiState,
-    viewModel: AnalysisViewModel,
-    onDeleted: (LayoutSlot, Int, ChartCard) -> Unit,
-    chart: @Composable (ChartCard) -> Unit,
-) {
-    // The other tab is built once this page has drawn, then kept: a tab switch only changes which
-    // list is placed, instead of composing every chart of the other list on the tap.
-    var prewarmed by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        withFrameNanos { }
-        delay(OTHER_TAB_PREWARM_MS)
-        prewarmed = true
-    }
-    // Nothing until the saved layouts are read: showing the defaults first would visibly reshuffle.
-    if (state.layouts.isEmpty()) return
-    Box(modifier = Modifier.fillMaxSize()) {
-        AnalysisTab.entries.forEach { shown ->
-            if (shown == tab || prewarmed) {
-                val slot = LayoutSlot.of(page, shown)
-                key(slot) {
-                    Box(modifier = Modifier.fillMaxSize().placedIf(shown == tab)) {
-                        val listState = rememberLazyListState()
-                        ChartList(slot, state.layouts[slot].orEmpty(), state.accounts, listState, viewModel, onDeleted, chart)
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** After a page's first frame, so building the hidden tab never delays the visible one. */
-private const val OTHER_TAB_PREWARM_MS = 300L
-
 // ----------------------------------------------------------------- month page
 
 @Composable
 private fun MonthPage(
     page: AnalysisPage.Month,
-    tab: AnalysisTab,
+    listState: LazyListState,
     state: AnalysisUiState,
     viewModel: AnalysisViewModel,
     onDeleted: (LayoutSlot, Int, ChartCard) -> Unit,
@@ -630,37 +592,38 @@ private fun MonthPage(
 
     LoadTradesAfterFirstFrame(page, viewModel)
 
-    PageCharts(page, tab, state, viewModel, onDeleted) { card ->
+    PageCharts(LayoutSlot.MONTH, listState, state, viewModel, onDeleted) { card ->
         val mode = card.mode
+        val height = chartContentHeight(card.type, mode)
         when (card.type) {
-            ChartType.SUMMARY -> StageSection(stats, stringResource(R.string.analysis_summary_title), 112.dp) {
+            ChartType.SUMMARY -> StageSection(stats, stringResource(R.string.analysis_summary_title), height) {
                 SummarySection(it.summary, mode, trades.dataOrNull?.transfers)
             }
-            ChartType.DONUT -> StageSection(stats, categoryTitle(mode), DonutCardSkeletonHeight) {
+            ChartType.DONUT -> StageSection(stats, categoryTitle(mode), height) {
                 DonutSection(it.expense, it.income, mode, selection, animate)
             }
-            ChartType.PACE -> StageSection(trades, paceTitle(mode), PaceHeight + 24.dp) {
+            ChartType.PACE -> StageSection(trades, paceTitle(mode), height) {
                 PaceSection(it.pace, mode, card.zero, animate)
             }
-            ChartType.TREND -> StageSection(stats, stringResource(R.string.analysis_trend_title), BarsHeight + 24.dp) {
+            ChartType.TREND -> StageSection(stats, stringResource(R.string.analysis_trend_title), height) {
                 BarsSection(it.bars, mode, card.zero, stringResource(R.string.analysis_trend_title), onSelectMonth, animate)
             }
-            ChartType.MOVERS -> StageSection(stats, stringResource(R.string.analysis_movers_title), moversContentHeight(mode)) {
+            ChartType.MOVERS -> StageSection(stats, stringResource(R.string.analysis_movers_title), height) {
                 MoversSection(it.movers, mode, animate)
             }
-            ChartType.HEATMAP -> StageSection(trades, stringResource(R.string.analysis_heatmap_title), 288.dp) {
+            ChartType.HEATMAP -> StageSection(trades, stringResource(R.string.analysis_heatmap_title), height) {
                 HeatmapSection(it.heatmap, onOpenDay)
             }
-            ChartType.WEEKDAY -> StageSection(trades, stringResource(R.string.analysis_weekday_title), WeekdayHeight) {
+            ChartType.WEEKDAY -> StageSection(trades, stringResource(R.string.analysis_weekday_title), height) {
                 WeekdaySection(it.weekday, card.zero, animate)
             }
-            ChartType.BUCKETS -> StageSection(trades, stringResource(R.string.analysis_buckets_title), 232.dp) {
+            ChartType.BUCKETS -> StageSection(trades, stringResource(R.string.analysis_buckets_title), height) {
                 BucketsSection(it.buckets, animate)
             }
-            ChartType.LARGEST -> StageSection(trades, largestTitle(mode), 220.dp) {
+            ChartType.LARGEST -> StageSection(trades, largestTitle(mode), height) {
                 LargestSection(it.largestOf(mode), mode, onOpenTrade)
             }
-            else -> AccountChart(card, accounts, transfers, state.accounts, accountSelection, animate, onOpenTrade)
+            else -> AccountChart(card, height, accounts, transfers, state.accounts, accountSelection, animate, onOpenTrade)
         }
     }
 }
@@ -670,7 +633,7 @@ private fun MonthPage(
 @Composable
 private fun YearPage(
     page: AnalysisPage.Year,
-    tab: AnalysisTab,
+    listState: LazyListState,
     state: AnalysisUiState,
     viewModel: AnalysisViewModel,
     onDeleted: (LayoutSlot, Int, ChartCard) -> Unit,
@@ -687,35 +650,51 @@ private fun YearPage(
 
     LoadTradesAfterFirstFrame(page, viewModel)
 
-    PageCharts(page, tab, state, viewModel, onDeleted) { card ->
+    PageCharts(LayoutSlot.YEAR, listState, state, viewModel, onDeleted) { card ->
         val mode = card.mode
+        val height = chartContentHeight(card.type, mode)
         when (card.type) {
-            ChartType.YEAR_SUMMARY -> StageSection(stats, stringResource(R.string.analysis_year_summary_title), 132.dp) {
+            ChartType.YEAR_SUMMARY -> StageSection(stats, stringResource(R.string.analysis_year_summary_title), height) {
                 YearSummarySection(it.summary, mode, trades.dataOrNull?.transfers)
             }
-            ChartType.YEAR_BARS -> StageSection(stats, stringResource(R.string.analysis_year_bars_title), BarsHeight + 24.dp) {
+            ChartType.YEAR_BARS -> StageSection(stats, stringResource(R.string.analysis_year_bars_title), height) {
                 BarsSection(it.bars, mode, card.zero, stringResource(R.string.analysis_year_bars_title), onSelectMonth, animate)
             }
-            ChartType.DONUT -> StageSection(stats, categoryTitle(mode), DonutCardSkeletonHeight) {
+            ChartType.DONUT -> StageSection(stats, categoryTitle(mode), height) {
                 DonutSection(it.expense, it.income, mode, selection, animate)
             }
-            ChartType.YOY -> StageSection(stats, stringResource(R.string.analysis_year_yoy_title), YoyHeight + 24.dp) {
+            ChartType.YOY -> StageSection(stats, stringResource(R.string.analysis_year_yoy_title), height) {
                 YoySection(it.yoy, page.year, mode, card.zero, animate)
             }
-            ChartType.LARGEST -> StageSection(trades, largestTitle(mode), 220.dp) {
+            ChartType.LARGEST -> StageSection(trades, largestTitle(mode), height) {
                 LargestSection(it.largestOf(mode), mode, onOpenTrade)
             }
-            else -> AccountChart(card, accounts, transfers, state.accounts, accountSelection, animate, onOpenTrade)
+            else -> AccountChart(card, height, accounts, transfers, state.accounts, accountSelection, animate, onOpenTrade)
         }
     }
 }
 
+/** A page's chart list; nothing until the saved layouts are read, since the defaults would visibly reshuffle. */
+@Composable
+private fun PageCharts(
+    slot: LayoutSlot,
+    listState: LazyListState,
+    state: AnalysisUiState,
+    viewModel: AnalysisViewModel,
+    onDeleted: (LayoutSlot, Int, ChartCard) -> Unit,
+    chart: @Composable (ChartCard) -> Unit,
+) {
+    val cards = state.layouts[slot] ?: return
+    ChartList(slot, cards, state.accounts, listState, viewModel, onDeleted, chart)
+}
+
 // --------------------------------------------------------------- account charts
 
-/** The Accounts tab's charts, the same on a month page and a year page. */
+/** The account charts, the same on a month page and a year page. */
 @Composable
 private fun AccountChart(
     card: ChartCard,
+    height: Dp,
     accounts: Stage<AccountsUi>,
     transfers: Stage<TransfersUi>,
     accountList: List<Pair<Long, String>>,
@@ -725,7 +704,7 @@ private fun AccountChart(
 ) {
     val mode = card.mode
     when (card.type) {
-        ChartType.ACCOUNT_DONUT -> StageSection(accounts, accountTitle(mode), DonutCardSkeletonHeight) {
+        ChartType.ACCOUNT_DONUT -> StageSection(accounts, accountTitle(mode), height) {
             // All mode is one ring of end-of-period balances, drawn as a single-kind (income-coloured) donut.
             if (mode == AnalysisMode.ALL) {
                 DonutSection(it.balanceShare, it.balanceShare, AnalysisMode.INCOME, selection, animate, title = accountTitle(mode), plainAmounts = true)
@@ -733,19 +712,19 @@ private fun AccountChart(
                 DonutSection(it.expense, it.income, mode, selection, animate, title = accountTitle(mode))
             }
         }
-        ChartType.NET_FLOW -> StageSection(accounts, stringResource(R.string.analysis_net_flow_title), NetFlowSkeletonHeight) {
+        ChartType.NET_FLOW -> StageSection(accounts, stringResource(R.string.analysis_net_flow_title), height) {
             NetFlowSection(it.netFlow, animate)
         }
-        ChartType.BALANCE_TREND -> StageSection(accounts, stringResource(R.string.analysis_balance_title), BalanceHeight + 24.dp) {
+        ChartType.BALANCE_TREND -> StageSection(accounts, stringResource(R.string.analysis_balance_title), height) {
             BalanceTrendSection(it.balance, card.zero, animate)
         }
-        ChartType.DAILY_BALANCE -> StageSection(accounts, stringResource(R.string.analysis_daily_balance_title), BalanceHeight + 24.dp) {
+        ChartType.DAILY_BALANCE -> StageSection(accounts, stringResource(R.string.analysis_daily_balance_title), height) {
             DailyBalanceSection(it.daily, card.accountId, card.zero, animate)
         }
-        ChartType.TRANSFERS -> StageSection(transfers, stringResource(R.string.analysis_transfers_title), 244.dp) {
+        ChartType.TRANSFERS -> StageSection(transfers, stringResource(R.string.analysis_transfers_title), height) {
             TransfersSection(it, animate)
         }
-        ChartType.ACCOUNT_LARGEST -> StageSection(accounts, largestTitle(mode), 220.dp) {
+        ChartType.ACCOUNT_LARGEST -> StageSection(accounts, largestTitle(mode), height) {
             val id = card.accountId ?: accountList.firstOrNull()?.first
             LargestSection(it.largest[id]?.of(mode).orEmpty(), mode, onOpenTrade)
         }

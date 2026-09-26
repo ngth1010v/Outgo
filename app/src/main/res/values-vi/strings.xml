@@ -234,8 +234,6 @@
     <string name="unit_thousand">K</string>
     <string name="unit_million">Tr</string>
     <string name="unit_billion">T</string>
-    <string name="analysis_tab_categories">Danh mục</string>
-    <string name="analysis_tab_accounts">Tài khoản</string>
     <string name="analysis_add_chart">Thêm biểu đồ</string>
     <string name="analysis_delete_chart">Thả vào đây để xoá biểu đồ</string>
     <string name="analysis_chart_deleted">Đã xoá biểu đồ</string>
