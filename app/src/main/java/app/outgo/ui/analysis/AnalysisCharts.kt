@@ -3,7 +3,10 @@ package app.outgo.ui.analysis
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
@@ -27,12 +30,14 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.res.stringResource
@@ -44,6 +49,7 @@ import app.outgo.ui.home.compactAmount
 import app.outgo.ui.theme.ExpenseRed
 import app.outgo.ui.theme.IncomeGreen
 import app.outgo.ui.theme.TransferBlue
+import app.outgo.util.Money
 import java.time.Year
 import java.time.YearMonth
 import java.util.Locale
@@ -248,7 +254,7 @@ fun PaceChart(pace: PaceUi, mode: AnalysisMode, zero: Boolean, progress: Float, 
     val measurer = rememberTextMeasurer()
 
     val xTicks = remember(pace.daysInMonth, style) {
-        axisDays(pace.daysInMonth).map { day ->
+        axisDays(pace.daysInMonth, 7).map { day ->
             day to measurer.measure(String.format(Locale.US, "%02d", day), style)
         }
     }
@@ -263,13 +269,16 @@ fun PaceChart(pace: PaceUi, mode: AnalysisMode, zero: Boolean, progress: Float, 
     val values = remember(series) { series.flatMap { (line, _) -> line.current + line.previous } }
     val axis = rememberValueAxis(values, zero, height, xTicks.firstOrNull()?.second?.size?.height ?: 0)
     val yTicks = rememberAxisLabels(axis.ticks)
+    val scrub = remember { Scrub() }
+    val look = rememberHoverLook()
 
-    Canvas(modifier = modifier.onSizeChanged { height = it.height }) {
+    Canvas(modifier = modifier.onSizeChanged { height = it.height }.scrub(scrub)) {
         val gutter = gutterOf(yTicks)
         val labelHeight = (xTicks.firstOrNull()?.second?.size?.height ?: 0).toFloat() + AxisGap.toPx()
         val plotWidth = size.width - gutter
         val plotHeight = size.height - labelHeight
         fun y(value: Long) = axis.y(value, plotHeight)
+        val stepX = plotWidth / (pace.daysInMonth - 1).coerceAtLeast(1)
 
         yTicks.forEach { (value, label) ->
             val y = y(value)
@@ -281,25 +290,28 @@ fun PaceChart(pace: PaceUi, mode: AnalysisMode, zero: Boolean, progress: Float, 
             )
         }
 
-        xTicks.forEachIndexed { index, (_, label) ->
-            val x = plotWidth * index / (xTicks.size - 1).coerceAtLeast(1)
-            // The first and last labels are pulled inside the plot so they are not clipped.
-            val left = (x - label.size.width / 2f).coerceIn(0f, plotWidth - label.size.width)
+        xTicks.forEach { (day, label) ->
+            // Each label sits under its own day; the first and last are pulled inside the plot so they are not clipped.
+            val left = ((day - 1) * stepX - label.size.width / 2f).coerceIn(0f, plotWidth - label.size.width)
             drawText(label, color = axisColor, topLeft = Offset(left, plotHeight + AxisGap.toPx()))
         }
 
-        series.forEach { (line, color) ->
-            drawPath(
-                linePath(line.previous, pace.daysInMonth, plotWidth, ::y),
-                fadedColor,
-                alpha = 0.4f,
-                style = Stroke(width = 3f, pathEffect = DashEffect),
-            )
-            drawPath(
-                linePath(line.current, pace.daysInMonth, plotWidth, ::y),
-                color,
-                alpha = progress,
-                style = Stroke(width = 5f),
+        // Per kind, last month's dashed line under this month's; a null colour marks the dashed one.
+        val lines = series.flatMap { (line, color) -> listOf(line.previous to null, line.current to color) }
+        val points = lines.map { (values, _) -> values.mapIndexed { index, value -> Offset(index * stepX, y(value)) } }
+        val hit = hoverHit(scrub, points, HoverStickiness.toPx())
+        lines.forEachIndexed { index, (_, color) ->
+            val grow = hit.grow(index)
+            if (color == null) {
+                drawPath(pathOf(points[index]), fadedColor, alpha = hit.alpha(index, 0.4f), style = Stroke(3f * grow, pathEffect = DashEffect))
+            } else {
+                drawPath(pathOf(points[index]), color, alpha = hit.alpha(index, progress), style = Stroke(5f * grow))
+            }
+        }
+        hit?.let {
+            drawHover(
+                look, points[it.line][it.point], lines[it.line].second ?: fadedColor,
+                String.format(Locale.US, "%02d", it.point + 1), lines[it.line].first[it.point], plotWidth, plotHeight,
             )
         }
     }
@@ -356,26 +368,154 @@ private fun ValueAxis.y(value: Long, plotHeight: Float): Float {
     return LineHeadroom + usable - ((value - low) / (high - low)).toFloat() * usable
 }
 
-private fun linePath(values: List<Long>, daysInMonth: Int, width: Float, y: (Long) -> Float): Path {
+private fun pathOf(points: List<Offset>): Path {
     val path = Path()
-    if (values.isEmpty()) return path
-    val stepX = width / (daysInMonth - 1).coerceAtLeast(1)
-    values.forEachIndexed { index, value ->
-        val x = index * stepX
-        if (index == 0) path.moveTo(x, y(value)) else path.lineTo(x, y(value))
-    }
+    points.forEachIndexed { index, point -> if (index == 0) path.moveTo(point.x, point.y) else path.lineTo(point.x, point.y) }
     return path
 }
 
-/** Value i sits at xs[i], a fraction of [width]; [fromZero] first starts the line at 0 on the left edge. */
-private fun monthEndPath(values: List<Long>, xs: List<Float>, width: Float, fromZero: Boolean, y: (Long) -> Float): Path {
-    val path = Path()
-    if (fromZero) path.moveTo(0f, y(0))
-    values.forEachIndexed { index, value ->
-        val x = xs[index] * width
-        if (index == 0 && !fromZero) path.moveTo(x, y(value)) else path.lineTo(x, y(value))
+// ------------------------------------------------------------ line chart hover
+
+/** A finger scrubbing a line chart, and the line it last picked out, which [hoverHit] favours. */
+private class Scrub {
+    var finger by mutableStateOf<Offset?>(null)
+
+    /** Plain field: written while drawing, so it must not invalidate the draw. -1 before a pick. */
+    var line = -1
+}
+
+/** How much closer another line must be before the hover leaves the line it is on. */
+private val HoverStickiness = 24.dp
+
+/**
+ * Scrubs [scrub] along a line chart: a press that moves sideways right away, before a long press
+ * would fire, follows the finger until it lifts. A press held still is left alone, so the card's
+ * long-press drag still works, and so is a mostly vertical move, which scrolls the list.
+ */
+private fun Modifier.scrub(scrub: Scrub): Modifier = pointerInput(scrub) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        val start = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+            var moved: PointerInputChange? = null
+            while (moved == null) {
+                val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id }
+                if (change == null || !change.pressed || change.isConsumed) break
+                val delta = change.position - down.position
+                if (delta.getDistance() > viewConfiguration.touchSlop) {
+                    if (abs(delta.x) <= abs(delta.y)) break
+                    moved = change
+                }
+            }
+            moved
+        } ?: return@awaitEachGesture
+        try {
+            start.consume()
+            scrub.finger = start.position
+            drag(start.id) {
+                it.consume()
+                scrub.finger = it.position
+            }
+        } finally {
+            scrub.finger = null
+            scrub.line = -1
+        }
     }
-    return path
+}
+
+/** The point under a scrubbing finger: [line] and [point] index into the chart's point lists. */
+private class HoverHit(val line: Int, val point: Int)
+
+/**
+ * On each line, the point nearest the finger across; of those, the one nearest the finger itself.
+ * Measuring the last step in both axes lets a line that stops short (this month, up to today)
+ * lose to one that runs under the finger. The line already picked counts [stickiness] closer, so
+ * where lines cross or overlap the hover stays on it rather than flicking between them.
+ */
+private fun hoverHit(scrub: Scrub, lines: List<List<Offset>>, stickiness: Float): HoverHit? {
+    val finger = scrub.finger ?: return null
+    var best: HoverHit? = null
+    var bestDistance = Float.MAX_VALUE
+    lines.forEachIndexed { line, points ->
+        val point = points.indices.minByOrNull { abs(points[it].x - finger.x) } ?: return@forEachIndexed
+        val distance = (points[point] - finger).getDistance() - if (line == scrub.line) stickiness else 0f
+        if (distance < bestDistance) {
+            bestDistance = distance
+            best = HoverHit(line, point)
+        }
+    }
+    scrub.line = best?.line ?: -1
+    return best
+}
+
+/** Alpha of [line]: [rest] with nothing hovered, full for the hovered line, faded for the others. */
+private fun HoverHit?.alpha(line: Int, rest: Float): Float = when {
+    this == null -> rest
+    this.line == line -> 1f
+    else -> rest * 0.3f
+}
+
+/** Stroke multiplier of [line]: the hovered line draws thicker. */
+private fun HoverHit?.grow(line: Int): Float = if (this?.line == line) 1.5f else 1f
+
+private class HoverLook(
+    val measurer: TextMeasurer,
+    val style: TextStyle,
+    val cross: Color,
+    val pill: Color,
+    val text: Color,
+    val ring: Color,
+)
+
+@Composable
+private fun rememberHoverLook(): HoverLook {
+    val scheme = MaterialTheme.colorScheme
+    val style = MaterialTheme.typography.labelSmall
+    val measurer = rememberTextMeasurer()
+    return remember(scheme, style, measurer) {
+        HoverLook(measurer, style, scheme.onSurfaceVariant.copy(alpha = 0.7f), scheme.inverseSurface, scheme.inverseOnSurface, scheme.surface)
+    }
+}
+
+/**
+ * Crosshair through [point], a dot on it, [value] in a pill on the value axis and [xText] in a
+ * pill on the x axis. Measured per frame, which only happens while a finger scrubs.
+ */
+private fun DrawScope.drawHover(
+    look: HoverLook,
+    point: Offset,
+    color: Color,
+    xText: String,
+    value: Long,
+    plotWidth: Float,
+    plotHeight: Float,
+) {
+    drawLine(look.cross, Offset(point.x, 0f), Offset(point.x, plotHeight), strokeWidth = 1.5f)
+    drawLine(look.cross, Offset(0f, point.y), Offset(plotWidth, point.y), strokeWidth = 1.5f)
+    drawCircle(look.ring, radius = 9f, center = point)
+    drawCircle(color, radius = 6f, center = point)
+
+    val padX = 4.dp.toPx()
+    val padY = 1.dp.toPx()
+    fun pill(label: TextLayoutResult, left: Float, top: Float) {
+        val pillSize = Size(label.size.width + padX * 2, label.size.height + padY * 2)
+        drawRoundRect(look.pill, Offset(left, top), pillSize, CornerRadius(pillSize.height / 2f))
+        drawText(label, look.text, Offset(left + padX, top + padY))
+    }
+    // Right-aligned to the edge, so an amount wider than the axis labels grows over the plot.
+    val valueLabel = look.measurer.measure(Money.groupThousands(value), look.style)
+    val valueHeight = valueLabel.size.height + padY * 2
+    pill(
+        valueLabel,
+        size.width - valueLabel.size.width - padX * 2,
+        (point.y - valueHeight / 2f).coerceAtMost(size.height - valueHeight).coerceAtLeast(0f),
+    )
+    val xLabel = look.measurer.measure(xText, look.style)
+    val xWidth = xLabel.size.width + padX * 2
+    pill(
+        xLabel,
+        (point.x - xWidth / 2f).coerceAtMost(size.width - xWidth).coerceAtLeast(0f),
+        (plotHeight + AxisGap.toPx() - padY).coerceAtMost(size.height - xLabel.size.height - padY * 2),
+    )
 }
 
 // -------------------------------------------------------------- sections 5, Y2
@@ -661,8 +801,10 @@ fun YoyChart(series: YoySeries, year: Int, mode: AnalysisMode, zero: Boolean, pr
     val values = remember(series) { series.current + series.previous }
     val axis = rememberValueAxis(values, zero, height, xTicks.firstOrNull()?.size?.height ?: 0)
     val yTicks = rememberAxisLabels(axis.ticks)
+    val scrub = remember { Scrub() }
+    val look = rememberHoverLook()
 
-    Canvas(modifier = modifier.onSizeChanged { height = it.height }) {
+    Canvas(modifier = modifier.onSizeChanged { height = it.height }.scrub(scrub)) {
         val plotHeight = size.height - (xTicks.firstOrNull()?.size?.height ?: 0) - AxisGap.toPx()
         // Inset by half a label so 01/01 and 31/12 sit centred under the ends, keeping the gaps equal.
         val inset = (xTicks.maxOfOrNull { it.size.width } ?: 0) / 2f
@@ -678,18 +820,24 @@ fun YoyChart(series: YoySeries, year: Int, mode: AnalysisMode, zero: Boolean, pr
             val x = inset + plotWidth * index / (xTicks.size - 1)
             drawText(label, color = fadedColor, topLeft = Offset(x - label.size.width / 2f, plotHeight + AxisGap.toPx()))
         }
-        translate(left = inset) {
-            drawPath(
-                monthEndPath(series.previous, monthEnds, plotWidth, zero, ::y),
-                fadedColor,
-                alpha = 0.4f,
-                style = Stroke(width = 3f, pathEffect = DashEffect),
-            )
-            drawPath(
-                monthEndPath(series.current, monthEnds, plotWidth, zero, ::y),
-                color,
-                alpha = progress,
-                style = Stroke(width = 5f),
+        // Value i sits on month i's last day; with [zero] a 0 on 01/01 comes first.
+        val lines = listOf(series.previous, series.current).map { values -> if (zero) listOf(0L) + values else values }
+        val lead = if (zero) 1 else 0
+        val points = lines.map { values ->
+            values.mapIndexed { index, value ->
+                val month = index - lead
+                Offset(inset + (if (month < 0) 0f else monthEnds[month]) * plotWidth, y(value))
+            }
+        }
+        val hit = hoverHit(scrub, points, HoverStickiness.toPx())
+        drawPath(pathOf(points[0]), fadedColor, alpha = hit.alpha(0, 0.4f), style = Stroke(3f * hit.grow(0), pathEffect = DashEffect))
+        drawPath(pathOf(points[1]), color, alpha = hit.alpha(1, progress), style = Stroke(5f * hit.grow(1)))
+        hit?.let {
+            val month = it.point - lead
+            val date = if (month < 0) Year.of(year).atDay(1) else YearMonth.of(year, month + 1).atEndOfMonth()
+            drawHover(
+                look, points[it.line][it.point], if (it.line == 0) fadedColor else color,
+                String.format(Locale.US, "%02d/%02d", date.dayOfMonth, date.monthValue), lines[it.line][it.point], gridWidth, plotHeight,
             )
         }
     }
@@ -715,8 +863,10 @@ fun BalanceChart(balance: BalanceTrendUi, labels: List<String>, zero: Boolean, p
     val values = remember(balance) { balance.lines.flatMap { it.values } }
     val axis = rememberValueAxis(values, zero, height, xLabels.firstOrNull()?.size?.height ?: 0)
     val yTicks = rememberAxisLabels(axis.ticks)
+    val scrub = remember { Scrub() }
+    val look = rememberHoverLook()
 
-    Canvas(modifier = modifier.onSizeChanged { height = it.height }) {
+    Canvas(modifier = modifier.onSizeChanged { height = it.height }.scrub(scrub)) {
         val gutter = gutterOf(yTicks)
         val plotWidth = size.width - gutter
         val plotHeight = size.height - (xLabels.firstOrNull()?.size?.height ?: 0) - AxisGap.toPx()
@@ -734,18 +884,35 @@ fun BalanceChart(balance: BalanceTrendUi, labels: List<String>, zero: Boolean, p
         xLabels.forEachIndexed { index, label ->
             drawText(label, color = axisColor, topLeft = Offset(x(index) - label.size.width / 2f, plotHeight + AxisGap.toPx()))
         }
-        balance.lines.forEach { line ->
-            val color = Color(line.color)
-            if (line.values.size == 1) {
-                drawCircle(color, radius = 5f, center = Offset(x(0), y(line.values[0])), alpha = progress)
-                return@forEach
-            }
-            val path = Path()
-            line.values.forEachIndexed { index, value ->
-                if (index == 0) path.moveTo(x(index), y(value)) else path.lineTo(x(index), y(value))
-            }
-            drawPath(path, color, alpha = progress, style = Stroke(width = 4f))
+        drawBalanceLines(balance.lines, ::x, ::y, scrub, progress, look, plotWidth, plotHeight) { labels.getOrElse(it) { "" } }
+    }
+}
+
+/** One line per account, the one under [scrub] picked out; [xText] names point i on the x axis. */
+private fun DrawScope.drawBalanceLines(
+    lines: List<BalanceLine>,
+    x: (Int) -> Float,
+    y: (Long) -> Float,
+    scrub: Scrub,
+    progress: Float,
+    look: HoverLook,
+    plotWidth: Float,
+    plotHeight: Float,
+    xText: (Int) -> String,
+) {
+    val points = lines.map { line -> line.values.mapIndexed { index, value -> Offset(x(index), y(value)) } }
+    val hit = hoverHit(scrub, points, HoverStickiness.toPx())
+    lines.forEachIndexed { index, line ->
+        val color = Color(line.color)
+        val alpha = hit.alpha(index, progress)
+        if (line.values.size == 1) {
+            drawCircle(color, radius = 5f * hit.grow(index), center = points[index][0], alpha = alpha)
+        } else {
+            drawPath(pathOf(points[index]), color, alpha = alpha, style = Stroke(width = 4f * hit.grow(index)))
         }
+    }
+    hit?.let {
+        drawHover(look, points[it.line][it.point], Color(lines[it.line].color), xText(it.point), lines[it.line].values[it.point], plotWidth, plotHeight)
     }
 }
 
@@ -767,8 +934,10 @@ fun DailyBalanceChart(lines: List<BalanceLine>, daysInMonth: Int, zero: Boolean,
     val values = remember(lines) { lines.flatMap { it.values } }
     val axis = rememberValueAxis(values, zero, height, xTicks.firstOrNull()?.second?.size?.height ?: 0)
     val yTicks = rememberAxisLabels(axis.ticks)
+    val scrub = remember { Scrub() }
+    val look = rememberHoverLook()
 
-    Canvas(modifier = modifier.onSizeChanged { height = it.height }) {
+    Canvas(modifier = modifier.onSizeChanged { height = it.height }.scrub(scrub)) {
         val gutter = gutterOf(yTicks)
         val plotWidth = size.width - gutter
         val plotHeight = size.height - (xTicks.firstOrNull()?.second?.size?.height ?: 0) - AxisGap.toPx()
@@ -786,17 +955,8 @@ fun DailyBalanceChart(lines: List<BalanceLine>, daysInMonth: Int, zero: Boolean,
         xTicks.forEach { (day, label) ->
             drawText(label, color = axisColor, topLeft = Offset(x(day - 1) - label.size.width / 2f, plotHeight + AxisGap.toPx()))
         }
-        lines.forEach { line ->
-            val color = Color(line.color)
-            if (line.values.size == 1) {
-                drawCircle(color, radius = 5f, center = Offset(x(0), y(line.values[0])), alpha = progress)
-                return@forEach
-            }
-            val path = Path()
-            line.values.forEachIndexed { index, value ->
-                if (index == 0) path.moveTo(x(index), y(value)) else path.lineTo(x(index), y(value))
-            }
-            drawPath(path, color, alpha = progress, style = Stroke(width = 4f))
+        drawBalanceLines(lines, ::x, ::y, scrub, progress, look, plotWidth, plotHeight) {
+            String.format(Locale.US, "%02d", it + 1)
         }
     }
 }
