@@ -309,6 +309,11 @@ data class AccountsUi(
     val netFlow: List<MoverRow>,
     val balance: BalanceTrendUi,
     val largest: Map<Long, LargestSet>,
+    /**
+     * Each account's share of the money held at the end of the period, against the end of the
+     * period before; the All-mode donut. Accounts at or below 0 cannot be a slice and are left out.
+     */
+    val balanceShare: SliceSet,
     /** Month pages only; a year page leaves it empty. */
     val daily: DailyBalanceUi = DailyBalanceUi(0, emptyList()),
 )

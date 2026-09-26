@@ -726,7 +726,12 @@ private fun AccountChart(
     val mode = card.mode
     when (card.type) {
         ChartType.ACCOUNT_DONUT -> StageSection(accounts, accountTitle(mode), DonutCardSkeletonHeight) {
-            DonutSection(it.expense, it.income, mode, selection, animate, title = accountTitle(mode))
+            // All mode is one ring of end-of-period balances, drawn as a single-kind (income-coloured) donut.
+            if (mode == AnalysisMode.ALL) {
+                DonutSection(it.balanceShare, it.balanceShare, AnalysisMode.INCOME, selection, animate, title = accountTitle(mode), plainAmounts = true)
+            } else {
+                DonutSection(it.expense, it.income, mode, selection, animate, title = accountTitle(mode))
+            }
         }
         ChartType.NET_FLOW -> StageSection(accounts, stringResource(R.string.analysis_net_flow_title), NetFlowSkeletonHeight) {
             NetFlowSection(it.netFlow, animate)

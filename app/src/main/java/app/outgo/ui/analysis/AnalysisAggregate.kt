@@ -468,7 +468,7 @@ internal fun largestOf(
 // ------------------------------------------------------------------ ACCOUNTS
 
 private val EmptySlices = SliceSet(DonutUi(emptyList(), 0L), emptyList(), 0L, 0L, 0)
-val EmptyAccounts = AccountsUi(EmptySlices, EmptySlices, emptyList(), BalanceTrendUi(emptyList(), emptyList()), emptyMap())
+val EmptyAccounts = AccountsUi(EmptySlices, EmptySlices, emptyList(), BalanceTrendUi(emptyList(), emptyList()), emptyMap(), EmptySlices)
 
 /** What a flow row does to its account's balance — the same signs as the balance triggers. */
 private fun signed(flow: AccountFlow): Long = when (flow.type) {
@@ -533,6 +533,23 @@ fun buildAccounts(
         if (values.all { it == 0L }) null else BalanceLine(id, account?.first.orEmpty(), account?.third ?: OTHER_COLOR, values)
     }
 
+    // Balances at the end of the period and at the end of the one before (-1: the opening balance).
+    val endIndex = trend.indexOf(period.last())
+    val beforeIndex = trend.indexOf(period.first()) - 1
+    fun balancesAt(index: Int): List<MonthCategoryTotal> = lines.mapNotNull { line ->
+        val balance = if (index < 0) start[line.accountId] ?: 0L else line.values[index]
+        val account = accounts[line.accountId]
+        if (balance <= 0L) null else MonthCategoryTotal(
+            monthKey = 0,
+            rootId = line.accountId,
+            type = CategoryKind.INCOME,
+            name = line.name,
+            color = line.color,
+            iconId = account?.second,
+            total = balance,
+        )
+    }
+
     return AccountsUi(
         expense = buildSliceSet(totals(period, CategoryKind.EXPENSE), totals(previous, CategoryKind.EXPENSE), CategoryKind.EXPENSE, otherName),
         income = buildSliceSet(totals(period, CategoryKind.INCOME), totals(previous, CategoryKind.INCOME), CategoryKind.INCOME, otherName),
@@ -545,6 +562,7 @@ fun buildAccounts(
                 all = largestOf(group, null, categories),
             )
         },
+        balanceShare = buildSliceSet(balancesAt(endIndex), balancesAt(beforeIndex), CategoryKind.INCOME, otherName),
     )
 }
 

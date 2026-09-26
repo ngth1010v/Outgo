@@ -363,6 +363,8 @@ fun DonutSection(
     animate: Boolean,
     modifier: Modifier = Modifier,
     title: String = categoryTitle(mode),
+    /** Row amounts in the default text colour rather than green for income, e.g. for balances. */
+    plainAmounts: Boolean = false,
 ) {
     val shown = if (mode == AnalysisMode.INCOME) income else expense
     // All mode's centre shows the net of both rings, signed and coloured like the summary.
@@ -403,13 +405,13 @@ fun DonutSection(
                 AnalysisMode.INCOME -> income.rows
                 AnalysisMode.ALL -> expense.rows + income.rows
             }
-            Column { rows.forEach { BreakdownRowItem(it, selection) } }
+            Column { rows.forEach { BreakdownRowItem(it, selection, plainAmounts) } }
         }
     }
 }
 
 @Composable
-private fun BreakdownRowItem(row: BreakdownRow, selection: AnalysisSelection) {
+private fun BreakdownRowItem(row: BreakdownRow, selection: AnalysisSelection, plainAmount: Boolean) {
     // Only the row whose selected-ness actually flips recomposes on a tap.
     val selected by remember(row.rootId) {
         derivedStateOf { row.rootId != null && selection.rootId == row.rootId }
@@ -443,7 +445,7 @@ private fun BreakdownRowItem(row: BreakdownRow, selection: AnalysisSelection) {
             Text(
                 Money.format(row.amount),
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (row.kind == CategoryKind.INCOME) IncomeGreen else MaterialTheme.colorScheme.onSurface,
+                color = if (row.kind == CategoryKind.INCOME && !plainAmount) IncomeGreen else MaterialTheme.colorScheme.onSurface,
             )
             Text(
                 "${Money.formatSignedNoCurrency(row.deltaAmount)} (${signedPercent(row.deltaPercent)})",

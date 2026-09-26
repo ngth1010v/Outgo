@@ -12,8 +12,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -44,6 +47,7 @@ import app.outgo.ui.theme.TransferBlue
 import java.time.Year
 import java.time.YearMonth
 import java.util.Locale
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.hypot
@@ -101,6 +105,7 @@ fun DonutChart(
     val label = remember(centerLabel, labelStyle) { measurer.measure(centerLabel, labelStyle) }
     val delta = remember(centerDelta, deltaStyle) { measurer.measure(centerDelta, deltaStyle) }
     val rings = remember(expense, income, mode) { ringsOf(expense, income, mode) }
+    val emphasis = rememberSliceEmphasis(selectedRootId)
 
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         Canvas(
@@ -112,7 +117,7 @@ fun DonutChart(
                     }
                 },
         ) {
-            val selectedId = selectedRootId()
+            val dim = emphasis.dim.value
             val radius = size.minDimension / 2f
             rings.forEachIndexed { index, ring ->
                 val stroke = radius * (if (rings.size == 1) 0.36f else 0.26f)
@@ -124,7 +129,7 @@ fun DonutChart(
                     drawCircle(outline.copy(alpha = 0.15f), radius = diameter / 2f, style = Stroke(stroke))
                 }
                 ring.slices.forEach { slice ->
-                    val selected = selectedId != null && slice.rootId == selectedId
+                    val lift = emphasis.of(slice.rootId)
                     drawArc(
                         color = Color(slice.color),
                         startAngle = slice.startAngle,
@@ -132,8 +137,9 @@ fun DonutChart(
                         useCenter = false,
                         topLeft = topLeft,
                         size = arcSize,
-                        alpha = if (selectedId == null || selected) 1f else 0.35f,
-                        style = Stroke(width = if (selected) stroke * 1.25f else stroke),
+                        // Selected: full colour and 1.25x as thick; the rest fade to 0.35 while one is.
+                        alpha = 1f - 0.65f * dim * (1f - lift),
+                        style = Stroke(width = stroke * (1f + 0.25f * lift)),
                     )
                 }
             }
@@ -151,6 +157,56 @@ fun DonutChart(
             )
         }
     }
+}
+
+/**
+ * Animated selection for [DonutChart]: [lift] of the selected slice runs 0 -> 1 while the one it
+ * replaces runs back from wherever it was, and [dim] fades the other slices in and out.
+ */
+private class SliceEmphasis {
+    val dim = Animatable(0f)
+    var selected by mutableStateOf<Long?>(null)
+    var released by mutableStateOf<Long?>(null)
+    val lift = Animatable(0f)
+    val drop = Animatable(0f)
+
+    fun of(rootId: Long?): Float = when {
+        rootId == null -> 0f
+        rootId == selected -> lift.value
+        rootId == released -> drop.value
+        else -> 0f
+    }
+}
+
+private val SliceSpec = tween<Float>(durationMillis = 220)
+
+/** Follows [selectedRootId] outside composition, so a tap animates the ring without recomposing it. */
+@Composable
+private fun rememberSliceEmphasis(selectedRootId: () -> Long?): SliceEmphasis {
+    val emphasis = remember { SliceEmphasis() }
+    val current by rememberUpdatedState(selectedRootId)
+    LaunchedEffect(emphasis) {
+        var first = true
+        snapshotFlow { current() }.collect { id ->
+            val target = if (id == null) 0f else 1f
+            if (first) {
+                // A revisited page shows its selection as it was, without replaying it.
+                first = false
+                emphasis.selected = id
+                emphasis.lift.snapTo(target)
+                emphasis.dim.snapTo(target)
+                return@collect
+            }
+            emphasis.drop.snapTo(emphasis.lift.value)
+            emphasis.released = emphasis.selected
+            emphasis.lift.snapTo(0f)
+            emphasis.selected = id
+            launch { emphasis.drop.animateTo(0f, SliceSpec) }
+            launch { emphasis.lift.animateTo(target, SliceSpec) }
+            launch { emphasis.dim.animateTo(target, SliceSpec) }
+        }
+    }
+    return emphasis
 }
 
 private fun ringsOf(expense: DonutUi, income: DonutUi, mode: AnalysisMode): List<DonutUi> = when (mode) {

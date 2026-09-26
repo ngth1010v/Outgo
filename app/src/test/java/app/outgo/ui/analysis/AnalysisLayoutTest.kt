@@ -84,6 +84,10 @@ class AnalysisLayoutTest {
         // Bank +1000 -200, Cash -300 +200.
         assertEquals(listOf(2L to 800L, 1L to -100L), ui.netFlow.map { it.rootId to it.delta })
         assertEquals(listOf(listOf(400L, 300L), listOf(0L, 800L)), ui.balance.lines.map { it.values })
+        // August's end-of-month balances, against July's end (Bank still at 0 then, so no slice).
+        assertEquals(listOf(2L to 800L, 1L to 300L), ui.balanceShare.rows.map { it.rootId to it.amount })
+        assertEquals(1_100L, ui.balanceShare.donut.total)
+        assertEquals(400L, ui.balanceShare.prevTotal)
         assertEquals(listOf(1L), ui.largest.getValue(1).expense.map { it.tradeId })
         assertEquals(listOf(2L), ui.largest.getValue(2).all.map { it.tradeId })
     }
