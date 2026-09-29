@@ -23,6 +23,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.lerp
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -352,12 +353,12 @@ private val MinTickGap = 24.dp
  * that first frame has no ticks.
  */
 @Composable
-private fun rememberValueAxis(values: List<Long>, zero: Boolean, heightPx: Int, xLabelHeightPx: Int): ValueAxis {
+private fun rememberValueAxis(values: List<Long>, zero: Boolean, heightPx: Int, xLabelHeightPx: Int, pad: Boolean = true): ValueAxis {
     val density = LocalDensity.current
-    return remember(values, zero, heightPx, xLabelHeightPx, density) {
+    return remember(values, zero, heightPx, xLabelHeightPx, density, pad) {
         with(density) {
             val plotPx = heightPx - xLabelHeightPx - AxisGap.toPx() - LineHeadroom * 2
-            valueAxis(values.minOrNull() ?: 0L, values.maxOrNull() ?: 0L, plotPx, MinTickGap.toPx(), zero)
+            valueAxis(values.minOrNull() ?: 0L, values.maxOrNull() ?: 0L, plotPx, MinTickGap.toPx(), zero, pad)
         }
     }
 }
@@ -888,6 +889,31 @@ fun BalanceChart(balance: BalanceTrendUi, labels: List<String>, zero: Boolean, p
     }
 }
 
+/**
+ * Shades each day-to-day step between [a] and [b], [above] where [a] leads and [below] where it
+ * trails. A step where they cross is split at the crossing so each side gets its own colour.
+ */
+private fun DrawScope.drawGap(a: List<Long>, b: List<Long>, x: (Int) -> Float, y: (Long) -> Float, above: Color, below: Color) {
+    fun colorOf(diff: Long) = if (diff > 0) above else below
+    fun fill(points: List<Offset>, color: Color) = drawPath(pathOf(points).apply { close() }, color, alpha = 0.2f)
+    for (i in 0 until minOf(a.size, b.size) - 1) {
+        val a0 = Offset(x(i), y(a[i]))
+        val a1 = Offset(x(i + 1), y(a[i + 1]))
+        val b0 = Offset(x(i), y(b[i]))
+        val b1 = Offset(x(i + 1), y(b[i + 1]))
+        val d0 = a[i] - b[i]
+        val d1 = a[i + 1] - b[i + 1]
+        if ((d0 > 0 && d1 < 0) || (d0 < 0 && d1 > 0)) {
+            // Both lines are straight over the step, so they cross where the gap hits 0.
+            val cross = lerp(a0, a1, d0.toFloat() / (d0 - d1))
+            fill(listOf(a0, cross, b0), colorOf(d0))
+            fill(listOf(cross, a1, b1), colorOf(d1))
+        } else if (d0 != 0L || d1 != 0L) {
+            fill(listOf(a0, a1, b1, b0), colorOf(d0 + d1))
+        }
+    }
+}
+
 /** One line per account, the one under [scrub] picked out; [xText] names point i on the x axis. */
 private fun DrawScope.drawBalanceLines(
     lines: List<BalanceLine>,
@@ -908,7 +934,7 @@ private fun DrawScope.drawBalanceLines(
         if (line.values.size == 1) {
             drawCircle(color, radius = 5f * hit.grow(index), center = points[index][0], alpha = alpha)
         } else {
-            drawPath(pathOf(points[index]), color, alpha = alpha, style = Stroke(width = 4f * hit.grow(index)))
+            drawPath(pathOf(points[index]), color, alpha = alpha, style = Stroke(width = 4f * hit.grow(index), pathEffect = if (line.dashed) DashEffect else null))
         }
     }
     hit?.let {
@@ -920,9 +946,19 @@ private fun DrawScope.drawBalanceLines(
  * One line per account through its end-of-day balances. Unless [zero], the value axis hugs the
  * lines rather than reaching down to 0, so a day's movement stays visible on a large balance.
  * Seven day labels, always the 1st and the month's last day, each under its own day.
+ * With [gapColors] (above, below) the gap between lines[0] and lines[1] is shaded by which one leads.
+ * Without [pad] the value axis stops at the data, with no headroom above or below it.
  */
 @Composable
-fun DailyBalanceChart(lines: List<BalanceLine>, daysInMonth: Int, zero: Boolean, progress: Float, modifier: Modifier = Modifier) {
+fun DailyBalanceChart(
+    lines: List<BalanceLine>,
+    daysInMonth: Int,
+    zero: Boolean,
+    progress: Float,
+    modifier: Modifier = Modifier,
+    gapColors: Pair<Color, Color>? = null,
+    pad: Boolean = true,
+) {
     val gridColor = MaterialTheme.colorScheme.outlineVariant
     val axisColor = MaterialTheme.colorScheme.onSurfaceVariant
     val style = MaterialTheme.typography.labelSmall
@@ -932,7 +968,7 @@ fun DailyBalanceChart(lines: List<BalanceLine>, daysInMonth: Int, zero: Boolean,
     }
     var height by remember { mutableIntStateOf(0) }
     val values = remember(lines) { lines.flatMap { it.values } }
-    val axis = rememberValueAxis(values, zero, height, xTicks.firstOrNull()?.second?.size?.height ?: 0)
+    val axis = rememberValueAxis(values, zero, height, xTicks.firstOrNull()?.second?.size?.height ?: 0, pad)
     val yTicks = rememberAxisLabels(axis.ticks)
     val scrub = remember { Scrub() }
     val look = rememberHoverLook()
@@ -954,6 +990,9 @@ fun DailyBalanceChart(lines: List<BalanceLine>, daysInMonth: Int, zero: Boolean,
         }
         xTicks.forEach { (day, label) ->
             drawText(label, color = axisColor, topLeft = Offset(x(day - 1) - label.size.width / 2f, plotHeight + AxisGap.toPx()))
+        }
+        if (gapColors != null && lines.size >= 2) {
+            drawGap(lines[0].values, lines[1].values, ::x, ::y, gapColors.first, gapColors.second)
         }
         drawBalanceLines(lines, ::x, ::y, scrub, progress, look, plotWidth, plotHeight) {
             String.format(Locale.US, "%02d", it + 1)

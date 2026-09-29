@@ -144,6 +144,11 @@ fun BalanceScreen() {
                             ),
                             progress = row.monthlyIncome.toFloat() / target.toFloat(),
                             color = savingsProgressColor(row.monthlyIncome, target, Color(account.color)),
+                            current = row.monthlyIncome,
+                            total = target,
+                            lineName = stringResource(R.string.progress_line_saved),
+                            loadDays = { container.tradeRepository.savingDaysThisMonth(account.id) },
+                            greenWhenLower = false,
                         )
                     }
                 }

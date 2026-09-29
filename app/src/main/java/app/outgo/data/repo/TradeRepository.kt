@@ -10,6 +10,9 @@ import app.outgo.data.db.entity.TradeEntity
 import app.outgo.domain.TradeDraft
 import app.outgo.domain.TradeType
 import app.outgo.util.MonthKey
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -124,4 +127,27 @@ class TradeRepository(private val tradeDao: TradeDao) {
 
     suspend fun accountMovesForMonth(monthKey: Int): List<AccountMove> =
         withContext(Dispatchers.IO) { tradeDao.accountMovesForMonth(monthKey) }
+
+    /** Running spend of a budget's category for each day of this month, day 1 to today. */
+    suspend fun budgetDaysThisMonth(categoryId: Long): List<Long> = withContext(Dispatchers.IO) {
+        runningToToday(tradeDao.budgetTradesForMonth(categoryId, MonthKey.current()))
+    }
+
+    /** Running amount saved into an account for each day of this month, day 1 to today. */
+    suspend fun savingDaysThisMonth(accountId: Long): List<Long> = withContext(Dispatchers.IO) {
+        runningToToday(tradeDao.savingTradesForMonth(accountId, MonthKey.current()))
+    }
+
+    private fun runningToToday(trades: List<TradeSlim>): List<Long> {
+        val zone = ZoneId.systemDefault()
+        val today = LocalDate.now(zone).dayOfMonth
+        val daily = LongArray(today)
+        trades.forEach {
+            val day = Instant.ofEpochMilli(it.occurredAt).atZone(zone).dayOfMonth
+            // A trade dated later this month still counts, on today.
+            daily[day.coerceAtMost(today) - 1] += it.amount
+        }
+        var running = 0L
+        return daily.map { running += it; running }
+    }
 }

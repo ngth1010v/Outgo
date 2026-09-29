@@ -277,7 +277,7 @@ data class YoyUi(val expense: YoySeries, val income: YoySeries) {
 
 /** One account's balance at the end of each month of [BalanceTrendUi.months]. */
 @Immutable
-data class BalanceLine(val accountId: Long, val name: String, val color: Int, val values: List<Long>)
+data class BalanceLine(val accountId: Long, val name: String, val color: Int, val values: List<Long>, val dashed: Boolean = false)
 
 @Immutable
 data class BalanceTrendUi(val months: List<Int>, val lines: List<BalanceLine>)

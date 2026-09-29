@@ -670,14 +670,17 @@ data class ValueAxis(val low: Double, val high: Double, val ticks: List<Long>)
  * Value axis for data spanning [min]..[max] on a plot [heightPx] tall. The range is the data
  * padded by a tenth of its span each side; with [zero] it always takes in 0, and an end that sits
  * on 0 is not padded past it. Ticks sit on the smallest 1/2/5 x 10^k step that keeps them at
- * least [minGapPx] apart. No ticks until the plot has a height.
+ * least [minGapPx] apart. No ticks until the plot has a height. Without [pad] the range is the data exactly,
+ * unless the data is flat.
  */
-fun valueAxis(min: Long, max: Long, heightPx: Float, minGapPx: Float, zero: Boolean): ValueAxis {
+fun valueAxis(min: Long, max: Long, heightPx: Float, minGapPx: Float, zero: Boolean, pad: Boolean = true): ValueAxis {
     val dataMin = (if (zero) minOf(min, 0L) else min).toDouble()
     val dataMax = (if (zero) maxOf(max, 0L) else max).toDouble()
     val delta = (dataMax - dataMin).takeIf { it > 0.0 } ?: abs(dataMax).takeIf { it > 0.0 } ?: 1.0
-    val low = if (zero && dataMin == 0.0) 0.0 else dataMin - delta / 10
-    val high = if (zero && dataMax == 0.0 && dataMin < 0.0) 0.0 else dataMax + delta / 10
+    // A flat line still needs a span, so it is padded either way.
+    val margin = if (!pad && dataMax > dataMin) 0.0 else delta / 10
+    val low = if (zero && dataMin == 0.0) 0.0 else dataMin - margin
+    val high = if (zero && dataMax == 0.0 && dataMin < 0.0) 0.0 else dataMax + margin
     if (heightPx <= 0f) return ValueAxis(low, high, emptyList())
     val span = high - low
     // Amounts are whole minor units, so the step never goes below 1.

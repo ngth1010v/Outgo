@@ -352,6 +352,7 @@ private fun CategoryRow(
             trailing?.invoke()
         }
         if (budget != null) {
+            val trades = LocalAppContainer.current.tradeRepository
             val limit = budget.limitAmount ?: 0L
             BudgetProgressBlock(
                 remainingText = budgetRemainingText(budget.spent, limit),
@@ -362,6 +363,11 @@ private fun CategoryRow(
                 ),
                 progress = if (limit > 0) budget.spent.toFloat() / limit.toFloat() else 0f,
                 color = budgetRemainingColor(budget.spent, limit, Color(category.color)),
+                current = budget.spent,
+                total = limit,
+                lineName = stringResource(R.string.progress_line_spent),
+                loadDays = { trades.budgetDaysThisMonth(category.id) },
+                greenWhenLower = true,
                 modifier = Modifier.padding(start = 40.dp),
             )
         }

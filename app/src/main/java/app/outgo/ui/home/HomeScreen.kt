@@ -430,6 +430,7 @@ private fun BalanceBlock(@StringRes label: Int, amount: Long, primary: Boolean, 
 
 @Composable
 private fun BudgetRow(budget: BudgetWithProgress, modifier: Modifier = Modifier) {
+    val trades = LocalAppContainer.current.tradeRepository
     Column(modifier = modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconView(iconId = budget.displayIconId, size = 32.dp, color = budget.categoryColor)
@@ -447,6 +448,11 @@ private fun BudgetRow(budget: BudgetWithProgress, modifier: Modifier = Modifier)
             ),
             progress = if (limit > 0) budget.spent.toFloat() / limit.toFloat() else 0f,
             color = budgetRemainingColor(budget.spent, limit, budget.categoryColor?.let { Color(it) } ?: MaterialTheme.colorScheme.primary),
+            current = budget.spent,
+            total = limit,
+            lineName = stringResource(R.string.progress_line_spent),
+            loadDays = { budget.categoryId?.let { trades.budgetDaysThisMonth(it) }.orEmpty() },
+            greenWhenLower = true,
         )
     }
 }
@@ -486,6 +492,7 @@ private fun MonthAmountBlock(current: Long, previous: Long, greenWhenLower: Bool
 
 @Composable
 private fun SavingsAccountRow(row: AccountWithProgress, modifier: Modifier = Modifier) {
+    val trades = LocalAppContainer.current.tradeRepository
     val account = row.account
     Column(modifier = modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -505,6 +512,11 @@ private fun SavingsAccountRow(row: AccountWithProgress, modifier: Modifier = Mod
                 ),
                 progress = row.monthlyIncome.toFloat() / target.toFloat(),
                 color = savingsProgressColor(row.monthlyIncome, target, Color(account.color)),
+                current = row.monthlyIncome,
+                total = target,
+                lineName = stringResource(R.string.progress_line_saved),
+                loadDays = { trades.savingDaysThisMonth(account.id) },
+                greenWhenLower = false,
             )
         }
     }

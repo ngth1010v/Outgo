@@ -136,4 +136,25 @@ interface TradeDao {
         """,
     )
     suspend fun nextPageForAccount(accountId: Long, beforeOccurredAt: Long, beforeId: Long, limit: Int): List<TradeEntity>
+
+    /** A budget's month: its category's trades plus its children's, the same set `BudgetWithProgress.spent` sums. */
+    @Query(
+        """
+        SELECT t.id, t.type, t.amount, t.occurred_at AS occurredAt, t.category_id AS categoryId, t.note, t.account_id AS accountId
+        FROM trade t JOIN category c ON c.id = t.category_id
+        WHERE t.month_key = :monthKey AND (c.id = :categoryId OR c.parent_id = :categoryId)
+        """,
+    )
+    suspend fun budgetTradesForMonth(categoryId: Long, monthKey: Int): List<TradeSlim>
+
+    /** A savings account's month: the income and transfers-in `AccountWithProgress.monthlyIncome` sums. */
+    @Query(
+        """
+        SELECT id, type, amount, occurred_at AS occurredAt, category_id AS categoryId, note, account_id AS accountId
+        FROM trade
+        WHERE month_key = :monthKey
+          AND ((account_id = :accountId AND type = 1) OR (to_account_id = :accountId AND type = 4))
+        """,
+    )
+    suspend fun savingTradesForMonth(accountId: Long, monthKey: Int): List<TradeSlim>
 }

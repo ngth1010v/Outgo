@@ -37,6 +37,7 @@ Open the app and you are already on the "add expense" screen. Log a purchase in 
 - **Available, savings and total balance** at a glance.
 - **Budgets** for this month: amount spent, amount remaining or over, and the change against last month. They are listed in the same order as your categories.
 - **Savings** progress toward each savings account's monthly target, in the same order as your accounts.
+- Tap any budget or savings progress bar to open its **pace panel**: what is left per remaining day, and a chart of this month's running total against a straight line to the limit or target. The gap between the two lines is shaded green when you are on track and red when you are not.
 - **History** grouped by day with daily totals. You can filter by Expense, Income or Transfer. Tap a transaction to edit it or delete it.
 
 <br clear="right" />

@@ -267,4 +267,8 @@
     <string name="analysis_group_overview">Overview</string>
     <string name="analysis_group_over_time">Over time</string>
     <string name="analysis_group_details">Details</string>
+    <string name="progress_per_day">%1$s/day</string>
+    <string name="progress_line_spent">Spent</string>
+    <string name="progress_line_saved">Saved</string>
+    <string name="progress_line_plan">Plan</string>
 </resources>

@@ -130,6 +130,9 @@ class AnalysisLayoutTest {
         assertEquals(0.0, valueAxis(-500, -100, 100f, 20f, zero = true).high, 0.0)
         // A flat line is widened by a tenth of its value.
         assertEquals(ValueAxis(450.0, 550.0, listOf(460L, 480L, 500L, 520L, 540L)), valueAxis(500, 500, 100f, 20f, zero = false))
+        // Unpadded: the range is the data; a flat line still gets padded.
+        assertEquals(ValueAxis(0.0, 700.0, listOf(0L, 200L, 400L, 600L)), valueAxis(0, 700, 100f, 20f, zero = true, pad = false))
+        assertEquals(550.0, valueAxis(500, 500, 100f, 20f, zero = false, pad = false).high, 0.0)
         // No height yet, no ticks.
         assertEquals(emptyList<Long>(), valueAxis(0, 10, 0f, 20f, zero = false).ticks)
     }

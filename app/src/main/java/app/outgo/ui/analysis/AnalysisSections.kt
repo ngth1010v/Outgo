@@ -1048,7 +1048,7 @@ fun DailyBalanceSection(daily: DailyBalanceUi, accountId: Long?, zero: Boolean, 
  * accounts than fit — wrapping would make the card's height depend on the account count.
  */
 @Composable
-private fun AccountLegend(lines: List<BalanceLine>) {
+internal fun AccountLegend(lines: List<BalanceLine>) {
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.horizontalScroll(rememberScrollState()).widthIn(min = maxWidth),
