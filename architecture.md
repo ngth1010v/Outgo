@@ -427,6 +427,9 @@ CREATE TABLE budget (
   over_target    INTEGER,                  -- chi vượt: NULL = không bù, 0 = budget này, khác = category_id của budget đích
   under_target   INTEGER,                  -- chi dư: cùng cách mã hoá
   carry_from     INTEGER,                  -- month_key đầu tiên được mang sang, đặt lại khi đổi đích
+  under_from_account INTEGER,              -- chi dư chuyển tiền thật: từ tài khoản này
+  under_to_account   INTEGER,              -- ... sang tài khoản này
+  settled_month  INTEGER,                  -- tháng cuối cùng đã tạo giao dịch chuyển
   CHECK ((kind = 0 AND category_id IS NOT NULL AND limit_amount > 0)
       OR (kind = 1 AND account_id IS NOT NULL AND target_amount > 0 AND name IS NOT NULL))
 );
@@ -856,6 +859,8 @@ fun budgetColor(spent: Long, limit: Long): BudgetLevel = when {
 - Budget của **danh mục cha** tính tổng chi của **tất cả danh mục con** trong tháng hiện tại.
 - Chỉ **danh mục Chi** mới có mục "Đặt budget" trong popup.
 - **Bù trừ sang tháng sau:** popup có 2 lựa chọn "Khi vượt hạn mức" / "Khi chưa chi hết": Không bù trừ, Ngân sách này, hoặc một budget khác. Phần vượt (âm) hoặc phần dư (dương) của tháng trước được cộng vào hạn mức tháng này của budget đích. Tính lần lượt từng tháng từ `carry_from` (`budgetCarry` trong `BudgetRepository`), nên phần đã bù ở tháng sau không bị tính lại. Hạn mức quá khứ dùng hạn mức hiện tại (không lưu lịch sử hạn mức).
+  - "Vượt hạn mức: trừ vào": Không / Ngân sách (chọn 1 budget, gồm cả budget này).
+  - "Chưa chi hết: lấy từ": Không / Ngân sách (cộng vào hạn mức của 1 budget) / Tài khoản (chọn "Từ tài khoản" và "Cộng vào" là 2 tài khoản khác nhau). Chế độ Tài khoản chuyển tiền thật: lần mở app đầu tiên của tháng mới, `settleAccountOffsets` tạo 1 giao dịch chuyển (ngày 1) cho mỗi tháng chưa xử lý (`settled_month`). Tài khoản nguồn không đủ tiền thì tạo giao dịch chuyển 0 với `trade.pending_amount` = số cần chuyển; Home hiện huy hiệu vàng trên tab Chuyển khoản và nút "Thử lại" trên dòng đó (`TradeRepository.settle`: chuyển đủ số tiền khi nguồn đã đủ, nếu không thì giữ nguyên). Chọn chế độ Tài khoản trong tháng này thì lần chuyển đầu tiên là cho tháng này, vào đầu tháng sau.
 
 #### Popup sửa / tạo danh mục và quy tắc xoá
 

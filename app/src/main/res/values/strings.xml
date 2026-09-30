@@ -98,10 +98,18 @@
     <string name="category_name_hint">Category name</string>
     <string name="category_color_label">Color</string>
     <string name="category_budget_hint">Monthly budget (optional)</string>
-    <string name="budget_over_action">When over the limit, take it from</string>
-    <string name="budget_under_action">When under the limit, add it to</string>
-    <string name="budget_offset_none">No offset</string>
+    <string name="budget_over_action">Over the limit: take from</string>
+    <string name="budget_under_action">Under the limit: take from</string>
+    <string name="budget_offset_none">None</string>
     <string name="budget_offset_self">This budget</string>
+    <string name="budget_offset_header">Month-end offset</string>
+    <string name="budget_offset_budget">Budget</string>
+    <string name="budget_offset_account">Account</string>
+    <string name="budget_offset_from_account">From account</string>
+    <string name="budget_offset_add_to">Add to</string>
+    <string name="history_retry">Retry</string>
+    <string name="history_retry_not_enough">%1$s doesn\'t have enough money yet</string>
+    <string name="history_pending_count">%1$d unfinished transfers</string>
     <string name="category_delete_confirm_title">Delete category?</string>
     <string name="category_delete_parent_confirm_message">This will also delete its %1$d subcategories.</string>
     <string name="category_delete_child_confirm_message">This category has no transactions and will be removed permanently.</string>
@@ -223,6 +231,10 @@
     <!-- Common -->
     <string name="common_save">Save</string>
     <string name="common_cancel">Cancel</string>
+    <string name="discard_title">Discard changes?</string>
+    <string name="discard_message">Your changes won\'t be saved.</string>
+    <string name="discard_confirm">Discard</string>
+    <string name="discard_keep_editing">Keep editing</string>
     <string name="common_delete">Delete</string>
     <string name="common_edit">Edit</string>
     <string name="common_confirm">Confirm</string>

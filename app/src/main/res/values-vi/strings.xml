@@ -91,10 +91,18 @@
     <string name="category_name_hint">Tên danh mục</string>
     <string name="category_color_label">Màu sắc</string>
     <string name="category_budget_hint">Ngân sách theo tháng (không bắt buộc)</string>
-    <string name="budget_over_action">Khi vượt hạn mức, trừ vào</string>
-    <string name="budget_under_action">Khi chưa chi hết, cộng vào</string>
-    <string name="budget_offset_none">Không bù trừ</string>
+    <string name="budget_over_action">Vượt hạn mức: trừ vào</string>
+    <string name="budget_under_action">Chưa chi hết: lấy từ</string>
+    <string name="budget_offset_none">Không</string>
     <string name="budget_offset_self">Ngân sách này</string>
+    <string name="budget_offset_header">Bù trừ cuối tháng</string>
+    <string name="budget_offset_budget">Ngân sách</string>
+    <string name="budget_offset_account">Tài khoản</string>
+    <string name="budget_offset_from_account">Từ tài khoản</string>
+    <string name="budget_offset_add_to">Cộng vào</string>
+    <string name="history_retry">Thử lại</string>
+    <string name="history_retry_not_enough">%1$s chưa đủ tiền</string>
+    <string name="history_pending_count">%1$d giao dịch chuyển chưa xong</string>
     <string name="category_delete_confirm_title">Xoá danh mục?</string>
     <string name="category_delete_parent_confirm_message">Thao tác này sẽ xoá luôn %1$d danh mục con.</string>
     <string name="category_delete_child_confirm_message">Danh mục chưa có giao dịch nào và sẽ bị xoá vĩnh viễn.</string>
@@ -213,6 +221,10 @@
 
     <string name="common_save">Lưu</string>
     <string name="common_cancel">Huỷ</string>
+    <string name="discard_title">Bỏ thay đổi?</string>
+    <string name="discard_message">Các thay đổi sẽ không được lưu.</string>
+    <string name="discard_confirm">Bỏ</string>
+    <string name="discard_keep_editing">Tiếp tục sửa</string>
     <string name="common_delete">Xoá</string>
     <string name="common_edit">Sửa</string>
     <string name="common_confirm">Xác nhận</string>

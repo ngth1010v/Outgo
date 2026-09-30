@@ -28,7 +28,7 @@ class AppContainer(private val context: Context) {
         AccountRepository(database, database.accountDao(), tradeRepository)
     }
 
-    val budgetRepository: BudgetRepository by lazy { BudgetRepository(database.budgetDao()) }
+    val budgetRepository: BudgetRepository by lazy { BudgetRepository(database, database.budgetDao(), tradeRepository) }
 
     val categoryRepository: CategoryRepository by lazy {
         CategoryRepository(database, database.categoryDao(), budgetRepository)

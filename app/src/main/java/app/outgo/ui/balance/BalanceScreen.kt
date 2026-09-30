@@ -1,6 +1,6 @@
 package app.outgo.ui.balance
 
-import androidx.compose.foundation.rememberScrollState
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,12 +17,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -40,6 +37,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -57,6 +55,7 @@ import app.outgo.ui.LocalAppContainer
 import app.outgo.ui.component.BudgetProgressBlock
 import app.outgo.ui.component.ColorPickerGrid
 import app.outgo.ui.component.ConfirmDialog
+import app.outgo.ui.component.EditorScaffold
 import app.outgo.ui.component.IconPickerSheet
 import app.outgo.ui.component.IconView
 import app.outgo.ui.component.PlusRow
@@ -73,14 +72,10 @@ private const val AddKey = "add"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BalanceScreen() {
+fun BalanceScreen(onOpenEditor: (accountId: Long?) -> Unit) {
     val container = LocalAppContainer.current
-    val viewModel: BalanceViewModel = viewModel(
-        factory = viewModelFactory { initializer { BalanceViewModel(container.accountRepository) } },
-    )
+    val viewModel = balanceViewModel()
     val accounts by viewModel.accounts.collectAsStateWithLifecycle()
-    var editing by remember { mutableStateOf<AccountEntity?>(null) }
-    var showCreate by remember { mutableStateOf(false) }
     // The order a drag is working on; the database's next emission replaces it.
     var order by remember(accounts) { mutableStateOf(accounts) }
     val listState = rememberLazyListState()
@@ -110,7 +105,7 @@ fun BalanceScreen() {
                         .fillMaxWidth()
                         .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
                         // A lifted row's release also ends a tap on it: that tap must not open the editor.
-                        .clickable { if (reorder.draggingKey == null) editing = account }
+                        .clickable { if (reorder.draggingKey == null) onOpenEditor(account.id) }
                         .padding(horizontal = 12.dp, vertical = 14.dp),
                 ) {
                     Row(
@@ -155,28 +150,39 @@ fun BalanceScreen() {
             }
             item(key = AddKey) {
                 PlusRow(
-                    onClick = { showCreate = true },
+                    onClick = { onOpenEditor(null) },
                     modifier = slideItem().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
                 )
             }
         }
     }
-
-    if (showCreate) {
-        EditAccountSheet(
-            account = null,
-            onDismiss = { showCreate = false },
-            viewModel = viewModel,
-        )
-    }
-    editing?.let { account ->
-        EditAccountSheet(account = account, onDismiss = { editing = null }, viewModel = viewModel)
-    }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * The Accounts tab's own ViewModel, from the activity's store: the tab lives outside the NavHost,
+ * and the editor route shares it so a save outlives the editor being popped.
+ */
 @Composable
-private fun EditAccountSheet(account: AccountEntity?, onDismiss: () -> Unit, viewModel: BalanceViewModel) {
+private fun balanceViewModel(): BalanceViewModel {
+    val container = LocalAppContainer.current
+    return viewModel(
+        viewModelStoreOwner = LocalContext.current as ComponentActivity,
+        factory = viewModelFactory { initializer { BalanceViewModel(container.accountRepository) } },
+    )
+}
+
+/** The account editor as its own screen: [accountId] edits that account, null creates one. */
+@Composable
+fun AccountEditScreen(accountId: Long?, onClose: () -> Unit) {
+    val viewModel = balanceViewModel()
+    val accounts by viewModel.accounts.collectAsStateWithLifecycle()
+    // Nothing to draw for the moment a deleted account is still on screen before the pop.
+    val account = if (accountId == null) null else accounts.firstOrNull { it.account.id == accountId }?.account ?: return
+    EditAccountScreen(account, onClose, viewModel)
+}
+
+@Composable
+private fun EditAccountScreen(account: AccountEntity?, onDismiss: () -> Unit, viewModel: BalanceViewModel) {
     val scope = rememberCoroutineScope()
     var accountType by remember { mutableStateOf(account?.accountType ?: AccountType.NORMAL) }
     var name by remember { mutableStateOf(account?.name.orEmpty()) }
@@ -192,92 +198,79 @@ private fun EditAccountSheet(account: AccountEntity?, onDismiss: () -> Unit, vie
         hasTrades = account?.let { viewModel.hasTrades(it.id) } ?: false
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        // Scrollable so a field stays reachable above the keyboard when the sheet is taller than the space left.
-        Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
-            Text(
-                if (account == null) stringResource(R.string.balance_create_title) else stringResource(R.string.balance_edit_title),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Spacer(Modifier.height(12.dp))
-
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                SegmentedButton(
-                    selected = accountType == AccountType.NORMAL,
-                    onClick = { accountType = AccountType.NORMAL },
-                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                ) { Text(stringResource(R.string.balance_type_normal)) }
-                SegmentedButton(
-                    selected = accountType == AccountType.SAVINGS,
-                    onClick = { accountType = AccountType.SAVINGS },
-                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                ) { Text(stringResource(R.string.balance_type_savings)) }
+    // Compared against the values the editor opened with.
+    val fields = listOf(accountType, name, balanceText, targetText, iconId, color)
+    val initialFields = remember { fields }
+    EditorScaffold(
+        title = if (account == null) stringResource(R.string.balance_create_title) else stringResource(R.string.balance_edit_title),
+        onCancel = onDismiss,
+        dirty = fields != initialFields,
+        onSave = {
+            val balance = balanceText.toLongOrNull() ?: 0L
+            val target = targetText.toLongOrNull()
+            if (account == null) {
+                viewModel.create(name, iconId, color, balance, accountType, target)
+            } else {
+                viewModel.update(account.id, name, iconId, color, balance, accountType, target)
             }
-            Spacer(Modifier.height(12.dp))
+            onDismiss()
+        },
+        saveEnabled = name.isNotBlank(),
+        onDelete = if (account != null) { { showDeleteConfirm = true } } else null,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconView(iconId = iconId, size = 48.dp, color = color, modifier = Modifier.padding(end = 12.dp))
+            OutlinedButton(onClick = { showIconPicker = true }) { Text(stringResource(R.string.common_choose_icon)) }
+        }
+        Spacer(Modifier.height(12.dp))
 
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text(stringResource(R.string.balance_name_hint)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            SegmentedButton(
+                selected = accountType == AccountType.NORMAL,
+                onClick = { accountType = AccountType.NORMAL },
+                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+            ) { Text(stringResource(R.string.balance_type_normal)) }
+            SegmentedButton(
+                selected = accountType == AccountType.SAVINGS,
+                onClick = { accountType = AccountType.SAVINGS },
+                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+            ) { Text(stringResource(R.string.balance_type_savings)) }
+        }
+        Spacer(Modifier.height(12.dp))
+
+        OutlinedTextField(
+            value = name,
+            onValueChange = { name = it },
+            label = { Text(stringResource(R.string.balance_name_hint)) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = balanceText,
+            onValueChange = { balanceText = it.filter { c -> c.isDigit() } },
+            label = { Text(stringResource(R.string.balance_current_balance_hint)) },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (accountType == AccountType.SAVINGS) {
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
-                value = balanceText,
-                onValueChange = { balanceText = it.filter { c -> c.isDigit() } },
-                label = { Text(stringResource(R.string.balance_current_balance_hint)) },
+                value = targetText,
+                onValueChange = { targetText = it.filter { c -> c.isDigit() } },
+                label = { Text(stringResource(R.string.balance_target_hint)) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.fillMaxWidth(),
             )
-            if (accountType == AccountType.SAVINGS) {
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = targetText,
-                    onValueChange = { targetText = it.filter { c -> c.isDigit() } },
-                    label = { Text(stringResource(R.string.balance_target_hint)) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-            Spacer(Modifier.height(12.dp))
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconView(iconId = iconId, size = 48.dp, color = color, modifier = Modifier.padding(end = 12.dp))
-                OutlinedButton(onClick = { showIconPicker = true }) { Text(stringResource(R.string.common_choose_icon)) }
-            }
-            Spacer(Modifier.height(12.dp))
-
-            Text(stringResource(R.string.category_color_label), style = MaterialTheme.typography.labelLarge)
-            Spacer(Modifier.height(8.dp))
-            ColorPickerGrid(selected = color, onSelect = { color = it })
-            Spacer(Modifier.height(16.dp))
-
-            val balance = balanceText.toLongOrNull() ?: 0L
-            val target = targetText.toLongOrNull()
-            Button(
-                onClick = {
-                    if (account == null) {
-                        viewModel.create(name, iconId, color, balance, accountType, target)
-                    } else {
-                        viewModel.update(account.id, name, iconId, color, balance, accountType, target)
-                    }
-                    onDismiss()
-                },
-                enabled = name.isNotBlank(),
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text(stringResource(R.string.common_save)) }
-
-            if (account != null) {
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = { showDeleteConfirm = true },
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text(stringResource(R.string.common_delete), color = MaterialTheme.colorScheme.error) }
-            }
         }
+        Spacer(Modifier.height(12.dp))
+
+
+        Text(stringResource(R.string.category_color_label), style = MaterialTheme.typography.labelLarge)
+        Spacer(Modifier.height(8.dp))
+        ColorPickerGrid(selected = color, onSelect = { color = it })
     }
 
     if (showIconPicker) {

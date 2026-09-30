@@ -65,6 +65,7 @@ import app.outgo.data.db.entity.CategoryEntity
 import app.outgo.domain.CategoryKind
 import app.outgo.domain.TradeType
 import app.outgo.ui.LocalAppContainer
+import app.outgo.ui.component.rememberDiscardGuard
 import app.outgo.ui.component.AmountField
 import app.outgo.ui.component.ConfirmDialog
 import app.outgo.ui.component.IconView
@@ -100,6 +101,11 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit) {
         val type = TRADE_TYPES.getOrNull(TRADE_TYPES.indexOf(state.type) + if (next) 1 else -1)
         if (state.isEditing || type == null) null else { { viewModel.onTypeChange(type) } }
     }
+    // Editing only: the loaded trade's fields, to tell whether leaving would drop changes.
+    val fields = listOf(state.type, state.amount, state.selectedCategory?.id, state.selectedAccountId, state.selectedToAccountId, state.occurredAt, state.note)
+    var initialFields by remember { mutableStateOf<List<Any?>?>(null) }
+    LaunchedEffect(state.isLoading) { if (!state.isLoading && initialFields == null) initialFields = fields }
+    val cancel = if (state.isEditing) rememberDiscardGuard(initialFields != null && fields != initialFields, onClose) else onClose
     val savedLabel = stringResource(R.string.trade_saved)
     val undoLabel = stringResource(R.string.trade_undo)
 
@@ -135,7 +141,7 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit) {
                     state = shown,
                     viewModel = viewModel,
                     onSeeAll = { showAllCategories = true },
-                    onClose = onClose,
+                    onClose = cancel,
                     onDelete = { showDeleteConfirm = true },
                     modifier = modifier,
                 )

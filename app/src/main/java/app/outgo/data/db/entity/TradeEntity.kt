@@ -61,4 +61,10 @@ data class TradeEntity(
     val createdAt: Long,
     @ColumnInfo(name = "updated_at")
     val updatedAt: Long,
+    /**
+     * Set on a budget-offset transfer the source account could not cover: [amount] stays 0 and
+     * this holds what still has to move. Null for every other trade.
+     */
+    @ColumnInfo(name = "pending_amount")
+    val pendingAmount: Long? = null,
 )

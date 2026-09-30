@@ -45,6 +45,9 @@ data class BudgetWithProgress(
     val overTarget: Long?,
     val underTarget: Long?,
     val carryFrom: Int?,
+    val underFromAccount: Long?,
+    val underToAccount: Long?,
+    val settledMonth: Int?,
     /** Offset carried in from earlier months (negative: overspend taken off). Filled by BudgetRepository. */
     val carry: Long,
 ) {

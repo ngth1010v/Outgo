@@ -15,6 +15,7 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -67,6 +68,8 @@ class TradeRepository(private val tradeDao: TradeDao) {
                 monthKey = MonthKey.of(draft.occurredAt),
                 note = draft.note?.takeIf { it.isNotBlank() },
                 updatedAt = System.currentTimeMillis(),
+                // Saved by hand with a real amount: no longer waiting on the offset.
+                pendingAmount = null,
             ),
         )
         signalChange()
@@ -95,6 +98,51 @@ class TradeRepository(private val tradeDao: TradeDao) {
             ),
         )
         signalChange()
+    }
+
+    val pendingCount: Flow<Int> get() = tradeDao.observePendingCount()
+
+    /**
+     * A budget offset's transfer, dated [occurredAt]. Moves [amount] when [fromAccountId] holds at
+     * least that much, otherwise records a 0 transfer holding [amount] as pending (see [settle]).
+     * Skipped when either account is gone.
+     */
+    suspend fun insertOffsetTransfer(fromAccountId: Long, toAccountId: Long, amount: Long, occurredAt: Long, note: String) =
+        withContext(Dispatchers.IO) {
+            val balance = tradeDao.accountBalance(fromAccountId) ?: return@withContext
+            tradeDao.accountBalance(toAccountId) ?: return@withContext
+            val covered = balance >= amount
+            val now = System.currentTimeMillis()
+            tradeDao.insert(
+                TradeEntity(
+                    type = TradeType.TRANSFER,
+                    amount = if (covered) amount else 0L,
+                    accountId = fromAccountId,
+                    categoryId = null,
+                    toAccountId = toAccountId,
+                    occurredAt = occurredAt,
+                    monthKey = MonthKey.of(occurredAt),
+                    note = note,
+                    createdAt = now,
+                    updatedAt = now,
+                    pendingAmount = if (covered) null else amount,
+                ),
+            )
+            signalChange()
+        }
+
+    /**
+     * Retries a pending offset transfer: moves the whole amount now, dated now, when the source
+     * account can cover it. False (and nothing changes) when it still can't.
+     */
+    suspend fun settle(id: Long): Boolean = withContext(Dispatchers.IO) {
+        val trade = tradeDao.findById(id) ?: return@withContext true
+        val pending = trade.pendingAmount ?: return@withContext true
+        if ((tradeDao.accountBalance(trade.accountId) ?: 0L) < pending) return@withContext false
+        val now = System.currentTimeMillis()
+        tradeDao.update(trade.copy(amount = pending, pendingAmount = null, occurredAt = now, monthKey = MonthKey.of(now), updatedAt = now))
+        signalChange()
+        true
     }
 
     suspend fun findById(id: Long): TradeEntity? = withContext(Dispatchers.IO) { tradeDao.findById(id) }

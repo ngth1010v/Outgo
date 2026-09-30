@@ -48,6 +48,8 @@ interface BudgetDao {
                cat.icon_id AS categoryIconId,
                cat.color AS categoryColor,
                b.over_target AS overTarget, b.under_target AS underTarget, b.carry_from AS carryFrom,
+               b.under_from_account AS underFromAccount, b.under_to_account AS underToAccount,
+               b.settled_month AS settledMonth,
                0 AS carry
         FROM budget b
         LEFT JOIN category cat ON cat.id = b.category_id
@@ -67,12 +69,15 @@ interface BudgetDao {
         FROM budget b
         JOIN category c ON c.id = b.category_id OR c.parent_id = b.category_id
         JOIN category_month_stat s ON s.category_id = c.id
-        WHERE b.kind = 0 AND (b.over_target IS NOT NULL OR b.under_target IS NOT NULL)
+        WHERE b.kind = 0 AND (b.over_target IS NOT NULL OR b.under_target IS NOT NULL OR b.under_from_account IS NOT NULL)
           AND s.month_key >= b.carry_from AND s.month_key < :monthKey
         GROUP BY b.category_id, s.month_key
         """,
     )
     fun observeCarrySpend(monthKey: Int): Flow<List<BudgetMonthSpend>>
+
+    @Query("UPDATE budget SET settled_month = :monthKey WHERE under_from_account IS NOT NULL")
+    suspend fun markAccountOffsetsSettled(monthKey: Int)
 
     @Query("SELECT COALESCE(MAX(sort_order), -1) FROM budget WHERE kind = :kind")
     suspend fun maxSortOrder(kind: Int): Int

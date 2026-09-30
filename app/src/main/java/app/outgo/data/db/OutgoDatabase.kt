@@ -44,7 +44,7 @@ import app.outgo.domain.IconKind
         BudgetEntity::class,
         SettingEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 abstract class OutgoDatabase : RoomDatabase() {
@@ -58,7 +58,7 @@ abstract class OutgoDatabase : RoomDatabase() {
 
     companion object {
         const val FILE_NAME = "outgo.sqlite"
-        const val SCHEMA_VERSION = 6
+        const val SCHEMA_VERSION = 7
 
         // "OUTO" packed into 4 bytes, stamped once via PRAGMA application_id so a
         // restore can reject a file that isn't an Outgo backup before touching real data.
@@ -109,11 +109,22 @@ abstract class OutgoDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // All null: no budget moves money until the user picks an account offset. The
+                // trade triggers don't read pending_amount, so they stay as they are.
+                db.execSQL("ALTER TABLE budget ADD COLUMN under_from_account INTEGER")
+                db.execSQL("ALTER TABLE budget ADD COLUMN under_to_account INTEGER")
+                db.execSQL("ALTER TABLE budget ADD COLUMN settled_month INTEGER")
+                db.execSQL("ALTER TABLE trade ADD COLUMN pending_amount INTEGER")
+            }
+        }
+
         fun build(context: Context): OutgoDatabase =
             Room.databaseBuilder(context.applicationContext, OutgoDatabase::class.java, FILE_NAME)
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
                 .addCallback(OutgoCallback)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .build()
     }
 }

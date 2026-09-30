@@ -1,5 +1,7 @@
 package app.outgo.ui.nav
 
+import app.outgo.ui.balance.AccountEditScreen
+import app.outgo.ui.category.CategoryEditScreen
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -142,6 +144,30 @@ fun OutgoRoot(openSetting: Boolean = false) {
                     val tradeId = entry.arguments?.getLong("tradeId") ?: return@composable
                     TradeScreen(editingTradeId = tradeId, onClose = { navController.popBackStack() })
                 }
+
+                composable(
+                    route = Routes.ACCOUNT_EDIT_PATTERN,
+                    arguments = listOf(navArgument("id") { type = NavType.LongType; defaultValue = 0L }),
+                ) { entry ->
+                    AccountEditScreen(
+                        accountId = entry.arguments?.getLong("id")?.takeIf { it > 0L },
+                        onClose = { navController.popBackStack() },
+                    )
+                }
+
+                composable(
+                    route = Routes.CATEGORY_EDIT_PATTERN,
+                    arguments = listOf(
+                        navArgument("id") { type = NavType.LongType; defaultValue = 0L },
+                        navArgument("parent") { type = NavType.LongType; defaultValue = 0L },
+                    ),
+                ) { entry ->
+                    CategoryEditScreen(
+                        categoryId = entry.arguments?.getLong("id")?.takeIf { it > 0L },
+                        parentId = entry.arguments?.getLong("parent")?.takeIf { it > 0L },
+                        onClose = { navController.popBackStack() },
+                    )
+                }
             }
         }
     }
@@ -155,8 +181,10 @@ private fun TabContent(route: String, shown: Boolean, navController: NavHostCont
             visible = shown,
             onOpenTrade = { tradeId -> navController.navigate(Routes.tradeEdit(tradeId)) },
         )
-        Routes.BALANCE -> BalanceScreen()
-        Routes.CATEGORY -> CategoryScreen()
+        Routes.BALANCE -> BalanceScreen(onOpenEditor = { id -> navController.navigate(Routes.accountEdit(id)) })
+        Routes.CATEGORY -> CategoryScreen(
+            onOpenEditor = { id, parentId -> navController.navigate(Routes.categoryEdit(id, parentId)) },
+        )
         Routes.ANALYSIS -> AnalysisScreen(
             onOpenTrade = { tradeId -> navController.navigate(Routes.tradeEdit(tradeId)) },
             onOpenDay = { dayStart -> navController.navigate(Routes.history(HistoryType.EXPENSE, dayStart)) },

@@ -1,5 +1,13 @@
 package app.outgo.ui.history
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import app.outgo.ui.theme.OnPendingContainer
+import app.outgo.ui.theme.PendingContainer
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -69,6 +77,8 @@ internal fun LazyListScope.historyItems(
     rowModifier: Modifier = Modifier,
     /** Keeps keys unique per list: two tabs share day-header keys otherwise. */
     keyPrefix: String = "",
+    /** Shows a Retry button on unfinished offset transfers; null hides it. */
+    onRetry: ((TradeEntity) -> Unit)? = null,
 ) {
     items(
         items = items,
@@ -81,7 +91,7 @@ internal fun LazyListScope.historyItems(
                 is HistoryListItem.Row -> "history_row"
             }
         },
-    ) { item -> HistoryItem(item, categoriesById, accountsById, onOpenTrade, rowModifier) }
+    ) { item -> HistoryItem(item, categoriesById, accountsById, onOpenTrade, rowModifier, onRetry) }
 }
 
 internal fun historyItemKey(item: HistoryListItem): String = when (item) {
@@ -101,6 +111,7 @@ internal fun HistoryItem(
     accountsById: Map<Long, AccountEntity>,
     onOpenTrade: (Long) -> Unit,
     modifier: Modifier = Modifier,
+    onRetry: ((TradeEntity) -> Unit)? = null,
 ) {
     when (item) {
         is HistoryListItem.Header -> Row(
@@ -134,6 +145,7 @@ internal fun HistoryItem(
             toAccount = accountsById[item.trade.toAccountId],
             onClick = { onOpenTrade(item.trade.id) },
             modifier = modifier,
+            onRetry = onRetry,
         )
     }
 }
@@ -146,8 +158,10 @@ private fun TradeRow(
     toAccount: AccountEntity?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onRetry: ((TradeEntity) -> Unit)? = null,
 ) {
     val isTransfer = trade.type == TradeType.TRANSFER
+    val pending = trade.pendingAmount
     Row(
         modifier = modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -169,10 +183,12 @@ private fun TradeRow(
         }
         Column(horizontalAlignment = Alignment.End) {
             val isCredit = TradeType.isCredit(trade.type)
+            // An unfinished transfer shows what it still has to move, not its 0.
             Text(
-                (if (isTransfer) "" else if (isCredit) "+" else "-") + Money.format(trade.amount),
+                (if (isTransfer) "" else if (isCredit) "+" else "-") + Money.format(pending ?: trade.amount),
                 fontWeight = FontWeight.Bold,
                 color = when {
+                    pending != null -> OnPendingContainer
                     isTransfer -> MaterialTheme.colorScheme.onSurface
                     isCredit -> app.outgo.ui.theme.IncomeGreen
                     else -> app.outgo.ui.theme.ExpenseRed
@@ -184,6 +200,35 @@ private fun TradeRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        if (pending != null && onRetry != null) {
+            TextButton(
+                onClick = { onRetry(trade) },
+                contentPadding = PaddingValues(horizontal = 8.dp),
+                modifier = Modifier.padding(start = 4.dp),
+            ) { Text(stringResource(R.string.history_retry)) }
+        }
+    }
+}
+
+/** "⚠ n" on a pale yellow pill: how many offset transfers are still waiting for money. */
+@Composable
+internal fun PendingBadge(count: Int, modifier: Modifier = Modifier) {
+    val description = stringResource(R.string.history_pending_count, count)
+    Row(
+        modifier = modifier
+            .background(PendingContainer, RoundedCornerShape(8.dp))
+            .padding(horizontal = 5.dp, vertical = 1.dp)
+            .semantics(mergeDescendants = true) { contentDescription = description },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ph_warning),
+            contentDescription = null,
+            tint = OnPendingContainer,
+            modifier = Modifier.size(12.dp),
+        )
+        Spacer(Modifier.width(2.dp))
+        Text(count.toString(), style = MaterialTheme.typography.labelSmall, color = OnPendingContainer, fontWeight = FontWeight.Bold)
     }
 }
 

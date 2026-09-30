@@ -8,11 +8,20 @@ import org.junit.Test
 
 class BudgetCarryTest {
 
-    private fun budget(categoryId: Long, limit: Long, over: Long? = null, under: Long? = null, from: Int? = 202607) =
+    private fun budget(
+        categoryId: Long,
+        limit: Long,
+        over: Long? = null,
+        under: Long? = null,
+        from: Int? = 202607,
+        fromAccount: Long? = null,
+        toAccount: Long? = null,
+    ) =
         BudgetWithProgress(
             id = categoryId, kind = 0, name = null, iconId = null, categoryId = categoryId, limitAmount = limit,
             sortOrder = 0, spent = 0, prevSpent = 0, categoryName = null, categoryIconId = null, categoryColor = null,
-            overTarget = over, underTarget = under, carryFrom = from, carry = 0,
+            overTarget = over, underTarget = under, carryFrom = from,
+            underFromAccount = fromAccount, underToAccount = toAccount, settledMonth = null, carry = 0,
         )
 
     private fun spend(categoryId: Long, month: Int, spent: Long) = BudgetMonthSpend(categoryId, month, spent)
@@ -43,5 +52,17 @@ class BudgetCarryTest {
         val budgets = listOf(budget(1, 100), budget(2, 100, over = 9), budget(3, 100, over = BudgetOffset.SELF, from = 202609))
         val spend = listOf(spend(1, 202608, 500), spend(2, 202608, 500), spend(3, 202608, 500))
         assertEquals(emptyMap<Long, Long>(), budgetCarry(budgets, spend, 202609))
+    }
+
+    @Test
+    fun accountOffsetReportsEachUnderMonthAndCarriesNothing() {
+        // Over in Jul goes to its own limit; Aug's lower limit then leaves 30 for the account.
+        val b = budget(1, 100, over = BudgetOffset.SELF, fromAccount = 5, toAccount = 6)
+        val moves = ArrayList<Pair<Int, Long>>()
+        val carry = budgetCarry(listOf(b), listOf(spend(1, 202607, 120), spend(1, 202608, 50)), 202609) { _, month, left ->
+            moves += month to left
+        }
+        assertEquals(listOf(202608 to 30L), moves)
+        assertEquals(emptyMap<Long, Long>(), carry)
     }
 }

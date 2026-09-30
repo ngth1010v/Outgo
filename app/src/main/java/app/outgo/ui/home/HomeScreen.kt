@@ -1,5 +1,11 @@
 package app.outgo.ui.home
 
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import app.outgo.data.db.entity.TradeEntity
+import app.outgo.ui.history.PendingBadge
 import androidx.annotation.StringRes
 import androidx.compose.animation.core.EaseInOut
 import androidx.compose.animation.core.tween
@@ -112,6 +118,19 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
     // stays composed while hidden), e.g. after adding or editing a trade.
     historyViewModels.values.forEach { vm -> LaunchedEffect(vm, visible) { vm.refresh() } }
     val historyRows = historyState.items
+    val pendingTransfers by remember { container.tradeRepository.pendingCount }.collectAsStateWithLifecycle(0)
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val onRetry: (TradeEntity) -> Unit = { trade ->
+        scope.launch {
+            if (container.tradeRepository.settle(trade.id)) {
+                historyViewModels.getValue(HistoryType.TRANSFER).refresh()
+            } else {
+                val from = historyState.accountsById[trade.accountId]?.name.orEmpty()
+                Toast.makeText(context, context.getString(R.string.history_retry_not_enough, from), Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     val listState = rememberLazyListState()
     LoadMoreOnScrollEnd(listState, historyState.canLoadMore, historyViewModel::loadMore)
@@ -241,15 +260,20 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
                                     onClick = { switchHistory(type) },
                                     shape = SegmentedButtonDefaults.itemShape(index, HistoryType.entries.size),
                                 ) {
-                                    Text(
-                                        stringResource(
-                                            when (type) {
-                                                HistoryType.EXPENSE -> R.string.trade_expense
-                                                HistoryType.INCOME -> R.string.trade_income
-                                                HistoryType.TRANSFER -> R.string.trade_transfer
-                                            },
-                                        ),
-                                    )
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            stringResource(
+                                                when (type) {
+                                                    HistoryType.EXPENSE -> R.string.trade_expense
+                                                    HistoryType.INCOME -> R.string.trade_income
+                                                    HistoryType.TRANSFER -> R.string.trade_transfer
+                                                },
+                                            ),
+                                        )
+                                        if (type == HistoryType.TRANSFER && pendingTransfers > 0) {
+                                            PendingBadge(pendingTransfers, Modifier.padding(start = 6.dp))
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -272,6 +296,7 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
                         historyRows, historyState.categoriesById, historyState.accountsById, onOpenTrade,
                         rowModifier = Modifier.swipeShift(historySwipe),
                         keyPrefix = historyKeyPrefix,
+                        onRetry = onRetry,
                     )
                 }
                 if (holdScroll) {

@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Update
+import kotlinx.coroutines.flow.Flow
 import app.outgo.data.db.entity.TradeEntity
 
 /**
@@ -157,4 +158,11 @@ interface TradeDao {
         """,
     )
     suspend fun savingTradesForMonth(accountId: Long, monthKey: Int): List<TradeSlim>
+
+    /** Budget-offset transfers still waiting for money; see [app.outgo.data.db.entity.TradeEntity.pendingAmount]. */
+    @Query("SELECT COUNT(*) FROM trade WHERE pending_amount IS NOT NULL")
+    fun observePendingCount(): Flow<Int>
+
+    @Query("SELECT balance FROM account WHERE id = :accountId")
+    suspend fun accountBalance(accountId: Long): Long?
 }

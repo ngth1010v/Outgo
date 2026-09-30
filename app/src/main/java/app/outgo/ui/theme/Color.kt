@@ -21,3 +21,7 @@ val ExpenseRed = Color(0xFFD32F2F)
 val IncomeGreen = Color(0xFF2E7D32)
 val TransferBlue = Color(0xFF1565C0)
 val BudgetWarningYellow = Color(0xFFF9A825)
+
+/** Unfinished budget-offset transfers: a pale yellow badge with dark amber content. */
+val PendingContainer = Color(0xFFFFF3C4)
+val OnPendingContainer = Color(0xFF7A5800)

@@ -73,6 +73,17 @@ data class BudgetEntity(
     /** Where a month's unspent limit is added next month; same encoding as [overTarget]. */
     @ColumnInfo(name = "under_target")
     val underTarget: Long? = null,
+    /**
+     * Instead of [underTarget]: the unspent amount is moved as real money, a transfer from this
+     * account to [underToAccount], made on the first app start of the next month.
+     */
+    @ColumnInfo(name = "under_from_account")
+    val underFromAccount: Long? = null,
+    @ColumnInfo(name = "under_to_account")
+    val underToAccount: Long? = null,
+    /** Last month (yyyyMM) whose account transfer was already made, so a restart never moves it twice. */
+    @ColumnInfo(name = "settled_month")
+    val settledMonth: Int? = null,
     /** First month (yyyyMM) whose result carries over; reset when a target changes so old months don't pile up. */
     @ColumnInfo(name = "carry_from")
     val carryFrom: Int? = null,

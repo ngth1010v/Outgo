@@ -3,7 +3,9 @@ package app.outgo.ui.category
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.outgo.data.db.dao.BudgetWithProgress
+import app.outgo.data.db.entity.AccountEntity
 import app.outgo.data.db.entity.CategoryEntity
+import app.outgo.data.repo.AccountRepository
 import app.outgo.data.repo.BudgetRepository
 import app.outgo.data.repo.BudgetSetting
 import app.outgo.data.repo.CategoryRepository
@@ -22,6 +24,8 @@ data class CategoryUiState(
     val parents: List<CategoryEntity> = emptyList(),
     val childrenByParent: Map<Long, List<CategoryEntity>> = emptyMap(),
     val budgetsByCategory: Map<Long, BudgetWithProgress> = emptyMap(),
+    /** The active accounts, for a budget's account offset. */
+    val accounts: List<AccountEntity> = emptyList(),
     /** The other type's lists, for the swipe preview; null inside it. */
     val other: CategoryUiState? = null,
 )
@@ -29,6 +33,7 @@ data class CategoryUiState(
 class CategoryViewModel(
     private val categoryRepository: CategoryRepository,
     private val budgetRepository: BudgetRepository,
+    accountRepository: AccountRepository,
 ) : ViewModel() {
 
     private val type = MutableStateFlow(CategoryKind.EXPENSE)
@@ -39,7 +44,9 @@ class CategoryViewModel(
         categoryRepository.observeAllOfType(CategoryKind.EXPENSE),
         categoryRepository.observeAllOfType(CategoryKind.INCOME),
         budgetRepository.observeWithProgress(MonthKey.current()),
-    ) { t, expense, income, budgets ->
+        accountRepository.observeAll(),
+    ) { t, expense, income, budgets, allAccounts ->
+        val accounts = allAccounts.filter { !it.archived }
         val budgetsByCategory = budgets.filter { it.kind == BudgetKind.LIMIT && it.categoryId != null }
             .associateBy { it.categoryId!! }
         fun ofType(kind: Int, all: List<CategoryEntity>) = CategoryUiState(
@@ -47,6 +54,7 @@ class CategoryViewModel(
             parents = all.filter { it.parentId == null },
             childrenByParent = all.filter { it.parentId != null }.groupBy { it.parentId!! },
             budgetsByCategory = budgetsByCategory,
+            accounts = accounts,
         )
         val expenseState = ofType(CategoryKind.EXPENSE, expense)
         val incomeState = ofType(CategoryKind.INCOME, income)

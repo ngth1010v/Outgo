@@ -1,5 +1,16 @@
 package app.outgo.ui.category
 
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.draw.rotate
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.imePadding
+import androidx.activity.ComponentActivity
+import app.outgo.data.db.entity.AccountEntity
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -29,7 +40,6 @@ import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -56,7 +66,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import androidx.annotation.StringRes
 import app.outgo.R
 import app.outgo.data.db.dao.BudgetWithProgress
 import app.outgo.data.db.entity.CategoryEntity
@@ -68,6 +77,7 @@ import app.outgo.ui.LocalAppContainer
 import app.outgo.ui.component.BudgetProgressBlock
 import app.outgo.ui.component.ColorPickerGrid
 import app.outgo.ui.component.ConfirmDialog
+import app.outgo.ui.component.EditorScaffold
 import app.outgo.ui.component.IconPickerSheet
 import app.outgo.ui.component.IconView
 import app.outgo.ui.component.PlusRow
@@ -91,14 +101,10 @@ private sealed interface EditTarget {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CategoryScreen() {
-    val container = LocalAppContainer.current
-    val viewModel: CategoryViewModel = viewModel(
-        factory = viewModelFactory { initializer { CategoryViewModel(container.categoryRepository, container.budgetRepository) } },
-    )
+fun CategoryScreen(onOpenEditor: (id: Long?, parentId: Long?) -> Unit) {
+    val viewModel = categoryViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
     var expanded by remember { mutableStateOf(setOf<Long>()) }
-    var editTarget by remember { mutableStateOf<EditTarget?>(null) }
     // Expense <-> Income; past either end the tab level takes the swipe.
     val typeSwipe = rememberSwipeLevel { next, _ ->
         val type = if (next) CategoryKind.INCOME else CategoryKind.EXPENSE
@@ -132,7 +138,13 @@ fun CategoryScreen() {
                     listState = shownListState,
                     expanded = expanded,
                     onToggle = { id -> expanded = if (id in expanded) expanded - id else expanded + id },
-                    onEdit = { editTarget = it },
+                    onEdit = { target ->
+                        when (target) {
+                            is EditTarget.Edit -> onOpenEditor(target.category.id, null)
+                            is EditTarget.NewChild -> onOpenEditor(null, target.parentId)
+                            EditTarget.NewParent -> onOpenEditor(null, null)
+                        }
+                    },
                     onReorder = viewModel::reorder,
                     modifier = modifier,
                 )
@@ -148,15 +160,34 @@ fun CategoryScreen() {
         }
     }
 
-    editTarget?.let { target ->
-        EditCategorySheet(
-            target = target,
-            currentType = state.type,
-            budgets = state.budgetsByCategory,
-            viewModel = viewModel,
-            onDismiss = { editTarget = null },
-        )
-    }
+}
+
+/**
+ * The Category tab's own ViewModel, from the activity's store: the tab lives outside the NavHost,
+ * and the editor route shares it so a save outlives the editor being popped.
+ */
+@Composable
+private fun categoryViewModel(): CategoryViewModel {
+    val container = LocalAppContainer.current
+    return viewModel(
+        viewModelStoreOwner = LocalContext.current as ComponentActivity,
+        factory = viewModelFactory { initializer { CategoryViewModel(container.categoryRepository, container.budgetRepository, container.accountRepository) } },
+    )
+}
+
+/** The category editor as its own screen; see [Routes.CATEGORY_EDIT_PATTERN][app.outgo.ui.nav.Routes.CATEGORY_EDIT_PATTERN]. */
+@Composable
+fun CategoryEditScreen(categoryId: Long?, parentId: Long?, onClose: () -> Unit) {
+    val viewModel = categoryViewModel()
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val all = listOfNotNull(state, state.other).flatMap { it.parents + it.childrenByParent.values.flatten() }
+    // Nothing to draw for the moment a deleted category is still on screen before the pop.
+    val target = when {
+        categoryId != null -> all.firstOrNull { it.id == categoryId }?.let { EditTarget.Edit(it) }
+        parentId != null -> all.firstOrNull { it.id == parentId }?.let { EditTarget.NewChild(it.id, it.color) }
+        else -> EditTarget.NewParent
+    } ?: return
+    EditCategoryScreen(target, state.type, state.budgetsByCategory, state.accounts, viewModel, onClose)
 }
 
 /** One row of the flattened category list; parents, children and plus rows are each a lazy item. */
@@ -381,12 +412,12 @@ private fun CategoryRow(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun EditCategorySheet(
+private fun EditCategoryScreen(
     target: EditTarget,
     currentType: Int,
     budgets: Map<Long, BudgetWithProgress>,
+    accounts: List<AccountEntity>,
     viewModel: CategoryViewModel,
     onDismiss: () -> Unit,
 ) {
@@ -399,8 +430,24 @@ private fun EditCategorySheet(
     }
     val budget = existing?.let { budgets[it.id] }
     var budgetText by remember { mutableStateOf(budget?.limitAmount?.toString().orEmpty()) }
-    var overTarget by remember { mutableStateOf(budget?.overTarget) }
-    var underTarget by remember { mutableStateOf(budget?.underTarget) }
+    var overOn by remember { mutableStateOf(budget?.overTarget != null) }
+    var overTarget by remember { mutableStateOf(budget?.overTarget ?: BudgetOffset.SELF) }
+    var underMode by remember {
+        mutableStateOf(
+            when {
+                budget?.underFromAccount != null -> UnderMode.ACCOUNT
+                budget?.underTarget != null -> UnderMode.BUDGET
+                else -> UnderMode.NONE
+            },
+        )
+    }
+    var underTarget by remember { mutableStateOf(budget?.underTarget ?: BudgetOffset.SELF) }
+    var fromAccount by remember { mutableStateOf(budget?.underFromAccount) }
+    var toAccount by remember { mutableStateOf(budget?.underToAccount) }
+    val hasBudget = (budgetText.toLongOrNull() ?: 0L) > 0
+    // An account offset needs two different accounts before it can be saved.
+    val offsetComplete = !hasBudget || underMode != UnderMode.ACCOUNT ||
+        (fromAccount != null && toAccount != null && fromAccount != toAccount)
     var showIconPicker by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var hasTrades by remember { mutableStateOf(false) }
@@ -420,70 +467,104 @@ private fun EditCategorySheet(
         else -> stringResource(R.string.category_create_parent_title)
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        // Scrollable so a field stays reachable above the keyboard when the sheet is taller than the space left.
-        Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(12.dp))
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconView(iconId = iconId, size = 48.dp, color = color, modifier = Modifier.padding(end = 12.dp))
-                OutlinedButton(onClick = { showIconPicker = true }) { Text(stringResource(R.string.common_choose_icon)) }
+    // Compared against the values the editor opened with.
+    val fields = listOf(name, iconId, color, budgetText, overOn, overTarget, underMode, underTarget, fromAccount, toAccount)
+    val initialFields = remember { fields }
+    EditorScaffold(
+        title = title,
+        onCancel = onDismiss,
+        dirty = fields != initialFields,
+        onSave = {
+            val setting = BudgetSetting(
+                limit = budgetText.toLongOrNull(),
+                overTarget = overTarget.takeIf { overOn },
+                underTarget = underTarget.takeIf { underMode == UnderMode.BUDGET },
+                underFromAccount = fromAccount.takeIf { underMode == UnderMode.ACCOUNT },
+                underToAccount = toAccount.takeIf { underMode == UnderMode.ACCOUNT },
+            )
+            when {
+                existing != null -> viewModel.update(existing, name, iconId, color, setting)
+                target is EditTarget.NewChild -> viewModel.createChild(target.parentId, name, iconId, color, setting)
+                else -> viewModel.createParent(name, iconId, color, setting, defaultChildName)
             }
-            Spacer(Modifier.height(12.dp))
+            onDismiss()
+        },
+        saveEnabled = name.isNotBlank() && offsetComplete,
+        onDelete = if (existing != null) { { showDeleteConfirm = true } } else null,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconView(iconId = iconId, size = 48.dp, color = color, modifier = Modifier.padding(end = 12.dp))
+            OutlinedButton(onClick = { showIconPicker = true }) { Text(stringResource(R.string.common_choose_icon)) }
+        }
+        Spacer(Modifier.height(12.dp))
 
+        OutlinedTextField(
+            value = name,
+            onValueChange = { name = it },
+            label = { Text(stringResource(R.string.category_name_hint)) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        if (effectiveType == CategoryKind.EXPENSE) {
+            Spacer(Modifier.height(8.dp))
             OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text(stringResource(R.string.category_name_hint)) },
+                value = budgetText,
+                onValueChange = { budgetText = it.filter { c -> c.isDigit() } },
+                label = { Text(stringResource(R.string.category_budget_hint)) },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.fillMaxWidth(),
             )
+        }
+        Spacer(Modifier.height(12.dp))
 
-            if (effectiveType == CategoryKind.EXPENSE) {
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = budgetText,
-                    onValueChange = { budgetText = it.filter { c -> c.isDigit() } },
-                    label = { Text(stringResource(R.string.category_budget_hint)) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                if ((budgetText.toLongOrNull() ?: 0L) > 0) {
-                    val targets = listOf(
-                        null to stringResource(R.string.budget_offset_none),
-                        BudgetOffset.SELF to stringResource(R.string.budget_offset_self),
-                    ) + budgets.values.filter { it.categoryId != existing?.id }.map { it.categoryId to it.displayName }
-                    OffsetPicker(R.string.budget_over_action, overTarget, targets) { overTarget = it }
-                    OffsetPicker(R.string.budget_under_action, underTarget, targets) { underTarget = it }
-                }
-            }
-            Spacer(Modifier.height(12.dp))
+        Text(stringResource(R.string.category_color_label), style = MaterialTheme.typography.labelLarge)
+        Spacer(Modifier.height(8.dp))
+        ColorPickerGrid(selected = color, onSelect = { color = it })
 
-            Text(stringResource(R.string.category_color_label), style = MaterialTheme.typography.labelLarge)
-            Spacer(Modifier.height(8.dp))
-            ColorPickerGrid(selected = color, onSelect = { color = it })
+        if (effectiveType == CategoryKind.EXPENSE && hasBudget) {
+            val none = stringResource(R.string.budget_offset_none)
+            val budgetLabel = stringResource(R.string.budget_offset_budget)
+            val budgetTargets = listOf(PickOption(BudgetOffset.SELF, stringResource(R.string.budget_offset_self), iconId, color)) +
+                budgets.values.filter { it.categoryId != null && it.categoryId != existing?.id }
+                    .map { PickOption(it.categoryId!!, it.displayName, it.displayIconId, it.categoryColor) }
+            val accountOptions = accounts.map { PickOption<Long?>(it.id, it.name, it.iconId, it.color) }
+            val addTo = stringResource(R.string.budget_offset_add_to)
+
             Spacer(Modifier.height(16.dp))
+            Text(stringResource(R.string.budget_offset_header), style = MaterialTheme.typography.labelLarge)
+            Spacer(Modifier.height(8.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OffsetPicker(
+                    stringResource(R.string.budget_over_action),
+                    overOn,
+                    listOf(PickOption(false, none), PickOption(true, budgetLabel)),
+                ) { overOn = it }
+                if (overOn) {
+                    OffsetPicker(budgetLabel, overTarget, budgetTargets, indent = true) { overTarget = it }
+                }
 
-            Button(
-                onClick = {
-                    val setting = BudgetSetting(budgetText.toLongOrNull(), overTarget, underTarget)
-                    when {
-                        existing != null -> viewModel.update(existing, name, iconId, color, setting)
-                        target is EditTarget.NewChild -> viewModel.createChild(target.parentId, name, iconId, color, setting)
-                        else -> viewModel.createParent(name, iconId, color, setting, defaultChildName)
+                OffsetPicker(
+                    stringResource(R.string.budget_under_action),
+                    underMode,
+                    listOf(
+                        PickOption(UnderMode.NONE, none),
+                        PickOption(UnderMode.BUDGET, budgetLabel),
+                        PickOption(UnderMode.ACCOUNT, stringResource(R.string.budget_offset_account)),
+                    ),
+                ) { underMode = it }
+                when (underMode) {
+                    UnderMode.NONE -> Unit
+                    UnderMode.BUDGET ->
+                        OffsetPicker(addTo, underTarget, budgetTargets, indent = true) { underTarget = it }
+                    UnderMode.ACCOUNT -> {
+                        OffsetPicker(stringResource(R.string.budget_offset_from_account), fromAccount, accountOptions, indent = true) {
+                            fromAccount = it
+                            if (toAccount == it) toAccount = null
+                        }
+                        OffsetPicker(addTo, toAccount, accountOptions.filter { it.value != fromAccount }, indent = true) { toAccount = it }
                     }
-                    onDismiss()
-                },
-                enabled = name.isNotBlank(),
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text(stringResource(R.string.common_save)) }
-
-            if (existing != null) {
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(onClick = { showDeleteConfirm = true }, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.common_delete), color = MaterialTheme.colorScheme.error)
                 }
             }
         }
@@ -512,19 +593,47 @@ private fun EditCategorySheet(
     }
 }
 
-/** "Label ........ Choice ▾" row; a target whose budget is gone shows as the first option. */
+/** Where a budget's unspent amount goes: nowhere, another budget's limit, or another account. */
+private enum class UnderMode { NONE, BUDGET, ACCOUNT }
+
+/** One choice of an [OffsetPicker]; a budget or account choice carries its icon. */
+private data class PickOption<T>(val value: T, val label: String, val iconId: Long? = null, val color: Int? = null) {
+    val hasIcon: Boolean get() = iconId != null || color != null
+}
+
+/** "Label ........ [icon] Choice ▾" in a bordered row. A value missing from [options] (not picked yet, or gone) shows "—". */
 @Composable
-private fun OffsetPicker(@StringRes label: Int, value: Long?, options: List<Pair<Long?, String>>, onSelect: (Long?) -> Unit) {
+private fun <T> OffsetPicker(
+    label: String,
+    value: T,
+    options: List<PickOption<T>>,
+    indent: Boolean = false,
+    onSelect: (T) -> Unit,
+) {
     var open by remember { mutableStateOf(false) }
+    // Same corners as the outlined text fields above.
+    val shape = OutlinedTextFieldDefaults.shape
+    val selected = options.firstOrNull { it.value == value }
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { open = true },
+        modifier = Modifier
+            .padding(start = if (indent) 16.dp else 0.dp)
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clip(shape)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
+            .clickable { open = true }
+            .padding(horizontal = 12.dp),
     ) {
-        Text(stringResource(label), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         Box {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                if (selected?.hasIcon == true) {
+                    IconView(iconId = selected.iconId, size = 22.dp, color = selected.color)
+                    Spacer(Modifier.width(6.dp))
+                }
                 Text(
-                    (options.firstOrNull { it.first == value } ?: options.first()).second,
+                    selected?.label ?: "—",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -536,8 +645,19 @@ private fun OffsetPicker(@StringRes label: Int, value: Long?, options: List<Pair
                 )
             }
             DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                options.forEach { (target, text) ->
-                    DropdownMenuItem(text = { Text(text) }, onClick = { open = false; onSelect(target) })
+                options.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option.label) },
+                        leadingIcon = if (option.hasIcon) {
+                            { IconView(iconId = option.iconId, size = 24.dp, color = option.color) }
+                        } else {
+                            null
+                        },
+                        onClick = {
+                            open = false
+                            onSelect(option.value)
+                        },
+                    )
                 }
             }
         }
