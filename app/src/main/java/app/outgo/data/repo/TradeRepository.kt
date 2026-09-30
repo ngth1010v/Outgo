@@ -12,6 +12,7 @@ import app.outgo.domain.TradeType
 import app.outgo.util.MonthKey
 import java.time.Instant
 import java.time.LocalDate
+import java.time.YearMonth
 import java.time.ZoneId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -128,24 +129,34 @@ class TradeRepository(private val tradeDao: TradeDao) {
     suspend fun accountMovesForMonth(monthKey: Int): List<AccountMove> =
         withContext(Dispatchers.IO) { tradeDao.accountMovesForMonth(monthKey) }
 
-    /** Running spend of a budget's category for each day of this month, day 1 to today. */
-    suspend fun budgetDaysThisMonth(categoryId: Long): List<Long> = withContext(Dispatchers.IO) {
-        runningToToday(tradeDao.budgetTradesForMonth(categoryId, MonthKey.current()))
+    /** Running spend of a budget's category for each day of [monthKey], day 1 to today (or the month's end). */
+    suspend fun budgetDays(categoryId: Long, monthKey: Int = MonthKey.current()): List<Long> = withContext(Dispatchers.IO) {
+        runningDays(tradeDao.budgetTradesForMonth(categoryId, monthKey).map { it.occurredAt to it.amount }, monthKey)
     }
 
     /** Running amount saved into an account for each day of this month, day 1 to today. */
     suspend fun savingDaysThisMonth(accountId: Long): List<Long> = withContext(Dispatchers.IO) {
-        runningToToday(tradeDao.savingTradesForMonth(accountId, MonthKey.current()))
+        val month = MonthKey.current()
+        runningDays(tradeDao.savingTradesForMonth(accountId, month).map { it.occurredAt to it.amount }, month)
     }
 
-    private fun runningToToday(trades: List<TradeSlim>): List<Long> {
+    /** Running balance change since [monthKey] began for each of [accountIds], day 1 to today (or the month's end). */
+    suspend fun balanceChangeDays(accountIds: Collection<Long>, monthKey: Int): Map<Long, List<Long>> = withContext(Dispatchers.IO) {
+        val moves = tradeDao.accountMovesForMonth(monthKey).groupBy { it.accountId }
+        accountIds.associateWith { id -> runningDays(moves[id].orEmpty().map { it.occurredAt to it.delta }, monthKey) }
+    }
+
+    /** (occurredAt, amount) pairs summed per day and run up; the live month stops at today. */
+    private fun runningDays(amounts: List<Pair<Long, Long>>, monthKey: Int): List<Long> {
         val zone = ZoneId.systemDefault()
-        val today = LocalDate.now(zone).dayOfMonth
-        val daily = LongArray(today)
-        trades.forEach {
-            val day = Instant.ofEpochMilli(it.occurredAt).atZone(zone).dayOfMonth
+        val today = LocalDate.now(zone)
+        val length = YearMonth.of(monthKey / 100, monthKey % 100).lengthOfMonth()
+        val days = if (monthKey == today.year * 100 + today.monthValue) today.dayOfMonth else length
+        val daily = LongArray(days)
+        amounts.forEach { (at, amount) ->
+            val day = Instant.ofEpochMilli(at).atZone(zone).dayOfMonth
             // A trade dated later this month still counts, on today.
-            daily[day.coerceAtMost(today) - 1] += it.amount
+            daily[day.coerceAtMost(days) - 1] += amount
         }
         var running = 0L
         return daily.map { running += it; running }

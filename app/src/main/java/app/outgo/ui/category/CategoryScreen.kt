@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -22,6 +23,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -53,10 +56,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import androidx.annotation.StringRes
 import app.outgo.R
 import app.outgo.data.db.dao.BudgetWithProgress
 import app.outgo.data.db.entity.CategoryEntity
+import app.outgo.data.repo.BudgetSetting
 import app.outgo.data.repo.CategoryColorPalette
+import app.outgo.domain.BudgetOffset
 import app.outgo.domain.CategoryKind
 import app.outgo.ui.LocalAppContainer
 import app.outgo.ui.component.BudgetProgressBlock
@@ -146,6 +152,7 @@ fun CategoryScreen() {
         EditCategorySheet(
             target = target,
             currentType = state.type,
+            budgets = state.budgetsByCategory,
             viewModel = viewModel,
             onDismiss = { editTarget = null },
         )
@@ -353,7 +360,7 @@ private fun CategoryRow(
         }
         if (budget != null) {
             val trades = LocalAppContainer.current.tradeRepository
-            val limit = budget.limitAmount ?: 0L
+            val limit = budget.effectiveLimit
             BudgetProgressBlock(
                 remainingText = budgetRemainingText(budget.spent, limit),
                 spentOfTotalText = stringResource(
@@ -366,7 +373,7 @@ private fun CategoryRow(
                 current = budget.spent,
                 total = limit,
                 lineName = stringResource(R.string.progress_line_spent),
-                loadDays = { trades.budgetDaysThisMonth(category.id) },
+                loadDays = { trades.budgetDays(category.id) },
                 greenWhenLower = true,
                 modifier = Modifier.padding(start = 40.dp),
             )
@@ -379,6 +386,7 @@ private fun CategoryRow(
 private fun EditCategorySheet(
     target: EditTarget,
     currentType: Int,
+    budgets: Map<Long, BudgetWithProgress>,
     viewModel: CategoryViewModel,
     onDismiss: () -> Unit,
 ) {
@@ -389,7 +397,10 @@ private fun EditCategorySheet(
     var color by remember {
         mutableStateOf(existing?.color ?: (target as? EditTarget.NewChild)?.parentColor ?: CategoryColorPalette[0])
     }
-    var budgetText by remember { mutableStateOf("") }
+    val budget = existing?.let { budgets[it.id] }
+    var budgetText by remember { mutableStateOf(budget?.limitAmount?.toString().orEmpty()) }
+    var overTarget by remember { mutableStateOf(budget?.overTarget) }
+    var underTarget by remember { mutableStateOf(budget?.underTarget) }
     var showIconPicker by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var hasTrades by remember { mutableStateOf(false) }
@@ -439,6 +450,14 @@ private fun EditCategorySheet(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
                 )
+                if ((budgetText.toLongOrNull() ?: 0L) > 0) {
+                    val targets = listOf(
+                        null to stringResource(R.string.budget_offset_none),
+                        BudgetOffset.SELF to stringResource(R.string.budget_offset_self),
+                    ) + budgets.values.filter { it.categoryId != existing?.id }.map { it.categoryId to it.displayName }
+                    OffsetPicker(R.string.budget_over_action, overTarget, targets) { overTarget = it }
+                    OffsetPicker(R.string.budget_under_action, underTarget, targets) { underTarget = it }
+                }
             }
             Spacer(Modifier.height(12.dp))
 
@@ -449,11 +468,11 @@ private fun EditCategorySheet(
 
             Button(
                 onClick = {
-                    val budget = budgetText.toLongOrNull()
+                    val setting = BudgetSetting(budgetText.toLongOrNull(), overTarget, underTarget)
                     when {
-                        existing != null -> viewModel.update(existing, name, iconId, color, budget)
-                        target is EditTarget.NewChild -> viewModel.createChild(target.parentId, name, iconId, color, budget)
-                        else -> viewModel.createParent(name, iconId, color, budget, defaultChildName)
+                        existing != null -> viewModel.update(existing, name, iconId, color, setting)
+                        target is EditTarget.NewChild -> viewModel.createChild(target.parentId, name, iconId, color, setting)
+                        else -> viewModel.createParent(name, iconId, color, setting, defaultChildName)
                     }
                     onDismiss()
                 },
@@ -490,5 +509,37 @@ private fun EditCategorySheet(
             },
             onDismiss = { showDeleteConfirm = false },
         )
+    }
+}
+
+/** "Label ........ Choice ▾" row; a target whose budget is gone shows as the first option. */
+@Composable
+private fun OffsetPicker(@StringRes label: Int, value: Long?, options: List<Pair<Long?, String>>, onSelect: (Long?) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { open = true },
+    ) {
+        Text(stringResource(label), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Box {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    (options.firstOrNull { it.first == value } ?: options.first()).second,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Icon(
+                    painter = painterResource(R.drawable.ph_caret_down),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(start = 4.dp).size(12.dp),
+                )
+            }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                options.forEach { (target, text) ->
+                    DropdownMenuItem(text = { Text(text) }, onClick = { open = false; onSelect(target) })
+                }
+            }
+        }
     }
 }

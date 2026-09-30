@@ -5,9 +5,11 @@ import androidx.lifecycle.viewModelScope
 import app.outgo.data.db.dao.MonthCategoryTotal
 import app.outgo.data.db.dao.StatDao
 import app.outgo.data.repo.AccountRepository
+import app.outgo.data.repo.BudgetRepository
 import app.outgo.data.repo.CategoryRepository
 import app.outgo.data.repo.SettingRepository
 import app.outgo.data.repo.TradeRepository
+import app.outgo.domain.AccountType
 import app.outgo.domain.CategoryKind
 import app.outgo.domain.TradeType
 import app.outgo.util.MonthKey
@@ -50,11 +52,17 @@ data class AnalysisUiState(
     val layouts: Map<LayoutSlot, List<ChartCard>> = emptyMap(),
     /** (id, name) in the user's order, for the per-account chart's picker. */
     val accounts: List<Pair<Long, String>> = emptyList(),
+    /** (category id, name) of each budget, and (id, name) of each savings account, for the picks chip. */
+    val budgets: List<Pair<Long, String>> = emptyList(),
+    val savings: List<Pair<Long, String>> = emptyList(),
+    /** By `yyyyMM`: a budget/savings card can show any month, not only its page's. */
+    val goals: Map<Int, Stage<GoalDaysUi>> = emptyMap(),
 )
 
 class AnalysisViewModel(
     private val statDao: StatDao,
     private val tradeRepository: TradeRepository,
+    budgetRepository: BudgetRepository,
     categoryRepository: CategoryRepository,
     accountRepository: AccountRepository,
     private val settingRepository: SettingRepository,
@@ -81,6 +89,12 @@ class AnalysisViewModel(
     private val yearStatsCache = lru<Stage<YearStatsData>>()
     private val yearTradesCache = lru<Stage<YearTradesData>>()
     private val tradeJobs = HashMap<AnalysisPage, Job>()
+
+    /** (id, name, color) of each budget (by category id) and each savings account. */
+    private var budgetInfo: List<Triple<Long, String, Int>> = emptyList()
+    private var savingInfo: List<Triple<Long, String, Int>> = emptyList()
+    private val goalsCache = lru<Stage<GoalDaysUi>>()
+    private val goalJobs = HashMap<Int, Job>()
 
     /** Pages whose charts have already played their intro animation. */
     private val animated = HashSet<AnalysisPage>()
@@ -109,8 +123,25 @@ class AnalysisViewModel(
         viewModelScope.launch {
             accountRepository.observeAll().collect { list ->
                 accounts = list.associate { it.id to Triple(it.name, it.iconId, it.color) }
-                _state.update { state -> state.copy(accounts = list.filter { !it.archived }.map { it.id to it.name }) }
+                val savings = list.filter { !it.archived && it.accountType == AccountType.SAVINGS }.map { Triple(it.id, it.name, it.color) }
+                _state.update { state ->
+                    state.copy(accounts = list.filter { !it.archived }.map { it.id to it.name }, savings = savings.map { it.first to it.second })
+                }
+                if (savings != savingInfo) {
+                    savingInfo = savings
+                    reloadGoals()
+                }
             }
+        }
+        viewModelScope.launch {
+            budgetRepository.observeWithProgress(currentMonth)
+                .map { list -> list.mapNotNull { b -> b.categoryId?.let { Triple(it, b.displayName, b.categoryColor ?: OTHER_COLOR) } } }
+                .distinctUntilChanged()
+                .collect { budgets ->
+                    budgetInfo = budgets
+                    _state.update { it.copy(budgets = budgets.map { b -> b.first to b.second }) }
+                    reloadGoals()
+                }
         }
         viewModelScope.launch {
             val layouts = LayoutSlot.entries.associateWith { slot ->
@@ -126,6 +157,7 @@ class AnalysisViewModel(
                 val cached = monthTradesCache.keys.map { AnalysisPage.Month(it) } +
                     yearTradesCache.keys.map { AnalysisPage.Year(it) }
                 cached.forEach { page -> loadTrades(page, force = true) }
+                reloadGoals()
             }
         }
     }
@@ -271,6 +303,34 @@ class AnalysisViewModel(
 
     private fun publishTrades() {
         _state.update { it.copy(monthTrades = monthTradesCache.toMap(), yearTrades = yearTradesCache.toMap()) }
+    }
+
+    // ------------------------------------------------------------------- GOALS
+
+    /** A budget/savings card asks for its month once drawn; one query per budget, one for all savings. */
+    fun loadGoals(month: Int, force: Boolean = false) {
+        if (!force && (goalsCache[month] != null || goalJobs[month] != null)) return
+        goalJobs.remove(month)?.cancel()
+        if (goalsCache[month] == null) {
+            goalsCache[month] = Stage.Loading
+            publishGoals()
+        }
+        goalJobs[month] = viewModelScope.launch {
+            val days = yearMonthOf(month).lengthOfMonth()
+            val budgets = budgetInfo.map { (id, name, color) -> BalanceLine(id, name, color, tradeRepository.budgetDays(id, month)) }
+            val changes = tradeRepository.balanceChangeDays(savingInfo.map { it.first }, month)
+            val savings = savingInfo.map { (id, name, color) -> BalanceLine(id, name, color, changes[id].orEmpty()) }
+            goalsCache[month] = Stage.Ready(GoalDaysUi(DailyBalanceUi(days, budgets), DailyBalanceUi(days, savings)))
+            goalJobs.remove(month)
+            publishGoals()
+        }
+    }
+
+    /** The cached months only: the rest load when a card asks. */
+    private fun reloadGoals() = goalsCache.keys.toList().forEach { loadGoals(it, force = true) }
+
+    private fun publishGoals() {
+        _state.update { it.copy(goals = goalsCache.toMap()) }
     }
 
     // -------------------------------------------------------------- navigation

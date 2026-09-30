@@ -45,3 +45,8 @@ object IconKind {
 object BudgetKind {
     const val LIMIT = 0
 }
+
+/** Special target of a budget's over/under offset; any other value is the target budget's category id. */
+object BudgetOffset {
+    const val SELF = 0L
+}

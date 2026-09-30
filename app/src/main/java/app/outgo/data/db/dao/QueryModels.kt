@@ -22,6 +22,13 @@ data class MonthCategoryTotal(
 )
 
 /** A LIMIT budget joined with how much of it has been spent this month. */
+/** Spend of one LIMIT budget (its category plus children) in one month. */
+data class BudgetMonthSpend(
+    val categoryId: Long,
+    val monthKey: Int,
+    val spent: Long,
+)
+
 data class BudgetWithProgress(
     val id: Long,
     val kind: Int,
@@ -35,7 +42,14 @@ data class BudgetWithProgress(
     val categoryName: String?,
     val categoryIconId: Long?,
     val categoryColor: Int?,
+    val overTarget: Long?,
+    val underTarget: Long?,
+    val carryFrom: Int?,
+    /** Offset carried in from earlier months (negative: overspend taken off). Filled by BudgetRepository. */
+    val carry: Long,
 ) {
+    /** This month's limit after the carried offset. */
+    val effectiveLimit: Long get() = (limitAmount ?: 0L) + carry
     val displayName: String get() = if (name != null) name else categoryName.orEmpty()
     val displayIconId: Long? get() = iconId ?: categoryIconId
 }

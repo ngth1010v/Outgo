@@ -98,6 +98,10 @@
     <string name="category_name_hint">Category name</string>
     <string name="category_color_label">Color</string>
     <string name="category_budget_hint">Monthly budget (optional)</string>
+    <string name="budget_over_action">When over the limit, take it from</string>
+    <string name="budget_under_action">When under the limit, add it to</string>
+    <string name="budget_offset_none">No offset</string>
+    <string name="budget_offset_self">This budget</string>
     <string name="category_delete_confirm_title">Delete category?</string>
     <string name="category_delete_parent_confirm_message">This will also delete its %1$d subcategories.</string>
     <string name="category_delete_child_confirm_message">This category has no transactions and will be removed permanently.</string>
@@ -264,6 +268,11 @@
     <string name="analysis_cd_net_flow">How much each account\'s balance changed in this period</string>
     <string name="analysis_cd_balance">Month-end balances of %1$d accounts</string>
     <string name="analysis_cd_daily_balance">Daily balances of %1$d accounts</string>
+    <string name="analysis_budget_daily_title">Daily budget spending</string>
+    <string name="analysis_saving_daily_title">Daily savings</string>
+    <string name="analysis_picked_count">%1$d selected</string>
+    <string name="analysis_month_follow">This page</string>
+    <string name="analysis_cd_daily_lines">%1$s, %2$d lines</string>
     <string name="analysis_group_overview">Overview</string>
     <string name="analysis_group_over_time">Over time</string>
     <string name="analysis_group_details">Details</string>

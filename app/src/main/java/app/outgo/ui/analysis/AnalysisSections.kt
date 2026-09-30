@@ -122,7 +122,8 @@ fun chartContentHeight(type: ChartType, mode: AnalysisMode): Dp {
         ChartType.LARGEST, ChartType.ACCOUNT_LARGEST -> RowHeight * LARGEST_COUNT
         ChartType.TRANSFERS -> small + SectionGap + RowHeight * TRANSFER_PAIR_COUNT
         ChartType.NET_FLOW -> MoverRowHeight * LIST_VISIBLE_ROWS
-        ChartType.BALANCE_TREND, ChartType.DAILY_BALANCE -> BalanceHeight + SectionGap + small
+        ChartType.BALANCE_TREND, ChartType.DAILY_BALANCE, ChartType.BUDGET_DAILY, ChartType.SAVING_DAILY ->
+            BalanceHeight + SectionGap + small
     }
 }
 
@@ -219,9 +220,12 @@ fun Section(title: String, modifier: Modifier = Modifier, content: @Composable (
 private val SectionTitleHeight = 28.dp
 private val SectionGap = 8.dp
 
-/** A compact dropdown in a section's title row: the current choice and a caret. */
+/**
+ * A compact dropdown in a section's title row: the current choice and a caret. With [checked] it is
+ * a multi-pick: each option shows a tick and the menu stays open while options are toggled.
+ */
 @Composable
-fun <T> ChoiceChip(label: String, options: List<Pair<T, String>>, onSelect: (T) -> Unit) {
+fun <T> ChoiceChip(label: String, options: List<Pair<T, String>>, checked: ((T) -> Boolean)? = null, onSelect: (T) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
         Row(
@@ -251,8 +255,18 @@ fun <T> ChoiceChip(label: String, options: List<Pair<T, String>>, onSelect: (T) 
                 DropdownMenuItem(
                     text = { Text(text) },
                     onClick = {
-                        open = false
+                        if (checked == null) open = false
                         onSelect(value)
+                    },
+                    leadingIcon = checked?.let { isChecked ->
+                        {
+                            Icon(
+                                painter = painterResource(R.drawable.ph_check),
+                                contentDescription = null,
+                                tint = if (isChecked(value)) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
                     },
                 )
             }
@@ -1033,11 +1047,32 @@ fun BalanceTrendSection(balance: BalanceTrendUi, zero: Boolean, animate: Boolean
 fun DailyBalanceSection(daily: DailyBalanceUi, accountId: Long?, zero: Boolean, animate: Boolean, modifier: Modifier = Modifier) {
     val lines = remember(daily, accountId) { if (accountId == null) daily.lines else daily.lines.filter { it.accountId == accountId } }
     val description = stringResource(R.string.analysis_cd_daily_balance, lines.size)
-    Section(stringResource(R.string.analysis_daily_balance_title), modifier.semantics { contentDescription = description }) {
+    DailyLines(stringResource(R.string.analysis_daily_balance_title), description, lines, daily.daysInMonth, zero, animate, modifier)
+}
+
+/** The budget and savings charts: the lines of [ids] (all when empty), on an axis through 0. */
+@Composable
+fun GoalDaysSection(title: String, daily: DailyBalanceUi, ids: List<Long>, animate: Boolean, modifier: Modifier = Modifier) {
+    val lines = remember(daily, ids) { if (ids.isEmpty()) daily.lines else daily.lines.filter { it.accountId in ids } }
+    val description = stringResource(R.string.analysis_cd_daily_lines, title, lines.size)
+    DailyLines(title, description, lines, daily.daysInMonth, zero = true, animate, modifier)
+}
+
+@Composable
+private fun DailyLines(
+    title: String,
+    description: String,
+    lines: List<BalanceLine>,
+    daysInMonth: Int,
+    zero: Boolean,
+    animate: Boolean,
+    modifier: Modifier,
+) {
+    Section(title, modifier.semantics { contentDescription = description }) {
         if (lines.isEmpty()) {
             EmptyBox(BalanceHeight)
         } else {
-            DailyBalanceChart(lines, daily.daysInMonth, zero, introProgress(animate), Modifier.fillMaxWidth().height(BalanceHeight))
+            DailyBalanceChart(lines, daysInMonth, zero, introProgress(animate), Modifier.fillMaxWidth().height(BalanceHeight))
             AccountLegend(lines)
         }
     }

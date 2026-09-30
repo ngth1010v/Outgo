@@ -438,7 +438,7 @@ private fun BudgetRow(budget: BudgetWithProgress, modifier: Modifier = Modifier)
             Text(budget.displayName, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
             MonthAmountBlock(budget.spent, budget.prevSpent, greenWhenLower = true)
         }
-        val limit = budget.limitAmount ?: 0L
+        val limit = budget.effectiveLimit
         BudgetProgressBlock(
             remainingText = budgetRemainingText(budget.spent, limit),
             spentOfTotalText = stringResource(
@@ -451,7 +451,7 @@ private fun BudgetRow(budget: BudgetWithProgress, modifier: Modifier = Modifier)
             current = budget.spent,
             total = limit,
             lineName = stringResource(R.string.progress_line_spent),
-            loadDays = { budget.categoryId?.let { trades.budgetDaysThisMonth(it) }.orEmpty() },
+            loadDays = { budget.categoryId?.let { trades.budgetDays(it) }.orEmpty() },
             greenWhenLower = true,
         )
     }

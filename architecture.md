@@ -424,6 +424,9 @@ CREATE TABLE budget (
   deadline       INTEGER,
   sort_order     INTEGER NOT NULL DEFAULT 0,
   created_at     INTEGER NOT NULL,
+  over_target    INTEGER,                  -- chi vượt: NULL = không bù, 0 = budget này, khác = category_id của budget đích
+  under_target   INTEGER,                  -- chi dư: cùng cách mã hoá
+  carry_from     INTEGER,                  -- month_key đầu tiên được mang sang, đặt lại khi đổi đích
   CHECK ((kind = 0 AND category_id IS NOT NULL AND limit_amount > 0)
       OR (kind = 1 AND account_id IS NOT NULL AND target_amount > 0 AND name IS NOT NULL))
 );
@@ -852,6 +855,7 @@ fun budgetColor(spent: Long, limit: Long): BudgetLevel = when {
 - **Hàng dưới:** `LinearProgressIndicator(progress = min(spent / limit, 1f))`, cùng màu.
 - Budget của **danh mục cha** tính tổng chi của **tất cả danh mục con** trong tháng hiện tại.
 - Chỉ **danh mục Chi** mới có mục "Đặt budget" trong popup.
+- **Bù trừ sang tháng sau:** popup có 2 lựa chọn "Khi vượt hạn mức" / "Khi chưa chi hết": Không bù trừ, Ngân sách này, hoặc một budget khác. Phần vượt (âm) hoặc phần dư (dương) của tháng trước được cộng vào hạn mức tháng này của budget đích. Tính lần lượt từng tháng từ `carry_from` (`budgetCarry` trong `BudgetRepository`), nên phần đã bù ở tháng sau không bị tính lại. Hạn mức quá khứ dùng hạn mức hiện tại (không lưu lịch sử hạn mức).
 
 #### Popup sửa / tạo danh mục và quy tắc xoá
 

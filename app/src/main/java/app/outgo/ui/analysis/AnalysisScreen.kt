@@ -82,6 +82,7 @@ import app.outgo.ui.component.rememberReorderState
 import app.outgo.ui.theme.ExpenseRed
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 /**
  * One flat pager: every year's months, then that year's summary page. Only three pages are ever
@@ -103,6 +104,7 @@ fun AnalysisScreen(onOpenTrade: (Long) -> Unit, onOpenDay: (Long) -> Unit) {
                 AnalysisViewModel(
                     container.statDao,
                     container.tradeRepository,
+                    container.budgetRepository,
                     container.categoryRepository,
                     container.accountRepository,
                     container.settingRepository,
@@ -361,7 +363,9 @@ private fun cardColor(): Color =
 private fun ChartList(
     slot: LayoutSlot,
     cards: List<ChartCard>,
-    accounts: List<Pair<Long, String>>,
+    state: AnalysisUiState,
+    /** The month page's own month, which a budget/savings card follows by default; null on a year page. */
+    pageMonth: Int?,
     listState: LazyListState,
     viewModel: AnalysisViewModel,
     onDeleted: (LayoutSlot, Int, ChartCard) -> Unit,
@@ -399,8 +403,8 @@ private fun ChartList(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             items(cards, key = { it.id }, contentType = { it.type }) { card ->
-                val action: (@Composable () -> Unit)? = if (card.type.hasMode || card.type.hasAccount || card.type.hasZero) {
-                    { CardChips(card, accounts) { viewModel.updateCard(slot, it) } }
+                val action: (@Composable () -> Unit)? = if (card.type.hasMode || card.type.hasAccount || card.type.hasZero || card.type.hasPicks) {
+                    { CardChips(card, state, pageMonth) { viewModel.updateCard(slot, it) } }
                 } else {
                     null
                 }
@@ -444,8 +448,31 @@ private fun ChartList(
 }
 
 @Composable
-private fun CardChips(card: ChartCard, accounts: List<Pair<Long, String>>, onChange: (ChartCard) -> Unit) {
+private fun CardChips(card: ChartCard, state: AnalysisUiState, pageMonth: Int?, onChange: (ChartCard) -> Unit) {
+    val accounts = state.accounts
     Row(verticalAlignment = Alignment.CenterVertically) {
+        if (card.type.hasPicks) {
+            val items = if (card.type == ChartType.BUDGET_DAILY) state.budgets else state.savings
+            val all = stringResource(R.string.analysis_accounts_all)
+            val label = when (card.ids.size) {
+                0 -> all
+                1 -> items.firstOrNull { it.first == card.ids[0] }?.second ?: "—"
+                else -> stringResource(R.string.analysis_picked_count, card.ids.size)
+            }
+            val picks: List<Pair<Long?, String>> = listOf(null to all) + items
+            ChoiceChip(label, picks, checked = { if (it == null) card.ids.isEmpty() else it in card.ids }) { id ->
+                // Unticking the last pick goes back to all.
+                val ids = when {
+                    id == null -> emptyList()
+                    id in card.ids -> card.ids - id
+                    else -> card.ids + id
+                }
+                onChange(card.copy(ids = ids))
+            }
+            val months: List<Pair<Int?, String>> = listOf(null to stringResource(R.string.analysis_month_follow)) +
+                state.pages.filterIsInstance<AnalysisPage.Month>().reversed().map { it.monthKey to monthNumber(it.monthKey) }
+            ChoiceChip((card.month ?: pageMonth)?.let(::monthNumber) ?: "—", months) { onChange(card.copy(month = it)) }
+        }
         if (card.type.allAccounts) {
             val options = listOf(null to stringResource(R.string.analysis_accounts_all)) + accounts
             ChoiceChip(options.firstOrNull { it.first == card.accountId }?.second ?: "—", options) { onChange(card.copy(accountId = it)) }
@@ -565,6 +592,8 @@ private fun chartName(type: ChartType): String = stringResource(
         ChartType.DAILY_BALANCE -> R.string.analysis_daily_balance_title
         ChartType.TRANSFERS -> R.string.analysis_transfers_title
         ChartType.ACCOUNT_LARGEST -> R.string.analysis_chart_account_largest
+        ChartType.BUDGET_DAILY -> R.string.analysis_budget_daily_title
+        ChartType.SAVING_DAILY -> R.string.analysis_saving_daily_title
     },
 )
 
@@ -592,7 +621,7 @@ private fun MonthPage(
 
     LoadTradesAfterFirstFrame(page, viewModel)
 
-    PageCharts(LayoutSlot.MONTH, listState, state, viewModel, onDeleted) { card ->
+    PageCharts(LayoutSlot.MONTH, month, listState, state, viewModel, onDeleted) { card ->
         val mode = card.mode
         val height = chartContentHeight(card.type, mode)
         when (card.type) {
@@ -623,6 +652,18 @@ private fun MonthPage(
             ChartType.LARGEST -> StageSection(trades, largestTitle(mode), height) {
                 LargestSection(it.largestOf(mode), mode, onOpenTrade)
             }
+            ChartType.BUDGET_DAILY, ChartType.SAVING_DAILY -> {
+                val shown = card.month ?: month
+                LaunchedEffect(shown) {
+                    withFrameNanos { }
+                    viewModel.loadGoals(shown)
+                }
+                val budgets = card.type == ChartType.BUDGET_DAILY
+                val title = stringResource(if (budgets) R.string.analysis_budget_daily_title else R.string.analysis_saving_daily_title)
+                StageSection(state.goals[shown] ?: Stage.Loading, title, height) {
+                    GoalDaysSection(title, if (budgets) it.budgets else it.savings, card.ids, animate)
+                }
+            }
             else -> AccountChart(card, height, accounts, transfers, state.accounts, accountSelection, animate, onOpenTrade)
         }
     }
@@ -650,7 +691,7 @@ private fun YearPage(
 
     LoadTradesAfterFirstFrame(page, viewModel)
 
-    PageCharts(LayoutSlot.YEAR, listState, state, viewModel, onDeleted) { card ->
+    PageCharts(LayoutSlot.YEAR, null, listState, state, viewModel, onDeleted) { card ->
         val mode = card.mode
         val height = chartContentHeight(card.type, mode)
         when (card.type) {
@@ -678,6 +719,7 @@ private fun YearPage(
 @Composable
 private fun PageCharts(
     slot: LayoutSlot,
+    pageMonth: Int?,
     listState: LazyListState,
     state: AnalysisUiState,
     viewModel: AnalysisViewModel,
@@ -685,7 +727,7 @@ private fun PageCharts(
     chart: @Composable (ChartCard) -> Unit,
 ) {
     val cards = state.layouts[slot] ?: return
-    ChartList(slot, cards, state.accounts, listState, viewModel, onDeleted, chart)
+    ChartList(slot, cards, state, pageMonth, listState, viewModel, onDeleted, chart)
 }
 
 // --------------------------------------------------------------- account charts
@@ -760,3 +802,6 @@ private fun rememberIntroAnimation(page: AnalysisPage, stats: Stage<*>, viewMode
     }
     return animate
 }
+
+/** `09/2026`: the budget/savings cards' month, as numbers. */
+private fun monthNumber(monthKey: Int): String = String.format(Locale.US, "%02d/%d", monthKey % 100, monthKey / 100)

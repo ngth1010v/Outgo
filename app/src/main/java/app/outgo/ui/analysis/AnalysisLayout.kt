@@ -21,6 +21,8 @@ enum class ChartType(
     val allAccounts: Boolean = false,
     /** A chart whose value axis can be pinned to reach 0; see [ChartCard.zero]. */
     val hasZero: Boolean = false,
+    /** Picks any number of budgets or savings accounts ([ChartCard.ids]) and its own month ([ChartCard.month]). */
+    val hasPicks: Boolean = false,
 ) {
     // Categories, month
     SUMMARY(R.drawable.ph_receipt),
@@ -47,6 +49,12 @@ enum class ChartType(
     DAILY_BALANCE(R.drawable.ph_chart_line, hasMode = false, hasAccount = true, allAccounts = true, hasZero = true),
     TRANSFERS(R.drawable.ph_arrows_left_right, hasMode = false),
     ACCOUNT_LARGEST(R.drawable.ph_ranking, hasAccount = true),
+
+    // Budgets and savings, month pages only
+    /** Running spend of each picked budget, day by day. */
+    BUDGET_DAILY(R.drawable.ph_trend_down, hasMode = false, hasPicks = true),
+    /** Running balance change of each picked savings account since the month began. */
+    SAVING_DAILY(R.drawable.ph_wallet_fill, hasMode = false, hasPicks = true),
 }
 
 /** A heading in the "+" sheet and the charts under it. */
@@ -65,7 +73,7 @@ enum class LayoutSlot(
 ) {
     MONTH(
         "analysis_layout_month",
-        MonthCategoryCharts + MonthAccountCharts,
+        MonthCategoryCharts + MonthAccountCharts + listOf(ChartType.BUDGET_DAILY, ChartType.SAVING_DAILY),
         listOf(
             ChartGroup(
                 R.string.analysis_group_overview,
@@ -75,7 +83,7 @@ enum class LayoutSlot(
                 R.string.analysis_group_over_time,
                 listOf(
                     ChartType.TREND, ChartType.PACE, ChartType.HEATMAP, ChartType.WEEKDAY,
-                    ChartType.BALANCE_TREND, ChartType.DAILY_BALANCE,
+                    ChartType.BALANCE_TREND, ChartType.DAILY_BALANCE, ChartType.BUDGET_DAILY, ChartType.SAVING_DAILY,
                 ),
             ),
             ChartGroup(
@@ -144,11 +152,19 @@ data class ChartCard(
     val accountId: Long? = null,
     /** Only for [ChartType.hasZero]: the value axis always takes in 0, instead of fitting the data. */
     val zero: Boolean = false,
+    /** Only for [ChartType.hasPicks]: the budgets' category ids or the savings account ids; empty means all. */
+    val ids: List<Long> = emptyList(),
+    /** Only for [ChartType.hasPicks]: a fixed `yyyyMM`; null follows the page's month. */
+    val month: Int? = null,
 )
 
-/** `TYPE.MODE.accountId.zero` per card, `;`-separated; zero is `0` when on, empty when off. */
-fun encodeLayout(cards: List<ChartCard>): String =
-    cards.joinToString(";") { "${it.type.name}.${it.mode.name}.${it.accountId ?: ""}.${if (it.zero) "0" else ""}" }
+/**
+ * `TYPE.MODE.accountId.zero.ids.month` per card, `;`-separated; zero is `0` when on, empty when off,
+ * ids are `,`-separated. Older versions read the first four parts and ignore the rest.
+ */
+fun encodeLayout(cards: List<ChartCard>): String = cards.joinToString(";") {
+    "${it.type.name}.${it.mode.name}.${it.accountId ?: ""}.${if (it.zero) "0" else ""}.${it.ids.joinToString(",")}.${it.month ?: ""}"
+}
 
 /**
  * Null [value] (never saved) gives [defaults]. Unknown charts — from a newer version's backup — and
@@ -160,7 +176,11 @@ fun decodeLayout(value: String?, defaults: List<ChartType>, offered: Set<ChartTy
         val parts = entry.split('.')
         val type = ChartType.entries.firstOrNull { it.name == parts[0] && it in offered } ?: return@mapNotNull null
         val mode = AnalysisMode.entries.firstOrNull { it.name == parts.getOrNull(1) } ?: AnalysisMode.ALL
-        ChartCard(0, type, mode, parts.getOrNull(2)?.toLongOrNull(), parts.getOrNull(3) == "0")
+        ChartCard(
+            0, type, mode, parts.getOrNull(2)?.toLongOrNull(), parts.getOrNull(3) == "0",
+            parts.getOrNull(4)?.split(',')?.mapNotNull { it.toLongOrNull() }.orEmpty(),
+            parts.getOrNull(5)?.toIntOrNull(),
+        )
     }
 }
 

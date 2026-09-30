@@ -289,6 +289,14 @@ data class BalanceTrendUi(val months: List<Int>, val lines: List<BalanceLine>)
 @Immutable
 data class DailyBalanceUi(val daysInMonth: Int, val lines: List<BalanceLine>)
 
+/**
+ * One month of the budget and savings charts, for every budget (keyed by category id) and every
+ * savings account; a card filters to its picks. Budgets run up their spend, savings their balance
+ * change since the 1st.
+ */
+@Immutable
+data class GoalDaysUi(val budgets: DailyBalanceUi, val savings: DailyBalanceUi)
+
 @Immutable
 data class LargestSet(val expense: List<LargestItem>, val income: List<LargestItem>, val all: List<LargestItem>) {
     fun of(mode: AnalysisMode): List<LargestItem> = when (mode) {

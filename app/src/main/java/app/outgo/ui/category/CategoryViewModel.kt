@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import app.outgo.data.db.dao.BudgetWithProgress
 import app.outgo.data.db.entity.CategoryEntity
 import app.outgo.data.repo.BudgetRepository
+import app.outgo.data.repo.BudgetSetting
 import app.outgo.data.repo.CategoryRepository
 import app.outgo.domain.BudgetKind
 import app.outgo.domain.CategoryKind
@@ -59,15 +60,15 @@ class CategoryViewModel(
     suspend fun childCount(parentId: Long): Int = categoryRepository.childCount(parentId)
     suspend fun hasTrades(categoryId: Long): Boolean = categoryRepository.hasTrades(categoryId)
 
-    fun createParent(name: String, iconId: Long?, color: Int, budget: Long?, defaultChildName: String) {
+    fun createParent(name: String, iconId: Long?, color: Int, budget: BudgetSetting?, defaultChildName: String) {
         viewModelScope.launch { categoryRepository.createParent(type.value, name, iconId, color, budget, defaultChildName) }
     }
 
-    fun createChild(parentId: Long, name: String, iconId: Long?, color: Int, budget: Long?) {
+    fun createChild(parentId: Long, name: String, iconId: Long?, color: Int, budget: BudgetSetting?) {
         viewModelScope.launch { categoryRepository.createChild(parentId, name, iconId, color, budget) }
     }
 
-    fun update(category: CategoryEntity, name: String, iconId: Long?, color: Int, budget: Long?) {
+    fun update(category: CategoryEntity, name: String, iconId: Long?, color: Int, budget: BudgetSetting?) {
         viewModelScope.launch { categoryRepository.update(category, name, iconId, color, budget) }
     }
 

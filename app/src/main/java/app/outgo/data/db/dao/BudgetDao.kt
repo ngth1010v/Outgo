@@ -46,7 +46,9 @@ interface BudgetDao {
                ), 0) AS prevSpent,
                cat.name AS categoryName,
                cat.icon_id AS categoryIconId,
-               cat.color AS categoryColor
+               cat.color AS categoryColor,
+               b.over_target AS overTarget, b.under_target AS underTarget, b.carry_from AS carryFrom,
+               0 AS carry
         FROM budget b
         LEFT JOIN category cat ON cat.id = b.category_id
         LEFT JOIN category parent ON parent.id = cat.parent_id
@@ -57,6 +59,20 @@ interface BudgetDao {
         """,
     )
     fun observeBudgetsWithProgress(monthKey: Int, prevMonthKey: Int): Flow<List<BudgetWithProgress>>
+
+    /** Monthly spend of budgets that carry an offset, from each one's carry_from up to before [monthKey]. */
+    @Query(
+        """
+        SELECT b.category_id AS categoryId, s.month_key AS monthKey, SUM(s.total) AS spent
+        FROM budget b
+        JOIN category c ON c.id = b.category_id OR c.parent_id = b.category_id
+        JOIN category_month_stat s ON s.category_id = c.id
+        WHERE b.kind = 0 AND (b.over_target IS NOT NULL OR b.under_target IS NOT NULL)
+          AND s.month_key >= b.carry_from AND s.month_key < :monthKey
+        GROUP BY b.category_id, s.month_key
+        """,
+    )
+    fun observeCarrySpend(monthKey: Int): Flow<List<BudgetMonthSpend>>
 
     @Query("SELECT COALESCE(MAX(sort_order), -1) FROM budget WHERE kind = :kind")
     suspend fun maxSortOrder(kind: Int): Int

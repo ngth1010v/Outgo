@@ -64,4 +64,16 @@ data class BudgetEntity(
     val sortOrder: Int = 0,
     @ColumnInfo(name = "created_at")
     val createdAt: Long,
+    /**
+     * Where a month's overspend is taken from next month: null = nowhere, [app.outgo.domain.BudgetOffset.SELF] =
+     * this budget, otherwise the category id of the budget whose limit shrinks.
+     */
+    @ColumnInfo(name = "over_target")
+    val overTarget: Long? = null,
+    /** Where a month's unspent limit is added next month; same encoding as [overTarget]. */
+    @ColumnInfo(name = "under_target")
+    val underTarget: Long? = null,
+    /** First month (yyyyMM) whose result carries over; reset when a target changes so old months don't pile up. */
+    @ColumnInfo(name = "carry_from")
+    val carryFrom: Int? = null,
 )

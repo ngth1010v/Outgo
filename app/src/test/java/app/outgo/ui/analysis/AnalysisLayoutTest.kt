@@ -41,6 +41,18 @@ class AnalysisLayoutTest {
     }
 
     @Test
+    fun `picked ids and month survive a round trip, old rows read without them`() {
+        val cards = listOf(
+            ChartCard(0, ChartType.BUDGET_DAILY, ids = listOf(4, 7), month = 202609),
+            ChartCard(0, ChartType.SAVING_DAILY),
+            ChartCard(0, ChartType.DAILY_BALANCE, accountId = 3, zero = true),
+        )
+        val offered = LayoutSlot.MONTH.offered
+        assertEquals(cards, decodeLayout(encodeLayout(cards), emptyList(), offered))
+        assertEquals(listOf(ChartCard(0, ChartType.PACE, zero = true)), decodeLayout("PACE.ALL..0", emptyList(), offered))
+    }
+
+    @Test
     fun `the merged row wins over the old ones`() {
         val saved = mapOf("analysis_layout_month" to "HEATMAP.ALL..", "analysis_layout_month_categories" to "DONUT.ALL..")
         assertEquals(listOf(ChartCard(0, ChartType.HEATMAP)), decodeSlot(LayoutSlot.MONTH) { saved[it] })
