@@ -19,12 +19,16 @@ import java.time.ZoneId
 import java.util.Locale
 
 /**
- * What the category sheet saves for a LIMIT budget. [overTarget]/[underTarget]: null = no offset,
+ * What the category editor saves for a LIMIT budget. [overTarget]/[underTarget]: null = no offset,
  * [BudgetOffset.SELF] = this budget, otherwise the target budget's category id. [underFromAccount]
  * and [underToAccount] replace [underTarget] when the unspent amount moves as real money.
+ * Not [enabled]: an existing budget is paused with its settings kept, and the rest is ignored.
  */
 data class BudgetSetting(
+    val enabled: Boolean,
     val limit: Long?,
+    /** yyyyMM; months before it have no budget. */
+    val applyFrom: Int,
     val overTarget: Long? = null,
     val underTarget: Long? = null,
     val underFromAccount: Long? = null,
@@ -52,48 +56,53 @@ class BudgetRepository(
 
     suspend fun delete(budget: BudgetEntity) = withContext(Dispatchers.IO) { budgetDao.delete(budget) }
 
-    /** Creates/updates/removes the single LIMIT budget for a category. A null or <= 0 limit clears it. */
+    /**
+     * Creates, updates or pauses the single LIMIT budget for a category. A null [setting] or a
+     * limit <= 0 while enabled changes nothing (the editor doesn't allow saving that).
+     */
     suspend fun setLimitForCategory(categoryId: Long, setting: BudgetSetting?) = withContext(Dispatchers.IO) {
+        if (setting == null) return@withContext
         val existing = budgetDao.findByCategory(categoryId)
-        val limit = setting?.limit
-        // Budget offsets start from last month's result, so a change shows on this month's bar
-        // right away. Account offsets move real money, so they wait for this month to end.
+        if (!setting.enabled) {
+            existing?.takeIf { it.enabled }?.let { budgetDao.update(it.copy(enabled = false)) }
+            return@withContext
+        }
+        val limit = setting.limit?.takeIf { it > 0 } ?: return@withContext
+        // Account transfers only move money for months that finish after this: a newly set, changed
+        // or resumed account offset starts clean from last month.
         val lastMonth = MonthKey.minus(MonthKey.current(), 1)
-        when {
-            limit == null || limit <= 0 -> existing?.let { budgetDao.delete(it) }
-            existing != null -> {
-                val targetsChanged = existing.overTarget != setting.overTarget || existing.underTarget != setting.underTarget ||
-                    existing.underFromAccount != setting.underFromAccount || existing.underToAccount != setting.underToAccount
-                budgetDao.update(
-                    existing.copy(
-                        limitAmount = limit,
-                        overTarget = setting.overTarget,
-                        underTarget = setting.underTarget,
-                        underFromAccount = setting.underFromAccount,
-                        underToAccount = setting.underToAccount,
-                        carryFrom = if (targetsChanged) lastMonth else existing.carryFrom,
-                        settledMonth = if (targetsChanged) lastMonth else existing.settledMonth,
-                    ),
-                )
-            }
-            else -> {
-                val order = budgetDao.maxSortOrder(BudgetKind.LIMIT) + 1
-                budgetDao.insert(
-                    BudgetEntity(
-                        kind = BudgetKind.LIMIT,
-                        categoryId = categoryId,
-                        limitAmount = limit,
-                        sortOrder = order,
-                        createdAt = System.currentTimeMillis(),
-                        overTarget = setting.overTarget,
-                        underTarget = setting.underTarget,
-                        underFromAccount = setting.underFromAccount,
-                        underToAccount = setting.underToAccount,
-                        carryFrom = lastMonth,
-                        settledMonth = lastMonth,
-                    ),
-                )
-            }
+        if (existing != null) {
+            val accountChanged = existing.underFromAccount != setting.underFromAccount ||
+                existing.underToAccount != setting.underToAccount || !existing.enabled
+            budgetDao.update(
+                existing.copy(
+                    limitAmount = limit,
+                    overTarget = setting.overTarget,
+                    underTarget = setting.underTarget,
+                    underFromAccount = setting.underFromAccount,
+                    underToAccount = setting.underToAccount,
+                    carryFrom = setting.applyFrom,
+                    settledMonth = if (accountChanged) lastMonth else existing.settledMonth,
+                    enabled = true,
+                ),
+            )
+        } else {
+            val order = budgetDao.maxSortOrder(BudgetKind.LIMIT) + 1
+            budgetDao.insert(
+                BudgetEntity(
+                    kind = BudgetKind.LIMIT,
+                    categoryId = categoryId,
+                    limitAmount = limit,
+                    sortOrder = order,
+                    createdAt = System.currentTimeMillis(),
+                    overTarget = setting.overTarget,
+                    underTarget = setting.underTarget,
+                    underFromAccount = setting.underFromAccount,
+                    underToAccount = setting.underToAccount,
+                    carryFrom = setting.applyFrom,
+                    settledMonth = lastMonth,
+                ),
+            )
         }
     }
 
@@ -130,9 +139,10 @@ class BudgetRepository(
 
 /**
  * Offset each budget (by category id) carries into [monthKey]. Walks month by month from the
- * earliest carry_from: a month's limit is the base limit plus what was carried in, and whatever is
- * over (negative) or under (positive) that goes to the chosen target the month after. So an offset
- * a later month absorbs is not counted twice. Targets without a budget drop the offset.
+ * earliest apply-from (carry_from): a month's limit is the base limit plus what was carried in, and
+ * whatever is over (negative) or under (positive) that goes to the chosen target the month after.
+ * So an offset a later month absorbs is not counted twice. Paused budgets take no part, and a target
+ * that is paused, gone, or not started yet in the month the offset lands in drops it.
  * A budget with an account offset hands its unspent amount to [onAccountOffset] instead of a budget.
  * Uses today's base limit for past months too, since limit history isn't kept.
  */
@@ -143,11 +153,12 @@ internal fun budgetCarry(
     onAccountOffset: (budget: BudgetWithProgress, month: Int, left: Long) -> Unit = { _, _, _ -> },
 ): Map<Long, Long> {
     val rules = budgets.filter {
-        it.categoryId != null && it.carryFrom != null &&
+        it.enabled && it.categoryId != null && it.carryFrom != null &&
             (it.overTarget != null || it.underTarget != null || (it.underFromAccount != null && it.underToAccount != null))
     }
     val start = rules.minOfOrNull { it.carryFrom!! } ?: return emptyMap()
-    val known = budgets.mapNotNullTo(HashSet()) { it.categoryId }
+    // Target -> its apply-from (MIN_VALUE when it has none).
+    val known = budgets.filter { it.enabled && it.categoryId != null }.associate { it.categoryId!! to (it.carryFrom ?: Int.MIN_VALUE) }
     val spent = spend.associate { (it.categoryId to it.monthKey) to it.spent }
     var carry = emptyMap<Long, Long>()
     var month = start
@@ -166,7 +177,7 @@ internal fun budgetCarry(
                 left > 0 -> b.underTarget
                 else -> null
             }?.let { if (it == BudgetOffset.SELF) id else it } ?: continue
-            if (target in known) next[target] = (next[target] ?: 0L) + left
+            if ((known[target] ?: continue) <= MonthKey.minus(month, -1)) next[target] = (next[target] ?: 0L) + left
         }
         carry = next
         month = MonthKey.minus(month, -1)

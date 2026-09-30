@@ -48,6 +48,9 @@ data class BudgetWithProgress(
     val underFromAccount: Long?,
     val underToAccount: Long?,
     val settledMonth: Int?,
+    val enabled: Boolean,
+    /** Enabled and started (apply-from reached) in the month asked for: only then does it show a bar. */
+    val active: Boolean,
     /** Offset carried in from earlier months (negative: overspend taken off). Filled by BudgetRepository. */
     val carry: Long,
 ) {

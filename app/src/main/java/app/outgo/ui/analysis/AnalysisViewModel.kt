@@ -135,7 +135,7 @@ class AnalysisViewModel(
         }
         viewModelScope.launch {
             budgetRepository.observeWithProgress(currentMonth)
-                .map { list -> list.mapNotNull { b -> b.categoryId?.let { Triple(it, b.displayName, b.categoryColor ?: OTHER_COLOR) } } }
+                .map { list -> list.filter { it.enabled }.mapNotNull { b -> b.categoryId?.let { Triple(it, b.displayName, b.categoryColor ?: OTHER_COLOR) } } }
                 .distinctUntilChanged()
                 .collect { budgets ->
                     budgetInfo = budgets

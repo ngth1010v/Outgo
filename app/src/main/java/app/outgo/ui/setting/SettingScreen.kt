@@ -57,7 +57,7 @@ fun SettingScreen() {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val versionName = remember {
-        runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.1.0"
+        runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "2.2.0"
     }
 
     var statusMessage by remember { mutableStateOf<String?>(null) }

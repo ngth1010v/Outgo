@@ -55,7 +55,8 @@ fun EditorScaffold(
             Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding().padding(16.dp)) {
                 // Level with the close button, and clear of it.
                 Box(Modifier.fillMaxWidth().height(CloseButtonSize).padding(end = CloseButtonSize + 12.dp), contentAlignment = Alignment.CenterStart) {
-                    Text(title, style = MaterialTheme.typography.titleMedium)
+                    val style = MaterialTheme.typography.titleMedium
+                    Text(title, style = style.copy(fontSize = style.fontSize * 1.2f, lineHeight = style.lineHeight * 1.2f))
                 }
                 Spacer(Modifier.height(16.dp))
 

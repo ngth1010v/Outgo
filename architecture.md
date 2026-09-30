@@ -426,10 +426,11 @@ CREATE TABLE budget (
   created_at     INTEGER NOT NULL,
   over_target    INTEGER,                  -- chi vượt: NULL = không bù, 0 = budget này, khác = category_id của budget đích
   under_target   INTEGER,                  -- chi dư: cùng cách mã hoá
-  carry_from     INTEGER,                  -- month_key đầu tiên được mang sang, đặt lại khi đổi đích
+  carry_from     INTEGER,                  -- "Áp dụng từ" (yyyyMM, người dùng chọn): các tháng trước coi như chưa có budget
   under_from_account INTEGER,              -- chi dư chuyển tiền thật: từ tài khoản này
   under_to_account   INTEGER,              -- ... sang tài khoản này
   settled_month  INTEGER,                  -- tháng cuối cùng đã tạo giao dịch chuyển
+  enabled        INTEGER NOT NULL DEFAULT 1, -- 0 = tạm tắt, giữ nguyên cài đặt
   CHECK ((kind = 0 AND category_id IS NOT NULL AND limit_amount > 0)
       OR (kind = 1 AND account_id IS NOT NULL AND target_amount > 0 AND name IS NOT NULL))
 );
@@ -859,6 +860,7 @@ fun budgetColor(spent: Long, limit: Long): BudgetLevel = when {
 - Budget của **danh mục cha** tính tổng chi của **tất cả danh mục con** trong tháng hiện tại.
 - Chỉ **danh mục Chi** mới có mục "Đặt budget" trong popup.
 - **Bù trừ sang tháng sau:** popup có 2 lựa chọn "Khi vượt hạn mức" / "Khi chưa chi hết": Không bù trừ, Ngân sách này, hoặc một budget khác. Phần vượt (âm) hoặc phần dư (dương) của tháng trước được cộng vào hạn mức tháng này của budget đích. Tính lần lượt từng tháng từ `carry_from` (`budgetCarry` trong `BudgetRepository`), nên phần đã bù ở tháng sau không bị tính lại. Hạn mức quá khứ dùng hạn mức hiện tại (không lưu lịch sử hạn mức).
+  - Màn sửa danh mục chia 2 phần: "Chung" (icon, tên, màu) và "Ngân sách tháng" (công tắc bật/tắt ở tiêu đề, hạn mức, "Áp dụng từ" MM/yyyy, các lựa chọn bù trừ). Tắt công tắc = tạm dừng budget (`enabled = 0`, không thanh tiến độ, không bù trừ), cài đặt được giữ lại. Tháng trước "Áp dụng từ" không có budget: không hiện thanh, không tính bù trừ, và không nhận bù trừ từ budget khác. Đổi lựa chọn bù trừ không còn tự đặt lại tháng bắt đầu. Bù trừ Tài khoản chỉ chuyển tiền cho các tháng kết thúc sau khi cài đặt (hoặc bật lại).
   - "Vượt hạn mức: trừ vào": Không / Ngân sách (chọn 1 budget, gồm cả budget này).
   - "Chưa chi hết: lấy từ": Không / Ngân sách (cộng vào hạn mức của 1 budget) / Tài khoản (chọn "Từ tài khoản" và "Cộng vào" là 2 tài khoản khác nhau). Chế độ Tài khoản chuyển tiền thật: lần mở app đầu tiên của tháng mới, `settleAccountOffsets` tạo 1 giao dịch chuyển (ngày 1) cho mỗi tháng chưa xử lý (`settled_month`). Tài khoản nguồn không đủ tiền thì tạo giao dịch chuyển 0 với `trade.pending_amount` = số cần chuyển; Home hiện huy hiệu vàng trên tab Chuyển khoản và nút "Thử lại" trên dòng đó (`TradeRepository.settle`: chuyển đủ số tiền khi nguồn đã đủ, nếu không thì giữ nguyên). Chọn chế độ Tài khoản trong tháng này thì lần chuyển đầu tiên là cho tháng này, vào đầu tháng sau.
 

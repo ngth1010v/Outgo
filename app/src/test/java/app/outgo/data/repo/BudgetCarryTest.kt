@@ -16,12 +16,14 @@ class BudgetCarryTest {
         from: Int? = 202607,
         fromAccount: Long? = null,
         toAccount: Long? = null,
+        enabled: Boolean = true,
     ) =
         BudgetWithProgress(
             id = categoryId, kind = 0, name = null, iconId = null, categoryId = categoryId, limitAmount = limit,
             sortOrder = 0, spent = 0, prevSpent = 0, categoryName = null, categoryIconId = null, categoryColor = null,
             overTarget = over, underTarget = under, carryFrom = from,
-            underFromAccount = fromAccount, underToAccount = toAccount, settledMonth = null, carry = 0,
+            underFromAccount = fromAccount, underToAccount = toAccount, settledMonth = null,
+            enabled = enabled, active = enabled, carry = 0,
         )
 
     private fun spend(categoryId: Long, month: Int, spent: Long) = BudgetMonthSpend(categoryId, month, spent)
@@ -64,5 +66,19 @@ class BudgetCarryTest {
         }
         assertEquals(listOf(202608 to 30L), moves)
         assertEquals(emptyMap<Long, Long>(), carry)
+    }
+
+    @Test
+    fun pausedBudgetsAndNotYetStartedTargetsTakeNoPart() {
+        // 1 is paused: its overspend goes nowhere. 2 gives to 3, which only starts in Oct.
+        val budgets = listOf(
+            budget(1, 100, over = BudgetOffset.SELF, enabled = false),
+            budget(2, 100, under = 3),
+            budget(3, 100, from = 202610),
+        )
+        val spend = listOf(spend(1, 202608, 500), spend(2, 202608, 40))
+        assertEquals(emptyMap<Long, Long>(), budgetCarry(budgets, spend, 202609))
+        // Once 3 has started, the same offset lands.
+        assertEquals(mapOf(3L to 60L), budgetCarry(listOf(budget(2, 100, under = 3), budget(3, 100, from = 202609)), spend, 202609))
     }
 }

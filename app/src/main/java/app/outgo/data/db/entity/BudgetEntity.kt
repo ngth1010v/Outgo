@@ -84,7 +84,13 @@ data class BudgetEntity(
     /** Last month (yyyyMM) whose account transfer was already made, so a restart never moves it twice. */
     @ColumnInfo(name = "settled_month")
     val settledMonth: Int? = null,
-    /** First month (yyyyMM) whose result carries over; reset when a target changes so old months don't pile up. */
+    /** Off: the budget is paused (no bar, no offsets) but keeps its settings for when it is turned back on. */
+    @ColumnInfo(name = "enabled", defaultValue = "1")
+    val enabled: Boolean = true,
+    /**
+     * "Apply from" (yyyyMM), set by the user: months before it have no budget, so they show no bar
+     * and carry no offset. Null on budgets saved before it existed: no start.
+     */
     @ColumnInfo(name = "carry_from")
     val carryFrom: Int? = null,
 )

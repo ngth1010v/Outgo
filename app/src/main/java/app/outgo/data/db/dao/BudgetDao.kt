@@ -49,7 +49,8 @@ interface BudgetDao {
                cat.color AS categoryColor,
                b.over_target AS overTarget, b.under_target AS underTarget, b.carry_from AS carryFrom,
                b.under_from_account AS underFromAccount, b.under_to_account AS underToAccount,
-               b.settled_month AS settledMonth,
+               b.settled_month AS settledMonth, b.enabled,
+               (b.enabled = 1 AND (b.carry_from IS NULL OR b.carry_from <= :monthKey)) AS active,
                0 AS carry
         FROM budget b
         LEFT JOIN category cat ON cat.id = b.category_id
@@ -62,14 +63,14 @@ interface BudgetDao {
     )
     fun observeBudgetsWithProgress(monthKey: Int, prevMonthKey: Int): Flow<List<BudgetWithProgress>>
 
-    /** Monthly spend of budgets that carry an offset, from each one's carry_from up to before [monthKey]. */
+    /** Monthly spend of enabled budgets that carry an offset, from each one's apply-from up to before [monthKey]. */
     @Query(
         """
         SELECT b.category_id AS categoryId, s.month_key AS monthKey, SUM(s.total) AS spent
         FROM budget b
         JOIN category c ON c.id = b.category_id OR c.parent_id = b.category_id
         JOIN category_month_stat s ON s.category_id = c.id
-        WHERE b.kind = 0 AND (b.over_target IS NOT NULL OR b.under_target IS NOT NULL OR b.under_from_account IS NOT NULL)
+        WHERE b.kind = 0 AND b.enabled = 1 AND (b.over_target IS NOT NULL OR b.under_target IS NOT NULL OR b.under_from_account IS NOT NULL)
           AND s.month_key >= b.carry_from AND s.month_key < :monthKey
         GROUP BY b.category_id, s.month_key
         """,

@@ -95,11 +95,14 @@
     <string name="budget_under_action">Chưa chi hết: lấy từ</string>
     <string name="budget_offset_none">Không</string>
     <string name="budget_offset_self">Ngân sách này</string>
-    <string name="budget_offset_header">Bù trừ cuối tháng</string>
+    <string name="category_section_general">Chung</string>
+    <string name="category_section_budget">Ngân sách tháng</string>
+    <string name="category_budget_limit">Hạn mức mỗi tháng</string>
+    <string name="budget_apply_from">Áp dụng từ</string>
     <string name="budget_offset_budget">Ngân sách</string>
     <string name="budget_offset_account">Tài khoản</string>
-    <string name="budget_offset_from_account">Từ tài khoản</string>
-    <string name="budget_offset_add_to">Cộng vào</string>
+    <string name="budget_offset_from_account">Từ</string>
+    <string name="budget_offset_add_to">Đến</string>
     <string name="history_retry">Thử lại</string>
     <string name="history_retry_not_enough">%1$s chưa đủ tiền</string>
     <string name="history_pending_count">%1$d giao dịch chuyển chưa xong</string>

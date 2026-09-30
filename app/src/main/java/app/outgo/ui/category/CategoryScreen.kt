@@ -1,5 +1,9 @@
 package app.outgo.ui.category
 
+import java.util.Locale
+import app.outgo.util.MonthKey
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.material3.Switch
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.rotate
 import androidx.compose.material3.TextButton
@@ -326,7 +330,7 @@ private fun CategoryList(
                     val parent = entry.category
                     CategoryRow(
                         category = parent,
-                        budget = state.budgetsByCategory[parent.id],
+                        budget = state.budgetsByCategory[parent.id]?.takeIf { it.active },
                         onRowClick = { edit(EditTarget.Edit(parent)) },
                         modifier = reorderableItem(reorder, entry.key),
                         trailing = {
@@ -344,7 +348,7 @@ private fun CategoryList(
                 }
                 is ChildEntry -> CategoryRow(
                     category = entry.category,
-                    budget = state.budgetsByCategory[entry.category.id],
+                    budget = state.budgetsByCategory[entry.category.id]?.takeIf { it.active },
                     onRowClick = { edit(EditTarget.Edit(entry.category)) },
                     modifier = Modifier.padding(start = 20.dp).then(reorderableItem(reorder, entry.key)),
                 )
@@ -429,7 +433,9 @@ private fun EditCategoryScreen(
         mutableStateOf(existing?.color ?: (target as? EditTarget.NewChild)?.parentColor ?: CategoryColorPalette[0])
     }
     val budget = existing?.let { budgets[it.id] }
+    var budgetOn by remember { mutableStateOf(budget?.enabled ?: false) }
     var budgetText by remember { mutableStateOf(budget?.limitAmount?.toString().orEmpty()) }
+    var applyFrom by remember { mutableStateOf(budget?.carryFrom ?: MonthKey.current()) }
     var overOn by remember { mutableStateOf(budget?.overTarget != null) }
     var overTarget by remember { mutableStateOf(budget?.overTarget ?: BudgetOffset.SELF) }
     var underMode by remember {
@@ -444,10 +450,10 @@ private fun EditCategoryScreen(
     var underTarget by remember { mutableStateOf(budget?.underTarget ?: BudgetOffset.SELF) }
     var fromAccount by remember { mutableStateOf(budget?.underFromAccount) }
     var toAccount by remember { mutableStateOf(budget?.underToAccount) }
-    val hasBudget = (budgetText.toLongOrNull() ?: 0L) > 0
-    // An account offset needs two different accounts before it can be saved.
-    val offsetComplete = !hasBudget || underMode != UnderMode.ACCOUNT ||
-        (fromAccount != null && toAccount != null && fromAccount != toAccount)
+    val budgetShown = budgetOn && effectiveType == CategoryKind.EXPENSE
+    // A budget that is on needs a limit, and an account offset two different accounts.
+    val budgetComplete = !budgetShown || ((budgetText.toLongOrNull() ?: 0L) > 0 &&
+        (underMode != UnderMode.ACCOUNT || (fromAccount != null && toAccount != null && fromAccount != toAccount)))
     var showIconPicker by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var hasTrades by remember { mutableStateOf(false) }
@@ -468,7 +474,7 @@ private fun EditCategoryScreen(
     }
 
     // Compared against the values the editor opened with.
-    val fields = listOf(name, iconId, color, budgetText, overOn, overTarget, underMode, underTarget, fromAccount, toAccount)
+    val fields = listOf(name, iconId, color, budgetOn, budgetText, applyFrom, overOn, overTarget, underMode, underTarget, fromAccount, toAccount)
     val initialFields = remember { fields }
     EditorScaffold(
         title = title,
@@ -476,7 +482,9 @@ private fun EditCategoryScreen(
         dirty = fields != initialFields,
         onSave = {
             val setting = BudgetSetting(
+                enabled = budgetShown,
                 limit = budgetText.toLongOrNull(),
+                applyFrom = applyFrom,
                 overTarget = overTarget.takeIf { overOn },
                 underTarget = underTarget.takeIf { underMode == UnderMode.BUDGET },
                 underFromAccount = fromAccount.takeIf { underMode == UnderMode.ACCOUNT },
@@ -489,15 +497,15 @@ private fun EditCategoryScreen(
             }
             onDismiss()
         },
-        saveEnabled = name.isNotBlank() && offsetComplete,
+        saveEnabled = name.isNotBlank() && budgetComplete,
         onDelete = if (existing != null) { { showDeleteConfirm = true } } else null,
     ) {
+        SectionHeader(stringResource(R.string.category_section_general))
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconView(iconId = iconId, size = 48.dp, color = color, modifier = Modifier.padding(end = 12.dp))
             OutlinedButton(onClick = { showIconPicker = true }) { Text(stringResource(R.string.common_choose_icon)) }
         }
         Spacer(Modifier.height(12.dp))
-
         OutlinedTextField(
             value = name,
             onValueChange = { name = it },
@@ -505,65 +513,70 @@ private fun EditCategoryScreen(
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
-
-        if (effectiveType == CategoryKind.EXPENSE) {
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                value = budgetText,
-                onValueChange = { budgetText = it.filter { c -> c.isDigit() } },
-                label = { Text(stringResource(R.string.category_budget_hint)) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
         Spacer(Modifier.height(12.dp))
-
         Text(stringResource(R.string.category_color_label), style = MaterialTheme.typography.labelLarge)
         Spacer(Modifier.height(8.dp))
         ColorPickerGrid(selected = color, onSelect = { color = it })
 
-        if (effectiveType == CategoryKind.EXPENSE && hasBudget) {
-            val none = stringResource(R.string.budget_offset_none)
-            val budgetLabel = stringResource(R.string.budget_offset_budget)
-            val budgetTargets = listOf(PickOption(BudgetOffset.SELF, stringResource(R.string.budget_offset_self), iconId, color)) +
-                budgets.values.filter { it.categoryId != null && it.categoryId != existing?.id }
-                    .map { PickOption(it.categoryId!!, it.displayName, it.displayIconId, it.categoryColor) }
-            val accountOptions = accounts.map { PickOption<Long?>(it.id, it.name, it.iconId, it.color) }
-            val addTo = stringResource(R.string.budget_offset_add_to)
+        // Only spending categories have a budget.
+        if (effectiveType == CategoryKind.EXPENSE) {
+            Spacer(Modifier.height(24.dp))
+            SectionHeader(stringResource(R.string.category_section_budget)) {
+                Switch(checked = budgetOn, onCheckedChange = { budgetOn = it })
+            }
+            if (budgetOn) {
+                val none = stringResource(R.string.budget_offset_none)
+                val budgetLabel = stringResource(R.string.budget_offset_budget)
+                val budgetTargets = listOf(PickOption(BudgetOffset.SELF, stringResource(R.string.budget_offset_self), iconId, color)) +
+                    budgets.values.filter { it.enabled && it.categoryId != null && it.categoryId != existing?.id }
+                        .map { PickOption(it.categoryId!!, it.displayName, it.displayIconId, it.categoryColor) }
+                val accountOptions = accounts.map { PickOption<Long?>(it.id, it.name, it.iconId, it.color) }
+                val to = stringResource(R.string.budget_offset_add_to)
+                // Two years back to a year ahead, newest first; an older saved month stays pickable.
+                val current = MonthKey.current()
+                val months = ((-12..24).map { MonthKey.minus(current, it.toLong()) } + applyFrom).distinct().sortedDescending()
+                    .map { PickOption(it, monthNumber(it)) }
 
-            Spacer(Modifier.height(16.dp))
-            Text(stringResource(R.string.budget_offset_header), style = MaterialTheme.typography.labelLarge)
-            Spacer(Modifier.height(8.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OffsetPicker(
-                    stringResource(R.string.budget_over_action),
-                    overOn,
-                    listOf(PickOption(false, none), PickOption(true, budgetLabel)),
-                ) { overOn = it }
-                if (overOn) {
-                    OffsetPicker(budgetLabel, overTarget, budgetTargets, indent = true) { overTarget = it }
-                }
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = budgetText,
+                        onValueChange = { budgetText = it.filter { c -> c.isDigit() } },
+                        label = { Text(stringResource(R.string.category_budget_limit)) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OffsetPicker(stringResource(R.string.budget_apply_from), applyFrom, months) { applyFrom = it }
 
-                OffsetPicker(
-                    stringResource(R.string.budget_under_action),
-                    underMode,
-                    listOf(
-                        PickOption(UnderMode.NONE, none),
-                        PickOption(UnderMode.BUDGET, budgetLabel),
-                        PickOption(UnderMode.ACCOUNT, stringResource(R.string.budget_offset_account)),
-                    ),
-                ) { underMode = it }
-                when (underMode) {
-                    UnderMode.NONE -> Unit
-                    UnderMode.BUDGET ->
-                        OffsetPicker(addTo, underTarget, budgetTargets, indent = true) { underTarget = it }
-                    UnderMode.ACCOUNT -> {
-                        OffsetPicker(stringResource(R.string.budget_offset_from_account), fromAccount, accountOptions, indent = true) {
-                            fromAccount = it
-                            if (toAccount == it) toAccount = null
+                    OffsetPicker(
+                        stringResource(R.string.budget_over_action),
+                        overOn,
+                        listOf(PickOption(false, none), PickOption(true, budgetLabel)),
+                    ) { overOn = it }
+                    if (overOn) {
+                        OffsetPicker(budgetLabel, overTarget, budgetTargets, indent = true) { overTarget = it }
+                    }
+
+                    OffsetPicker(
+                        stringResource(R.string.budget_under_action),
+                        underMode,
+                        listOf(
+                            PickOption(UnderMode.NONE, none),
+                            PickOption(UnderMode.BUDGET, budgetLabel),
+                            PickOption(UnderMode.ACCOUNT, stringResource(R.string.budget_offset_account)),
+                        ),
+                    ) { underMode = it }
+                    when (underMode) {
+                        UnderMode.NONE -> Unit
+                        UnderMode.BUDGET ->
+                            OffsetPicker(to, underTarget, budgetTargets, indent = true) { underTarget = it }
+                        UnderMode.ACCOUNT -> {
+                            OffsetPicker(stringResource(R.string.budget_offset_from_account), fromAccount, accountOptions, indent = true) {
+                                fromAccount = it
+                                if (toAccount == it) toAccount = null
+                            }
+                            OffsetPicker(to, toAccount, accountOptions.filter { it.value != fromAccount }, indent = true) { toAccount = it }
                         }
-                        OffsetPicker(addTo, toAccount, accountOptions.filter { it.value != fromAccount }, indent = true) { toAccount = it }
                     }
                 }
             }
@@ -592,6 +605,21 @@ private fun EditCategoryScreen(
         )
     }
 }
+
+/** A section's title, with an optional control (the budget's on/off switch) at its right end. */
+@Composable
+private fun SectionHeader(title: String, action: (@Composable () -> Unit)? = null) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp).padding(bottom = 8.dp),
+    ) {
+        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        action?.invoke()
+    }
+}
+
+/** `09/2026`: the budget's apply-from, as numbers. */
+private fun monthNumber(monthKey: Int): String = String.format(Locale.US, "%02d/%d", monthKey % 100, monthKey / 100)
 
 /** Where a budget's unspent amount goes: nowhere, another budget's limit, or another account. */
 private enum class UnderMode { NONE, BUDGET, ACCOUNT }
