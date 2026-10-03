@@ -429,7 +429,7 @@ private val HOLD_SCROLL_HEIGHT = 30_000.dp
 
 /**
  * One of Home's balance rows: the label with its (i) over the amount, and the eye at the right
- * edge. [large] (the first row) only changes the amount's size and weight, animated, so a row
+ * edge, after the budgets' shortfall warning when there is one. [large] (the first row) only changes the amount's size and weight, animated, so a row
  * moved to or from the top grows or shrinks in place.
  */
 @Composable
@@ -448,42 +448,34 @@ private fun BalanceRow(
         label = "balance-row-size",
     )
     val amountStyle = lerp(
-        MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Normal),
+        MaterialTheme.typography.titleMedium.scaled(1.2f).copy(fontWeight = FontWeight.Normal),
         MaterialTheme.typography.headlineMedium.scaled(1.2f).copy(fontWeight = FontWeight.Bold),
         t,
     )
     val warn = balance == HomeBalance.BUDGETS && state.budgetShortfall > 0
     Row(modifier.padding(horizontal = ROW_PADDING_H, vertical = ROW_PADDING_V), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(lerp(AMOUNT_GAP, LARGE_AMOUNT_GAP, t))) {
-            val labelBase = MaterialTheme.typography.labelLarge
+            val labelBase = MaterialTheme.typography.labelLarge.scaled(1.2f)
             // Compact rows get a smaller label; the large row keeps the full size.
             BalanceLabel(balance, lerp(labelBase.scaled(0.8f), labelBase, t), onInfo)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    if (balance in state.hidden) Money.formatHidden() else Money.format(state.amount(balance)),
-                    style = amountStyle,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
+            Text(
+                if (balance in state.hidden) Money.formatHidden() else Money.format(state.amount(balance)),
+                style = amountStyle,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+            )
+        }
+        if (warn) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.padding(start = 4.dp).size(SMALL_BUTTON_SIZE).clip(CircleShape).clickable(onClick = onWarning),
+            ) {
+                Icon(
+                    painterResource(R.drawable.ph_warning),
+                    contentDescription = stringResource(R.string.home_budgets_short_warning),
+                    modifier = Modifier.size(18.dp),
+                    tint = WarningDarkYellow,
                 )
-                if (warn) {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .padding(start = 2.dp)
-                            // The compact amount's line height: any taller and this row's label
-                            // would sit further from its amount than on the other rows.
-                            .size(24.dp)
-                            .clip(CircleShape)
-                            .clickable(onClick = onWarning),
-                    ) {
-                        Icon(
-                            painterResource(R.drawable.ph_warning),
-                            contentDescription = stringResource(R.string.home_budgets_short_warning),
-                            modifier = Modifier.size(18.dp),
-                            tint = WarningDarkYellow,
-                        )
-                    }
-                }
             }
         }
         RevealToggle(balance, hidden = balance in state.hidden, onClick = onToggle)
@@ -523,10 +515,11 @@ private val ROW_PADDING_V = 2.4.dp
 
 /**
  * Negative: pull the amount up under its label, into the line spacing of both texts. Tuned by
- * measuring the glyph gap on screen: ~5dp on a compact row, ~6dp on the large one.
+ * measuring the glyph gap on screen: ~5dp on a compact row, ~6dp on the large one. With the
+ * texts at 1.2x, the compact gap is pulled in further to stay ~5dp, and the large one opened to ~12dp.
  */
-private val AMOUNT_GAP = (-3.0).dp
-private val LARGE_AMOUNT_GAP = (-8.2).dp
+private val AMOUNT_GAP = (-5.0).dp
+private val LARGE_AMOUNT_GAP = (-3.2).dp
 
 /**
  * Reports [space] less height than the content takes, so the list's item spacing after this item
