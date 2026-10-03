@@ -8,10 +8,12 @@ import androidx.compose.ui.semantics.semantics
 import app.outgo.ui.theme.OnPendingContainer
 import app.outgo.ui.theme.PendingContainer
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -166,7 +168,8 @@ private fun TradeRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (isTransfer) {
-            TransferIconStack(fromAccount = fromAccount, toAccount = toAccount)
+            // A transfer's category is the budget it was taken from.
+            TransferIconStack(fromAccount = fromAccount, toAccount = toAccount, budget = category)
         } else {
             IconView(iconId = category?.iconId, size = 32.dp, color = category?.color)
         }
@@ -176,15 +179,6 @@ private fun TradeRow(
                 (if (isTransfer) toAccount?.name else category?.name) ?: stringResource(R.string.history_adjustment_note),
                 style = MaterialTheme.typography.bodyLarge,
             )
-            // A transfer's category is the budget it was taken from.
-            if (isTransfer && category != null) {
-                Text(
-                    stringResource(R.string.history_from_budget, category.name),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                )
-            }
             if (!trade.note.isNullOrBlank()) {
                 Text(trade.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
@@ -219,7 +213,8 @@ private fun TradeRow(
                 }
             }
             Text(
-                (fromAccount?.name ?: "") + " · " + formatTime(trade.occurredAt),
+                (fromAccount?.name ?: "") + (if (isTransfer && category != null) "/" + category.name else "") +
+                    " · " + formatTime(trade.occurredAt),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -249,11 +244,25 @@ internal fun PendingBadge(count: Int, modifier: Modifier = Modifier) {
     }
 }
 
-/** Transfer row leading visual: from-account icon, a neutral arrow, then to-account icon. */
+/**
+ * Transfer row leading visual: from-account icon, a neutral arrow, then to-account icon. The
+ * budget a transfer was taken from sits as a badge on the from-account icon's corner.
+ */
 @Composable
-private fun TransferIconStack(fromAccount: AccountEntity?, toAccount: AccountEntity?) {
+private fun TransferIconStack(fromAccount: AccountEntity?, toAccount: AccountEntity?, budget: CategoryEntity?) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        IconView(iconId = fromAccount?.iconId, size = 28.dp, color = fromAccount?.color)
+        Box {
+            IconView(iconId = fromAccount?.iconId, size = 28.dp, color = fromAccount?.color)
+            if (budget != null) {
+                // Nudged right ~20% and down ~33% of its size so it reads as a badge hanging off the corner.
+                IconView(
+                    iconId = budget.iconId,
+                    size = 17.25.dp,
+                    color = budget.color,
+                    modifier = Modifier.align(Alignment.BottomEnd).offset(x = 3.5.dp, y = 5.75.dp),
+                )
+            }
+        }
         Icon(
             painter = painterResource(R.drawable.ph_arrow_right),
             contentDescription = null,

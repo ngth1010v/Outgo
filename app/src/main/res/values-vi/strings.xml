@@ -264,7 +264,6 @@
 
     <string name="history_empty">Chưa có giao dịch nào</string>
     <string name="history_adjustment_note">Điều chỉnh số dư</string>
-    <string name="history_from_budget">Ngân sách: %1$s</string>
     <string name="history_delete_confirm_title">Xoá giao dịch này?</string>
 
     <string name="backup_export_success">Đã lưu backup (%1$s)</string>

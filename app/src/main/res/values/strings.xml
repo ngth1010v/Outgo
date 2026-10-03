@@ -275,7 +275,6 @@
     <!-- History -->
     <string name="history_empty">No transactions yet</string>
     <string name="history_adjustment_note">Balance adjustment</string>
-    <string name="history_from_budget">Budget: %1$s</string>
     <string name="history_delete_confirm_title">Delete this transaction?</string>
 
     <!-- Backup / restore -->
