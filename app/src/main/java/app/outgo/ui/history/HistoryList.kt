@@ -1,9 +1,8 @@
 package app.outgo.ui.history
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.TextButton
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import app.outgo.ui.theme.OnPendingContainer
@@ -192,29 +191,38 @@ private fun TradeRow(
         }
         Column(horizontalAlignment = Alignment.End) {
             val isCredit = TradeType.isCredit(trade.type)
-            // An unfinished transfer shows what it still has to move, not its 0.
-            Text(
-                (if (isTransfer) "" else if (isCredit) "+" else "-") + Money.format(pending ?: trade.amount),
-                fontWeight = FontWeight.Bold,
-                color = when {
-                    pending != null -> OnPendingContainer
-                    isTransfer -> MaterialTheme.colorScheme.onSurface
-                    isCredit -> app.outgo.ui.theme.IncomeGreen
-                    else -> app.outgo.ui.theme.ExpenseRed
-                },
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // An unfinished transfer shows what it still has to move, not its 0.
+                Text(
+                    (if (isTransfer) "" else if (isCredit) "+" else "-") + Money.format(pending ?: trade.amount),
+                    fontWeight = FontWeight.Bold,
+                    color = when {
+                        pending != null -> OnPendingContainer
+                        isTransfer -> MaterialTheme.colorScheme.onSurface
+                        isCredit -> app.outgo.ui.theme.IncomeGreen
+                        else -> app.outgo.ui.theme.ExpenseRed
+                    },
+                )
+                if (pending != null && onRetry != null) {
+                    Icon(
+                        painter = painterResource(R.drawable.ph_arrow_counter_clockwise),
+                        contentDescription = stringResource(R.string.history_retry),
+                        tint = OnPendingContainer,
+                        modifier = Modifier
+                            .padding(start = 6.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(PendingContainer)
+                            .clickable { onRetry(trade) }
+                            .padding(3.dp)
+                            .size(14.dp),
+                    )
+                }
+            }
             Text(
                 (fromAccount?.name ?: "") + " · " + formatTime(trade.occurredAt),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-        }
-        if (pending != null && onRetry != null) {
-            TextButton(
-                onClick = { onRetry(trade) },
-                contentPadding = PaddingValues(horizontal = 8.dp),
-                modifier = Modifier.padding(start = 4.dp),
-            ) { Text(stringResource(R.string.history_retry)) }
         }
     }
 }
