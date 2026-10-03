@@ -1,8 +1,8 @@
 package app.outgo.data.icon
 
 /**
- * Every PNG bundled under `assets/icons/`, in the account icon picker's order. The category picker
- * shows them mixed with [TablerIcons]' vectors, by [TablerIcons.GROUPS]. Rows in the `icon` table only get
+ * Every PNG bundled under `assets/icons/`. The icon picker shows them mixed with [TablerIcons]'
+ * vectors, by [TablerIcons.GROUPS]. Rows in the `icon` table only get
  * created for these lazily, the first time a user actually picks one (see
  * [IconStore.ensureBuiltin]) — keeping the seed data in OutgoDatabase small.
  */

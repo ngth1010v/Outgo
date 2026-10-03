@@ -585,7 +585,7 @@ private fun EditCategoryScreen(
     }
 
     if (showIconPicker) {
-        IconPickerSheet(onIconSelected = { iconId = it; showIconPicker = false }, onDismiss = { showIconPicker = false }, categoryIcons = true)
+        IconPickerSheet(onIconSelected = { iconId = it; showIconPicker = false }, onDismiss = { showIconPicker = false })
     }
 
     if (showDeleteConfirm && existing != null) {

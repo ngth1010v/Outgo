@@ -23,7 +23,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -46,7 +45,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.outgo.R
-import app.outgo.data.icon.BuiltinIcons
 import app.outgo.data.icon.IconStore
 import app.outgo.data.icon.TablerIcons
 import app.outgo.ui.LocalAppContainer
@@ -59,16 +57,15 @@ private val IconSize = 44.dp
 private class Section(@StringRes val title: Int, val headerIndex: Int)
 
 /**
- * Icon gallery: imported icons, then the bundled PNGs. With [categoryIcons] the bundled PNGs and
- * the Tabler icons come mixed into the groups of [TablerIcons.GROUPS] instead, each under a header
- * that a row of chips jumps to. Only categories get the Tabler icons; accounts keep the original set.
+ * Icon gallery for categories and accounts: imported icons, then the bundled PNGs and the Tabler
+ * icons mixed into the groups of [TablerIcons.GROUPS], each under a header that a row of chips
+ * jumps to.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun IconPickerSheet(
     onIconSelected: (iconId: Long) -> Unit,
     onDismiss: () -> Unit,
-    categoryIcons: Boolean = false,
 ) {
     val container = LocalAppContainer.current
     val context = LocalContext.current
@@ -89,17 +86,14 @@ fun IconPickerSheet(
             if (iconId != null) onIconSelected(iconId) else importError = true
         }
     }
-    if (categoryIcons) {
-        // Drawn while the sheet slides up, so a jump to a later section finds its icons ready
-        // instead of blank circles filling in one by one.
-        LaunchedEffect(Unit) { container.iconStore.preloadAssets(TablerIcons.GROUPS.flatMap { it.keys }) }
-    }
+    // Drawn while the sheet slides up, so a jump to a later section finds its icons ready
+    // instead of blank circles filling in one by one.
+    LaunchedEffect(Unit) { container.iconStore.preloadAssets(TablerIcons.GROUPS.flatMap { it.keys }) }
     val pickAsset: (String) -> Unit = { assetKey -> scope.launch { onIconSelected(container.iconStore.ensureBuiltin(assetKey)) } }
 
     // Section header positions after the imported icons' block, so a chip can scroll to its
     // section and the chip row can follow the scroll. Mirrors the item order in the grid below.
-    val sections = remember(categoryIcons) {
-        if (!categoryIcons) return@remember emptyList()
+    val sections = remember {
         buildList {
             var index = 0
             TablerIcons.GROUPS.forEach { group ->
@@ -167,14 +161,9 @@ fun IconPickerSheet(
                         IconCell(onClick = { onIconSelected(id) }) { IconView(iconId = id, size = IconSize) }
                     }
                 }
-                if (categoryIcons) {
-                    TablerIcons.GROUPS.forEach { group ->
-                        header(group.title)
-                        assetItems(group.keys, pickAsset)
-                    }
-                } else {
-                    if (userIconIds.isNotEmpty()) divider()
-                    assetItems(BuiltinIcons.ALL, pickAsset)
+                TablerIcons.GROUPS.forEach { group ->
+                    header(group.title)
+                    assetItems(group.keys, pickAsset)
                 }
             }
         }
@@ -188,13 +177,6 @@ private fun LazyGridScope.header(@StringRes title: Int) {
             style = MaterialTheme.typography.labelLarge,
             modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
         )
-    }
-}
-
-/** Separates the imported icons from the bundled ones when there are no section headers. */
-private fun LazyGridScope.divider() {
-    item(span = { GridItemSpan(maxLineSpan) }, contentType = "header") {
-        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
     }
 }
 
