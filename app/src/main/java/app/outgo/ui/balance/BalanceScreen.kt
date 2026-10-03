@@ -25,7 +25,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
-import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.runtime.Composable
@@ -51,7 +50,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import app.outgo.R
 import app.outgo.data.db.dao.AccountWithProgress
 import app.outgo.data.db.entity.AccountEntity
-import app.outgo.data.repo.CategoryColorPalette
+import app.outgo.data.repo.DefaultCategoryColor
 import app.outgo.domain.AccountType
 import app.outgo.ui.LocalAppContainer
 import app.outgo.ui.category.OffsetPicker
@@ -60,6 +59,7 @@ import app.outgo.ui.category.SectionHeader
 import app.outgo.ui.category.SectionSwitch
 import app.outgo.ui.category.monthNumber
 import app.outgo.ui.component.BudgetProgressBlock
+import app.outgo.ui.component.OutgoSegmentedButton
 import app.outgo.ui.component.ColorPickerGrid
 import app.outgo.ui.component.ConfirmDialog
 import app.outgo.ui.component.EditorScaffold
@@ -199,7 +199,7 @@ private fun EditAccountScreen(account: AccountEntity?, onDismiss: () -> Unit, vi
     var savingsOn by remember { mutableStateOf(account?.accountType == AccountType.SAVINGS && account?.savingsTarget != null) }
     var savingsFrom by remember { mutableStateOf(account?.savingsFrom ?: MonthKey.current()) }
     var iconId by remember { mutableStateOf(account?.iconId) }
-    var color by remember { mutableStateOf(account?.color ?: CategoryColorPalette[0]) }
+    var color by remember { mutableStateOf(account?.color ?: DefaultCategoryColor) }
     var showIconPicker by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var hasTrades by remember { mutableStateOf(false) }
@@ -238,12 +238,12 @@ private fun EditAccountScreen(account: AccountEntity?, onDismiss: () -> Unit, vi
         Spacer(Modifier.height(12.dp))
 
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            SegmentedButton(
+            OutgoSegmentedButton(
                 selected = accountType == AccountType.NORMAL,
                 onClick = { accountType = AccountType.NORMAL; savingsOn = false },
                 shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
             ) { Text(stringResource(R.string.balance_type_normal)) }
-            SegmentedButton(
+            OutgoSegmentedButton(
                 selected = accountType == AccountType.SAVINGS,
                 onClick = { accountType = AccountType.SAVINGS },
                 shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),

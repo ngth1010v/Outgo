@@ -29,3 +29,6 @@ Thumbs.db
 
 # Kotlin 2.x compiler session data
 .kotlin/
+
+# Python bytecode from tools/ scripts.
+__pycache__/

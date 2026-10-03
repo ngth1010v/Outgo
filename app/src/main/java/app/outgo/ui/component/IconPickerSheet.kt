@@ -52,15 +52,16 @@ import app.outgo.data.icon.TablerIcons
 import app.outgo.ui.LocalAppContainer
 import kotlinx.coroutines.launch
 
-private const val COLUMNS = 5
+private const val COLUMNS = 6
+private val IconSize = 44.dp
 
 /** A titled block of the gallery: [headerIndex] is its header's position in the grid. */
 private class Section(@StringRes val title: Int, val headerIndex: Int)
 
 /**
- * Icon gallery: imported icons, the bundled PNGs, and with [categoryIcons] the Tabler groups
- * after them, each under a header that a row of chips jumps to. Only categories get the Tabler
- * icons; accounts keep the original set.
+ * Icon gallery: imported icons, then the bundled PNGs. With [categoryIcons] the bundled PNGs and
+ * the Tabler icons come mixed into the groups of [TablerIcons.GROUPS] instead, each under a header
+ * that a row of chips jumps to. Only categories get the Tabler icons; accounts keep the original set.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,8 +90,8 @@ fun IconPickerSheet(
         }
     }
     if (categoryIcons) {
-        // Drawn while the sheet slides up and the bundled icons show, so a jump to a Tabler
-        // section finds its icons ready instead of blank circles filling in one by one.
+        // Drawn while the sheet slides up, so a jump to a later section finds its icons ready
+        // instead of blank circles filling in one by one.
         LaunchedEffect(Unit) { container.iconStore.preloadAssets(TablerIcons.GROUPS.flatMap { it.keys }) }
     }
     val pickAsset: (String) -> Unit = { assetKey -> scope.launch { onIconSelected(container.iconStore.ensureBuiltin(assetKey)) } }
@@ -100,8 +101,7 @@ fun IconPickerSheet(
     val sections = remember(categoryIcons) {
         if (!categoryIcons) return@remember emptyList()
         buildList {
-            add(Section(R.string.icon_group_builtin, 0))
-            var index = 1 + BuiltinIcons.ALL.size
+            var index = 0
             TablerIcons.GROUPS.forEach { group ->
                 add(Section(group.title, index))
                 index += 1 + group.keys.size
@@ -164,16 +164,17 @@ fun IconPickerSheet(
                 if (userIconIds.isNotEmpty()) {
                     header(R.string.setting_section_icons)
                     items(userIconIds, key = { "user_$it" }) { id ->
-                        IconCell(onClick = { onIconSelected(id) }) { IconView(iconId = id, size = 44.dp) }
+                        IconCell(onClick = { onIconSelected(id) }) { IconView(iconId = id, size = IconSize) }
                     }
                 }
-                if (categoryIcons) header(R.string.icon_group_builtin) else if (userIconIds.isNotEmpty()) divider()
-                assetItems(BuiltinIcons.ALL, pickAsset)
                 if (categoryIcons) {
                     TablerIcons.GROUPS.forEach { group ->
                         header(group.title)
                         assetItems(group.keys, pickAsset)
                     }
+                } else {
+                    if (userIconIds.isNotEmpty()) divider()
+                    assetItems(BuiltinIcons.ALL, pickAsset)
                 }
             }
         }
@@ -199,7 +200,7 @@ private fun LazyGridScope.divider() {
 
 private fun LazyGridScope.assetItems(keys: List<String>, onClick: (String) -> Unit) {
     items(keys, key = { it }, contentType = { "asset" }) { key ->
-        IconCell(onClick = { onClick(key) }) { BuiltinIconImage(assetKey = key, size = 44.dp) }
+        IconCell(onClick = { onClick(key) }) { BuiltinIconImage(assetKey = key, size = IconSize) }
     }
 }
 

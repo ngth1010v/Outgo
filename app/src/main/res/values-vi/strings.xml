@@ -123,7 +123,9 @@
     <string name="budget_offset_add_to">Đến</string>
     <string name="history_retry">Thử lại</string>
     <string name="history_retry_not_enough">%1$s chưa đủ tiền</string>
-    <string name="history_pending_count">%1$d giao dịch chuyển chưa xong</string>
+    <plurals name="history_pending_count">
+        <item quantity="other">%1$d giao dịch chuyển chưa xong</item>
+    </plurals>
     <string name="category_delete_confirm_title">Xoá danh mục?</string>
     <string name="category_delete_parent_confirm_message">Thao tác này sẽ xoá luôn %1$d danh mục con.</string>
     <string name="category_delete_child_confirm_message">Danh mục chưa có giao dịch nào và sẽ bị xoá vĩnh viễn.</string>
@@ -239,7 +241,6 @@
     <string name="icon_picker_title">Chọn icon</string>
     <string name="icon_picker_import">Import từ thiết bị</string>
     <string name="icon_picker_import_error">Không thể import ảnh này</string>
-    <string name="icon_group_builtin">Có sẵn</string>
     <string name="icon_group_food">Ăn uống</string>
     <string name="icon_group_transport">Di chuyển</string>
     <string name="icon_group_shopping">Mua sắm</string>

@@ -3,10 +3,9 @@ package app.outgo.ui.history
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import app.outgo.ui.theme.OnPendingContainer
 import app.outgo.ui.theme.PendingContainer
+import app.outgo.ui.theme.WarningDarkYellow
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -222,25 +222,40 @@ private fun TradeRow(
     }
 }
 
-/** "⚠ n" on a pale yellow pill: how many offset transfers are still waiting for money. */
+/** A yellow "⚠": some offset transfers are still waiting for money ([PendingBanner] says how many). */
 @Composable
 internal fun PendingBadge(count: Int, modifier: Modifier = Modifier) {
-    val description = stringResource(R.string.history_pending_count, count)
+    Icon(
+        painter = painterResource(R.drawable.ph_warning),
+        contentDescription = pluralStringResource(R.plurals.history_pending_count, count, count),
+        tint = WarningDarkYellow,
+        modifier = modifier.size(16.dp),
+    )
+}
+
+/** "⚠ n unfinished transfers" in a pale yellow box, atop the transfer history. */
+@Composable
+internal fun PendingBanner(count: Int, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
-            .background(PendingContainer, RoundedCornerShape(8.dp))
-            .padding(horizontal = 5.dp, vertical = 1.dp)
-            .semantics(mergeDescendants = true) { contentDescription = description },
+            .fillMaxWidth()
+            .background(PendingContainer, RoundedCornerShape(12.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
             painter = painterResource(R.drawable.ph_warning),
             contentDescription = null,
             tint = OnPendingContainer,
-            modifier = Modifier.size(12.dp),
+            modifier = Modifier.size(18.dp),
         )
-        Spacer(Modifier.width(2.dp))
-        Text(count.toString(), style = MaterialTheme.typography.labelSmall, color = OnPendingContainer, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.width(8.dp))
+        Text(
+            pluralStringResource(R.plurals.history_pending_count, count, count),
+            style = MaterialTheme.typography.bodyMedium,
+            color = OnPendingContainer,
+            fontWeight = FontWeight.Medium,
+        )
     }
 }
 

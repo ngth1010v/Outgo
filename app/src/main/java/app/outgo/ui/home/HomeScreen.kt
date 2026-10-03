@@ -6,6 +6,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import app.outgo.data.db.entity.TradeEntity
 import app.outgo.ui.history.PendingBadge
+import app.outgo.ui.history.PendingBanner
 import androidx.annotation.StringRes
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -15,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.lerp
 import app.outgo.ui.component.rememberReorderState
+import app.outgo.ui.component.OutgoSegmentedButton
 import app.outgo.ui.component.reorderableItem
 import androidx.compose.animation.core.EaseInOut
 import androidx.compose.animation.core.tween
@@ -43,7 +45,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Scaffold
@@ -281,7 +282,7 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
                         Text(stringResource(R.string.home_history_section), style = MaterialTheme.typography.titleMedium)
                         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                             HistoryType.entries.forEachIndexed { index, type ->
-                                SegmentedButton(
+                                OutgoSegmentedButton(
                                     selected = type == historyType,
                                     onClick = { switchHistory(type) },
                                     shape = SegmentedButtonDefaults.itemShape(index, HistoryType.entries.size),
@@ -306,6 +307,9 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
                     }
                 }
 
+                if (historyType == HistoryType.TRANSFER && pendingTransfers > 0) {
+                    item(key = PENDING_BANNER_KEY) { PendingBanner(pendingTransfers, Modifier.swipeShift(historySwipe)) }
+                }
                 if (historyRows.isEmpty()) {
                     if (!historyState.isLoading) {
                         item {
@@ -342,6 +346,7 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
                                 currentRows = historyRows,
                                 currentKeyPrefix = historyKeyPrefix,
                                 onOpenTrade = onOpenTrade,
+                                pendingTransfers = if (type == HistoryType.TRANSFER) pendingTransfers else 0,
                                 modifier = Modifier.swipeShift(historySwipe, page),
                             )
                         }
@@ -354,6 +359,7 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
 
 private const val HOLD_SCROLL_KEY = "history_hold_scroll"
 private const val HISTORY_HEADER_KEY = "history_header"
+private const val PENDING_BANNER_KEY = "history_pending_banner"
 
 /**
  * Whether [down] (in list coordinates) lands in the history section. With the header scrolled
@@ -378,6 +384,8 @@ private fun NeighborHistory(
     currentRows: List<HistoryListItem>,
     currentKeyPrefix: String,
     onOpenTrade: (Long) -> Unit,
+    /** Shows the unfinished-transfers banner atop the rows when above 0, as the list does. */
+    pendingTransfers: Int,
     modifier: Modifier,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -402,6 +410,7 @@ private fun NeighborHistory(
         contentPadding = androidx.compose.foundation.layout.PaddingValues(top = topPadding, bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(HISTORY_SPACING),
     ) {
+        if (pendingTransfers > 0) item { PendingBanner(pendingTransfers) }
         if (state.items.isEmpty()) {
             if (!state.isLoading) {
                 item {

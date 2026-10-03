@@ -130,7 +130,10 @@
     <string name="budget_offset_add_to">To</string>
     <string name="history_retry">Retry</string>
     <string name="history_retry_not_enough">%1$s doesn\'t have enough money yet</string>
-    <string name="history_pending_count">%1$d unfinished transfers</string>
+    <plurals name="history_pending_count">
+        <item quantity="one">%1$d unfinished transfer</item>
+        <item quantity="other">%1$d unfinished transfers</item>
+    </plurals>
     <string name="category_delete_confirm_title">Delete category?</string>
     <string name="category_delete_parent_confirm_message">This will also delete its %1$d subcategories.</string>
     <string name="category_delete_child_confirm_message">This category has no transactions and will be removed permanently.</string>
@@ -248,7 +251,6 @@
     <string name="icon_picker_title">Choose an icon</string>
     <string name="icon_picker_import">Import from device</string>
     <string name="icon_picker_import_error">Couldn\'t import that image</string>
-    <string name="icon_group_builtin">Built-in</string>
     <string name="icon_group_food">Food &amp; drink</string>
     <string name="icon_group_transport">Transport</string>
     <string name="icon_group_shopping">Shopping</string>

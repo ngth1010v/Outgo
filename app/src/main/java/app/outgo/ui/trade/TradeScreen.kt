@@ -31,7 +31,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarDuration
@@ -68,6 +67,7 @@ import app.outgo.domain.CategoryKind
 import app.outgo.domain.TradeType
 import app.outgo.ui.LocalAppContainer
 import app.outgo.ui.component.rememberDiscardGuard
+import app.outgo.ui.component.OutgoSegmentedButton
 import app.outgo.ui.component.AmountField
 import app.outgo.ui.component.ConfirmDialog
 import app.outgo.ui.component.IconView
@@ -302,19 +302,19 @@ private fun TradeForm(
 @Composable
 private fun ExpenseIncomeToggle(type: Int, onTypeChange: (Int) -> Unit, enabled: Boolean = true) {
     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-        SegmentedButton(
+        OutgoSegmentedButton(
             selected = type == CategoryKind.EXPENSE,
             onClick = { onTypeChange(CategoryKind.EXPENSE) },
             enabled = enabled,
             shape = SegmentedButtonDefaults.itemShape(0, 3),
         ) { Text(stringResource(R.string.trade_expense)) }
-        SegmentedButton(
+        OutgoSegmentedButton(
             selected = type == CategoryKind.INCOME,
             onClick = { onTypeChange(CategoryKind.INCOME) },
             enabled = enabled,
             shape = SegmentedButtonDefaults.itemShape(1, 3),
         ) { Text(stringResource(R.string.trade_income)) }
-        SegmentedButton(
+        OutgoSegmentedButton(
             selected = type == TradeType.TRANSFER,
             onClick = { onTypeChange(TradeType.TRANSFER) },
             enabled = enabled,

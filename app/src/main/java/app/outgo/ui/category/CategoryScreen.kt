@@ -48,7 +48,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
@@ -75,11 +74,12 @@ import app.outgo.R
 import app.outgo.data.db.dao.BudgetWithProgress
 import app.outgo.data.db.entity.CategoryEntity
 import app.outgo.data.repo.BudgetSetting
-import app.outgo.data.repo.CategoryColorPalette
+import app.outgo.data.repo.DefaultCategoryColor
 import app.outgo.domain.BudgetOffset
 import app.outgo.domain.CategoryKind
 import app.outgo.ui.LocalAppContainer
 import app.outgo.ui.component.BudgetProgressBlock
+import app.outgo.ui.component.OutgoSegmentedButton
 import app.outgo.ui.component.ColorPickerGrid
 import app.outgo.ui.component.ConfirmDialog
 import app.outgo.ui.component.EditorScaffold
@@ -124,12 +124,12 @@ fun CategoryScreen(onOpenEditor: (id: Long?, parentId: Long?) -> Unit) {
             SingleChoiceSegmentedButtonRow(
                 modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 4.dp, end = 16.dp, bottom = 16.dp),
             ) {
-                SegmentedButton(
+                OutgoSegmentedButton(
                     selected = state.type == CategoryKind.EXPENSE,
                     onClick = { viewModel.setType(CategoryKind.EXPENSE) },
                     shape = SegmentedButtonDefaults.itemShape(0, 2),
                 ) { Text(stringResource(R.string.category_expense_tab)) }
-                SegmentedButton(
+                OutgoSegmentedButton(
                     selected = state.type == CategoryKind.INCOME,
                     onClick = { viewModel.setType(CategoryKind.INCOME) },
                     shape = SegmentedButtonDefaults.itemShape(1, 2),
@@ -431,7 +431,7 @@ private fun EditCategoryScreen(
     var name by remember { mutableStateOf(existing?.name.orEmpty()) }
     var iconId by remember { mutableStateOf(existing?.iconId) }
     var color by remember {
-        mutableStateOf(existing?.color ?: (target as? EditTarget.NewChild)?.parentColor ?: CategoryColorPalette[0])
+        mutableStateOf(existing?.color ?: (target as? EditTarget.NewChild)?.parentColor ?: DefaultCategoryColor)
     }
     val budget = existing?.let { budgets[it.id] }
     var budgetOn by remember { mutableStateOf(budget?.enabled ?: false) }

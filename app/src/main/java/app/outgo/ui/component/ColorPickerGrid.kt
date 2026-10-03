@@ -17,19 +17,19 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import app.outgo.data.repo.CategoryColorPalette
 
-private const val COLUMNS = 11
-private val SwatchShape = RoundedCornerShape(6.dp)
+private const val COLUMNS = 15
+private val SwatchShape = RoundedCornerShape(4.dp)
 
 /**
- * 33 swatches (see [CategoryColorPalette]) laid out as 3 rows of 11, for the category/account
- * color pickers. Each row fills the available width (matching the sheet's other inputs) with
+ * 75 square swatches (see [CategoryColorPalette]) laid out as 5 rows of 15, for the
+ * category/account color pickers. Each row fills the available width (matching the sheet's other inputs) with
  * swatches sized to divide it evenly, rather than a fixed dot size.
  */
 @Composable
 fun ColorPickerGrid(selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
-    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         CategoryColorPalette.toList().chunked(COLUMNS).forEach { row ->
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 row.forEach { swatch ->
                     val isSelected = swatch == selected
                     Box(

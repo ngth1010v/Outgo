@@ -1,10 +1,33 @@
-# Tabler outline icons offered in the category icon picker, in picker order.
+# Icons offered in the category icon picker, by group, in picker order: the bundled PNGs first,
+# then Tabler outline icons (redrawn filled by the generator).
 # `@group <id>` starts a section; <id> needs strings icon_group_<id> (values/ and values-vi/).
-# One Tabler icon name per line, `#` starts a comment (the Vietnamese meaning, for maintainers).
+# One Tabler icon name per line, or `asset:<key>` for a bundled PNG (assets/icons/<key>.png);
+# every bundled PNG must be placed in a group. `#` starts a comment (the Vietnamese meaning, for
+# maintainers).
 # Append only: removing a shipped name would break categories that already use it.
 # Regenerate with: python tools/tabler-icons/gen_tabler_icons.py
 
 @group food
+asset:food
+asset:coffee
+asset:groceries
+asset:beer
+asset:egg
+asset:meat
+asset:milk
+asset:tea
+asset:bread
+asset:pizza
+asset:hamburger
+asset:fish
+asset:carrot
+asset:orange
+asset:avocado
+asset:cookie
+asset:ice_cream
+asset:cake
+asset:wine
+asset:martini
 soup             # Canh / súp / lẩu
 bowl-chopsticks  # Bún, phở, mì
 bowl-spoon       # Cháo, chè
@@ -24,6 +47,14 @@ chef-hat         # Nấu ăn, lớp nấu ăn
 tools-kitchen-2  # Nhà hàng
 
 @group transport
+asset:transport
+asset:bus
+asset:fuel
+asset:bicycle
+asset:motorcycle
+asset:scooter
+asset:taxi
+asset:train
 car-suv           # Ô tô gia đình
 truck             # Xe tải, chuyển nhà
 truck-delivery    # Phí giao hàng, ship
@@ -41,6 +72,11 @@ scooter-electric  # Xe điện
 route             # Chuyến đi, lộ trình
 
 @group shopping
+asset:shopping
+asset:clothing
+asset:sneaker
+asset:dress
+asset:storefront
 basket          # Giỏ hàng, chợ
 tag             # Hàng giảm giá
 discount        # Khuyến mãi, voucher
@@ -56,6 +92,22 @@ package         # Đơn hàng online
 perfume         # Nước hoa
 
 @group home
+asset:rent
+asset:electricity
+asset:water
+asset:internet
+asset:phone
+asset:sim_card
+asset:lightbulb
+asset:fire
+asset:repair
+asset:laundry
+asset:washing_machine
+asset:broom
+asset:toilet_paper
+asset:bathtub
+asset:couch
+asset:television
 building            # Chung cư
 building-community  # Phí quản lý
 key                 # Tiền cọc, chìa khóa
@@ -75,6 +127,9 @@ file-invoice        # Hóa đơn
 garden-cart         # Làm vườn
 
 @group education
+asset:education
+asset:book
+asset:newspaper
 certificate   # Chứng chỉ, thi cử
 pencil        # Văn phòng phẩm
 notebook      # Vở, sổ
@@ -88,6 +143,17 @@ abacus        # Học toán
 backpack      # Cặp sách, đồ đi học
 
 @group entertainment
+asset:movie
+asset:popcorn
+asset:ticket
+asset:game_controller
+asset:music_notes
+asset:headphones
+asset:confetti
+asset:sport
+asset:exercise
+asset:soccer_ball
+asset:swimming_pool
 microphone-2     # Karaoke
 piano            # Học nhạc, nhạc cụ
 balloon          # Tiệc, sinh nhật
@@ -110,6 +176,13 @@ fish-hook        # Câu cá
 kayak            # Chèo thuyền
 
 @group health
+asset:health
+asset:medicine
+asset:hospital
+asset:emergency
+asset:tooth
+asset:beauty
+asset:scissors
 stethoscope    # Khám bệnh
 vaccine        # Tiêm chủng
 first-aid-kit  # Tủ thuốc
@@ -123,6 +196,16 @@ zzz            # Giấc ngủ
 dna            # Xét nghiệm
 
 @group family
+asset:family
+asset:baby
+asset:baby_carriage
+asset:pet
+asset:dog
+asset:cat
+asset:plant
+asset:flower
+asset:gift
+asset:hand_heart
 baby-bottle  # Sữa, đồ cho bé
 mood-kid     # Con cái
 horse-toy    # Đồ chơi trẻ em
@@ -134,6 +217,10 @@ woman        # Mẹ, chị em gái
 friends      # Bạn bè
 
 @group travel
+asset:travel
+asset:suitcase
+asset:tent
+asset:umbrella
 beach                # Biển
 mountain             # Núi
 map                  # Bản đồ, tour
@@ -149,6 +236,20 @@ torii                # Châu Á, đền chùa
 building-arch        # Châu Âu
 
 @group finance
+asset:salary
+asset:bonus
+asset:investment
+asset:interest
+asset:freelance
+asset:other_income
+asset:wallet
+asset:bank
+asset:card
+asset:ewallet
+asset:fee
+asset:tax
+asset:target
+asset:shield_check
 cash              # Tiền mặt
 cash-banknote     # Tiền giấy
 coins             # Tiền lẻ
@@ -167,6 +268,13 @@ home-dollar       # Cho thuê nhà
 shield-dollar     # Bảo hiểm
 
 @group other
+asset:other
+asset:flag
+asset:cigarette
+asset:church
+asset:claude
+asset:aws
+asset:default
 printer   # In ấn
 mail      # Bưu phí, thư
 cloud     # Dịch vụ đăng ký, cloud
