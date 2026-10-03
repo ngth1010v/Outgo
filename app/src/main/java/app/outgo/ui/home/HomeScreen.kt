@@ -96,6 +96,7 @@ import app.outgo.ui.theme.ExpenseRed
 import app.outgo.ui.theme.IncomeGreen
 import app.outgo.ui.theme.WarningDarkYellow
 import app.outgo.util.Money
+import app.outgo.util.MonthKey
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.isActive
 
@@ -703,8 +704,8 @@ private fun SavingsAccountRow(row: AccountWithProgress, modifier: Modifier = Mod
             Text(account.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
             MonthAmountBlock(row.monthlyIncome, row.prevMonthlyIncome, greenWhenLower = false)
         }
-        val target = account.savingsTarget
-        if (target != null && target > 0) {
+        val target = account.savingsTargetIn(MonthKey.current())
+        if (target != null) {
             BudgetProgressBlock(
                 remainingText = savingsProgressText(row.monthlyIncome, target),
                 spentOfTotalText = stringResource(

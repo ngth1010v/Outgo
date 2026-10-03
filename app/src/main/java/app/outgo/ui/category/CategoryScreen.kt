@@ -6,6 +6,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.Switch
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.scale
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -522,7 +523,7 @@ private fun EditCategoryScreen(
         if (effectiveType == CategoryKind.EXPENSE) {
             Spacer(Modifier.height(24.dp))
             SectionHeader(stringResource(R.string.category_section_budget)) {
-                Switch(checked = budgetOn, onCheckedChange = { budgetOn = it })
+                SectionSwitch(checked = budgetOn, onCheckedChange = { budgetOn = it })
             }
             if (budgetOn) {
                 val none = stringResource(R.string.budget_offset_none)
@@ -606,32 +607,47 @@ private fun EditCategoryScreen(
     }
 }
 
-/** A section's title, with an optional control (the budget's on/off switch) at its right end. */
+/** A section's title, with an optional control (a [SectionSwitch]) at its right end. */
 @Composable
-private fun SectionHeader(title: String, action: (@Composable () -> Unit)? = null) {
+internal fun SectionHeader(title: String, action: (@Composable () -> Unit)? = null) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp).padding(bottom = 8.dp),
+        // Title sits 10dp below the section above and 8dp above its content.
+        modifier = Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 4.dp).heightIn(min = 28.dp),
     ) {
         Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
         action?.invoke()
     }
 }
 
-/** `09/2026`: the budget's apply-from, as numbers. */
-private fun monthNumber(monthKey: Int): String = String.format(Locale.US, "%02d/%d", monthKey % 100, monthKey / 100)
+/**
+ * A section header's on/off switch, drawn at 75% (39x24dp) so it doesn't make the header taller
+ * than its title row. Compose still widens its touch area to the 48dp minimum.
+ */
+@Composable
+internal fun SectionSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+    Switch(
+        checked = checked,
+        onCheckedChange = onCheckedChange,
+        enabled = enabled,
+        modifier = modifier.size(39.dp, 24.dp).scale(0.75f),
+    )
+}
+
+/** `09/2026`: a month key as numbers (a budget's apply-from, a savings account's saving-from). */
+internal fun monthNumber(monthKey: Int): String = String.format(Locale.US, "%02d/%d", monthKey % 100, monthKey / 100)
 
 /** Where a budget's unspent amount goes: nowhere, another budget's limit, or another account. */
 private enum class UnderMode { NONE, BUDGET, ACCOUNT }
 
 /** One choice of an [OffsetPicker]; a budget or account choice carries its icon. */
-private data class PickOption<T>(val value: T, val label: String, val iconId: Long? = null, val color: Int? = null) {
+internal data class PickOption<T>(val value: T, val label: String, val iconId: Long? = null, val color: Int? = null) {
     val hasIcon: Boolean get() = iconId != null || color != null
 }
 
 /** "Label ........ [icon] Choice ▾" in a bordered row. A value missing from [options] (not picked yet, or gone) shows "—". */
 @Composable
-private fun <T> OffsetPicker(
+internal fun <T> OffsetPicker(
     label: String,
     value: T,
     options: List<PickOption<T>>,

@@ -40,6 +40,7 @@ class AccountRepository(
         initialBalance: Long,
         accountType: Int = AccountType.NORMAL,
         savingsTarget: Long? = null,
+        savingsFrom: Int? = null,
     ): Long = withContext(Dispatchers.IO) {
         db.withTransaction {
             val now = System.currentTimeMillis()
@@ -52,6 +53,7 @@ class AccountRepository(
                     color = color,
                     accountType = accountType,
                     savingsTarget = savingsTarget.takeIf { accountType == AccountType.SAVINGS },
+                    savingsFrom = savingsFrom.takeIf { accountType == AccountType.SAVINGS && savingsTarget != null },
                     sortOrder = order,
                     createdAt = now,
                     updatedAt = now,
@@ -70,6 +72,7 @@ class AccountRepository(
         newBalance: Long,
         accountType: Int,
         savingsTarget: Long?,
+        savingsFrom: Int?,
     ) = withContext(Dispatchers.IO) {
         db.withTransaction {
             val existing = accountDao.findById(accountId) ?: return@withTransaction
@@ -80,6 +83,7 @@ class AccountRepository(
                     color = color,
                     accountType = accountType,
                     savingsTarget = savingsTarget.takeIf { accountType == AccountType.SAVINGS },
+                    savingsFrom = savingsFrom.takeIf { accountType == AccountType.SAVINGS && savingsTarget != null },
                     updatedAt = System.currentTimeMillis(),
                 ),
             )

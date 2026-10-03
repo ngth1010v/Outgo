@@ -5,6 +5,7 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import app.outgo.domain.AccountType
 
 /**
  * A place money is held (cash, a bank account, an e-wallet, a savings pot…).
@@ -42,6 +43,9 @@ data class AccountEntity(
     /** Monthly savings target; only meaningful when [accountType] is SAVINGS. */
     @ColumnInfo(name = "savings_target")
     val savingsTarget: Long? = null,
+    /** First month (yyyyMM) [savingsTarget] applies; earlier months have no target. Null: always. */
+    @ColumnInfo(name = "savings_from")
+    val savingsFrom: Int? = null,
     @ColumnInfo(name = "sort_order")
     val sortOrder: Int = 0,
     @ColumnInfo(name = "archived")
@@ -50,4 +54,9 @@ data class AccountEntity(
     val createdAt: Long,
     @ColumnInfo(name = "updated_at")
     val updatedAt: Long,
-)
+) {
+    /** The savings target [monthKey] is measured against, or null when there is none that month. */
+    fun savingsTargetIn(monthKey: Int): Long? = savingsTarget?.takeIf {
+        it > 0 && accountType == AccountType.SAVINGS && (savingsFrom ?: Int.MIN_VALUE) <= monthKey
+    }
+}

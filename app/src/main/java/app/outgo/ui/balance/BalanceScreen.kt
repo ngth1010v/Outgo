@@ -39,6 +39,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -52,6 +54,11 @@ import app.outgo.data.db.entity.AccountEntity
 import app.outgo.data.repo.CategoryColorPalette
 import app.outgo.domain.AccountType
 import app.outgo.ui.LocalAppContainer
+import app.outgo.ui.category.OffsetPicker
+import app.outgo.ui.category.PickOption
+import app.outgo.ui.category.SectionHeader
+import app.outgo.ui.category.SectionSwitch
+import app.outgo.ui.category.monthNumber
 import app.outgo.ui.component.BudgetProgressBlock
 import app.outgo.ui.component.ColorPickerGrid
 import app.outgo.ui.component.ConfirmDialog
@@ -65,6 +72,7 @@ import app.outgo.ui.component.slideItem
 import app.outgo.ui.component.savingsProgressColor
 import app.outgo.ui.component.savingsProgressText
 import app.outgo.util.Money
+import app.outgo.util.MonthKey
 import androidx.compose.ui.graphics.Color
 
 /** The "add account" row's key; account rows are keyed by id. */
@@ -99,7 +107,7 @@ fun BalanceScreen(onOpenEditor: (accountId: Long?) -> Unit) {
         ) {
             items(order, key = { it.account.id }) { row ->
                 val account = row.account
-                val target = account.savingsTarget?.takeIf { it > 0 && account.accountType == AccountType.SAVINGS }
+                val target = account.savingsTargetIn(MonthKey.current())
                 Column(
                     modifier = reorderableItem(reorder, account.id)
                         .fillMaxWidth()
@@ -188,6 +196,8 @@ private fun EditAccountScreen(account: AccountEntity?, onDismiss: () -> Unit, vi
     var name by remember { mutableStateOf(account?.name.orEmpty()) }
     var balanceText by remember { mutableStateOf(account?.balance?.takeIf { it != 0L }?.toString().orEmpty()) }
     var targetText by remember { mutableStateOf(account?.savingsTarget?.toString().orEmpty()) }
+    var savingsOn by remember { mutableStateOf(account?.accountType == AccountType.SAVINGS && account?.savingsTarget != null) }
+    var savingsFrom by remember { mutableStateOf(account?.savingsFrom ?: MonthKey.current()) }
     var iconId by remember { mutableStateOf(account?.iconId) }
     var color by remember { mutableStateOf(account?.color ?: CategoryColorPalette[0]) }
     var showIconPicker by remember { mutableStateOf(false) }
@@ -199,7 +209,7 @@ private fun EditAccountScreen(account: AccountEntity?, onDismiss: () -> Unit, vi
     }
 
     // Compared against the values the editor opened with.
-    val fields = listOf(accountType, name, balanceText, targetText, iconId, color)
+    val fields = listOf(accountType, name, balanceText, savingsOn, targetText, savingsFrom, iconId, color)
     val initialFields = remember { fields }
     EditorScaffold(
         title = if (account == null) stringResource(R.string.balance_create_title) else stringResource(R.string.balance_edit_title),
@@ -207,17 +217,20 @@ private fun EditAccountScreen(account: AccountEntity?, onDismiss: () -> Unit, vi
         dirty = fields != initialFields,
         onSave = {
             val balance = balanceText.toLongOrNull() ?: 0L
-            val target = targetText.toLongOrNull()
+            val target = targetText.toLongOrNull().takeIf { savingsOn }
+            val from = savingsFrom.takeIf { savingsOn }
             if (account == null) {
-                viewModel.create(name, iconId, color, balance, accountType, target)
+                viewModel.create(name, iconId, color, balance, accountType, target, from)
             } else {
-                viewModel.update(account.id, name, iconId, color, balance, accountType, target)
+                viewModel.update(account.id, name, iconId, color, balance, accountType, target, from)
             }
             onDismiss()
         },
-        saveEnabled = name.isNotBlank(),
+        // A savings target that is on needs an amount.
+        saveEnabled = name.isNotBlank() && (!savingsOn || (targetText.toLongOrNull() ?: 0L) > 0),
         onDelete = if (account != null) { { showDeleteConfirm = true } } else null,
     ) {
+        SectionHeader(stringResource(R.string.category_section_general))
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconView(iconId = iconId, size = 48.dp, color = color, modifier = Modifier.padding(end = 12.dp))
             OutlinedButton(onClick = { showIconPicker = true }) { Text(stringResource(R.string.common_choose_icon)) }
@@ -227,7 +240,7 @@ private fun EditAccountScreen(account: AccountEntity?, onDismiss: () -> Unit, vi
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
             SegmentedButton(
                 selected = accountType == AccountType.NORMAL,
-                onClick = { accountType = AccountType.NORMAL },
+                onClick = { accountType = AccountType.NORMAL; savingsOn = false },
                 shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
             ) { Text(stringResource(R.string.balance_type_normal)) }
             SegmentedButton(
@@ -254,23 +267,39 @@ private fun EditAccountScreen(account: AccountEntity?, onDismiss: () -> Unit, vi
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth(),
         )
-        if (accountType == AccountType.SAVINGS) {
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                value = targetText,
-                onValueChange = { targetText = it.filter { c -> c.isDigit() } },
-                label = { Text(stringResource(R.string.balance_target_hint)) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
         Spacer(Modifier.height(12.dp))
-
-
         Text(stringResource(R.string.category_color_label), style = MaterialTheme.typography.labelLarge)
         Spacer(Modifier.height(8.dp))
         ColorPickerGrid(selected = color, onSelect = { color = it })
+
+        // Only a savings account has a target; a normal one shows the switch off and disabled.
+        Spacer(Modifier.height(24.dp))
+        val switchDescription = stringResource(R.string.balance_savings_target_switch)
+        SectionHeader(stringResource(R.string.balance_savings_label)) {
+            SectionSwitch(
+                checked = savingsOn,
+                onCheckedChange = { savingsOn = it },
+                enabled = accountType == AccountType.SAVINGS,
+                modifier = Modifier.semantics { contentDescription = switchDescription },
+            )
+        }
+        if (savingsOn) {
+            // Two years back to a year ahead, newest first; an older saved month stays pickable.
+            val current = MonthKey.current()
+            val months = ((-12..24).map { MonthKey.minus(current, it.toLong()) } + savingsFrom).distinct().sortedDescending()
+                .map { PickOption(it, monthNumber(it)) }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = targetText,
+                    onValueChange = { targetText = it.filter { c -> c.isDigit() } },
+                    label = { Text(stringResource(R.string.balance_target_hint)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OffsetPicker(stringResource(R.string.balance_savings_from), savingsFrom, months) { savingsFrom = it }
+            }
+        }
     }
 
     if (showIconPicker) {

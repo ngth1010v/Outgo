@@ -18,12 +18,12 @@ class BalanceViewModel(private val accountRepository: AccountRepository) : ViewM
 
     suspend fun hasTrades(accountId: Long): Boolean = accountRepository.hasTrades(accountId)
 
-    fun create(name: String, iconId: Long?, color: Int, balance: Long, accountType: Int, savingsTarget: Long?) {
-        viewModelScope.launch { accountRepository.create(name, iconId, color, balance, accountType, savingsTarget) }
+    fun create(name: String, iconId: Long?, color: Int, balance: Long, accountType: Int, savingsTarget: Long?, savingsFrom: Int?) {
+        viewModelScope.launch { accountRepository.create(name, iconId, color, balance, accountType, savingsTarget, savingsFrom) }
     }
 
-    fun update(accountId: Long, name: String, iconId: Long?, color: Int, balance: Long, accountType: Int, savingsTarget: Long?) {
-        viewModelScope.launch { accountRepository.update(accountId, name, iconId, color, balance, accountType, savingsTarget) }
+    fun update(accountId: Long, name: String, iconId: Long?, color: Int, balance: Long, accountType: Int, savingsTarget: Long?, savingsFrom: Int?) {
+        viewModelScope.launch { accountRepository.update(accountId, name, iconId, color, balance, accountType, savingsTarget, savingsFrom) }
     }
 
     fun reorder(ids: List<Long>) {

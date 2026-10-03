@@ -98,7 +98,9 @@
     <string name="balance_type_normal">Normal</string>
     <string name="balance_type_savings">Savings</string>
     <string name="balance_savings_label">Savings</string>
-    <string name="balance_target_hint">Monthly savings target (optional)</string>
+    <string name="balance_target_hint">Monthly savings target</string>
+    <string name="balance_savings_target_switch">Savings target</string>
+    <string name="balance_savings_from">Saving from</string>
     <string name="balance_savings_remain">%1$s remain</string>
     <string name="balance_savings_of_target">%1$s/%2$s</string>
     <string name="balance_savings_to_go">%1$s to go</string>

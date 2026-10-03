@@ -92,7 +92,9 @@
     <string name="balance_type_normal">Thường</string>
     <string name="balance_type_savings">Tiết kiệm</string>
     <string name="balance_savings_label">Tiết kiệm</string>
-    <string name="balance_target_hint">Mục tiêu tiết kiệm hàng tháng (không bắt buộc)</string>
+    <string name="balance_target_hint">Mục tiêu tiết kiệm hàng tháng</string>
+    <string name="balance_savings_target_switch">Mục tiêu tiết kiệm</string>
+    <string name="balance_savings_from">Tiết kiệm từ</string>
     <string name="balance_savings_remain">Còn %1$s</string>
     <string name="balance_savings_of_target">%1$s/%2$s</string>
     <string name="balance_savings_to_go">Còn %1$s nữa</string>
