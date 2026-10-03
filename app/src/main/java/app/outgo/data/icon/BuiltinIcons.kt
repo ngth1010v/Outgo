@@ -1,7 +1,8 @@
 package app.outgo.data.icon
 
 /**
- * Every PNG bundled under `assets/icons/`. Rows in the `icon` table only get
+ * Every PNG bundled under `assets/icons/` (the category picker adds [TablerIcons]' vectors after
+ * them). Rows in the `icon` table only get
  * created for these lazily, the first time a user actually picks one (see
  * [IconStore.ensureBuiltin]) — keeping the seed data in OutgoDatabase small.
  */
@@ -27,6 +28,9 @@ object BuiltinIcons {
         "lightbulb", "fire", "sim_card", "claude", "aws",
         "default",
     )
+
+    /** Shown for an `asset_key` this build has no icon for. */
+    const val FALLBACK = "default"
 
     fun assetPath(assetKey: String) = "icons/$assetKey.png"
 }

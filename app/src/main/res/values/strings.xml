@@ -238,12 +238,24 @@
     <string name="setting_section_about">About</string>
     <string name="setting_version">Version</string>
     <string name="setting_licenses">Open-source licenses</string>
-    <string name="setting_licenses_body">Navigation and UI icons based on Phosphor Icons (MIT License), phosphoricons.com.</string>
+    <string name="setting_licenses_body">Navigation and UI icons based on Phosphor Icons (MIT License), phosphoricons.com. Part of the category icons from Tabler Icons (MIT License), tabler.io/icons.</string>
 
     <!-- Icon picker -->
     <string name="icon_picker_title">Choose an icon</string>
     <string name="icon_picker_import">Import from device</string>
     <string name="icon_picker_import_error">Couldn\'t import that image</string>
+    <string name="icon_group_builtin">Built-in</string>
+    <string name="icon_group_food">Food &amp; drink</string>
+    <string name="icon_group_transport">Transport</string>
+    <string name="icon_group_shopping">Shopping</string>
+    <string name="icon_group_home">Home &amp; bills</string>
+    <string name="icon_group_education">Education</string>
+    <string name="icon_group_entertainment">Fun &amp; sports</string>
+    <string name="icon_group_health">Health</string>
+    <string name="icon_group_family">Family &amp; pets</string>
+    <string name="icon_group_travel">Travel</string>
+    <string name="icon_group_finance">Money &amp; income</string>
+    <string name="icon_group_other">Other</string>
 
     <!-- Common -->
     <string name="common_save">Save</string>

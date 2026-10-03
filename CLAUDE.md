@@ -126,6 +126,12 @@ built-in icons ship as PNGs under `app/src/main/assets/icons/` and are reference
 user-imported icons are normalized, deduped by SHA-256, and stored as BLOBs in the `icon` table so
 they travel with backups.
 
+The category picker also offers Tabler Icons as VectorDrawables (`res/drawable/ic_cat_tabler_*.xml`,
+`asset_key` `tabler_<name>`, drawn to a bitmap by `IconStore`). They are generated: edit
+`tools/tabler-icons/icons.txt` and run `python tools/tabler-icons/gen_tabler_icons.py`, which also
+rewrites `data/icon/TablerIcons.kt`. Never remove or rename a shipped icon key: it is stored in users'
+databases and backups.
+
 ### Key implementation detail: manual dependency wiring
 
 When adding a new screen/feature, the pattern is: entity (`data/db/entity/`) -> DAO

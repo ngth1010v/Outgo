@@ -5,6 +5,8 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.toBitmap
 import app.outgo.data.db.dao.IconDao
 import app.outgo.data.db.entity.IconEntity
 import app.outgo.domain.IconKind
@@ -100,8 +102,17 @@ class IconStore(
         return entity.png?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }?.ready()
     }
 
-    private fun decodeAsset(assetKey: String): ImageBitmap? =
-        context.assets.open(BuiltinIcons.assetPath(assetKey)).use { BitmapFactory.decodeStream(it) }?.ready()
+    private fun decodeAsset(assetKey: String): ImageBitmap? {
+        TablerIcons.drawable(assetKey)?.let { res ->
+            // Drawn at the bundled PNGs' size, so IconView tints and scales both kinds alike.
+            return ContextCompat.getDrawable(context, res)?.toBitmap(ASSET_PX, ASSET_PX)?.ready()
+        }
+        // A key this build does not ship (a backup from a newer version) shows the generic icon
+        // instead of crashing on the missing file.
+        val stream = runCatching { context.assets.open(BuiltinIcons.assetPath(assetKey)) }.getOrNull()
+            ?: return if (assetKey != BuiltinIcons.FALLBACK) decodeAsset(BuiltinIcons.FALLBACK) else null
+        return stream.use { BitmapFactory.decodeStream(it) }?.ready()
+    }
 
     /** Starts the GPU texture upload now, off the UI thread, instead of in the first frame drawing it. */
     private fun Bitmap.ready(): ImageBitmap {
@@ -110,6 +121,9 @@ class IconStore(
     }
 
     companion object {
+        /** Side of the bundled PNG icons; vector icons are drawn at the same size. */
+        private const val ASSET_PX = 128
+
         /** Crops to a centered square, downsamples to [maxSide] and re-encodes as PNG. */
         fun normalizeToPng(source: Bitmap, maxSide: Int = 128): ByteArray {
             val side = minOf(source.width, source.height)

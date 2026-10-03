@@ -65,7 +65,7 @@ Open the app and you are already on the "add expense" screen. Log a purchase in 
 - **Two-level categories** (parent and subcategory) for both expense and income. A default set is created on first launch.
 - Set a **monthly budget** on any expense category. A parent budget counts the spending of all its subcategories.
 - The progress bar shows the remaining amount. It turns red with an "over" amount when you exceed the budget.
-- **105 built-in icons**, or **import your own PNG**. Imported icons are stored in the database, so they are included in backups.
+- **253 built-in icons** (148 of them, for categories only, grouped by theme in the picker), or **import your own PNG**. Imported icons are stored in the database, so they are included in backups.
 
 <br clear="right" />
 
@@ -174,4 +174,4 @@ See [architecture.md](architecture.md) for the full design (in Vietnamese): data
 
 ## License
 
-[MIT](LICENSE) © ngth1010v. Navigation and UI icons are based on [Phosphor Icons](https://phosphoricons.com) (MIT).
+[MIT](LICENSE) © ngth1010v. Navigation and UI icons are based on [Phosphor Icons](https://phosphoricons.com) (MIT). Part of the category icons come from [Tabler Icons](https://tabler.io/icons) (MIT).

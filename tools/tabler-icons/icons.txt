@@ -1,0 +1,175 @@
+# Tabler outline icons offered in the category icon picker, in picker order.
+# `@group <id>` starts a section; <id> needs strings icon_group_<id> (values/ and values-vi/).
+# One Tabler icon name per line, `#` starts a comment (the Vietnamese meaning, for maintainers).
+# Append only: removing a shipped name would break categories that already use it.
+# Regenerate with: python tools/tabler-icons/gen_tabler_icons.py
+
+@group food
+soup             # Canh / súp / lẩu
+bowl-chopsticks  # Bún, phở, mì
+bowl-spoon       # Cháo, chè
+salad            # Salad, rau
+sausage          # Xúc xích, đồ nướng
+cheese           # Phô mai, bơ sữa
+candy            # Kẹo, bánh kẹo
+lollipop         # Kẹo mút, quà vặt
+apple            # Trái cây
+cherry           # Cherry, trái cây nhập
+grape            # Nho
+mushroom         # Nấm
+pepper           # Gia vị
+milkshake        # Trà sữa, sinh tố
+bottle           # Nước đóng chai
+chef-hat         # Nấu ăn, lớp nấu ăn
+tools-kitchen-2  # Nhà hàng
+
+@group transport
+car-suv           # Ô tô gia đình
+truck             # Xe tải, chuyển nhà
+truck-delivery    # Phí giao hàng, ship
+parking           # Gửi xe
+car-garage        # Gửi xe tháng, garage
+car-crash         # Tai nạn, bảo hiểm xe
+steering-wheel    # Học lái, thuê xe
+road              # Phí cầu đường
+charging-pile     # Sạc xe điện
+engine            # Bảo dưỡng xe
+bus-stop          # Vé tháng xe buýt
+ship              # Tàu, phà
+sailboat          # Du thuyền
+scooter-electric  # Xe điện
+route             # Chuyến đi, lộ trình
+
+@group shopping
+basket          # Giỏ hàng, chợ
+tag             # Hàng giảm giá
+discount        # Khuyến mãi, voucher
+gift-card       # Thẻ quà tặng
+hanger          # Thời trang
+jacket          # Áo khoác
+eyeglass        # Kính mắt
+diamond         # Trang sức
+device-desktop  # Máy tính bàn
+device-watch    # Đồng hồ
+camera          # Máy ảnh
+package         # Đơn hàng online
+perfume         # Nước hoa
+
+@group home
+building            # Chung cư
+building-community  # Phí quản lý
+key                 # Tiền cọc, chìa khóa
+lock                # Khóa, an ninh
+bed                 # Giường, nội thất
+plug                # Thiết bị điện
+router              # Modem, mạng
+air-conditioning    # Điều hòa
+fridge              # Tủ lạnh
+microwave           # Đồ bếp
+hammer              # Sửa nhà
+paint               # Sơn, trang trí
+bucket              # Đồ dọn dẹp
+trash               # Phí rác
+recycle             # Ve chai, tái chế
+file-invoice        # Hóa đơn
+garden-cart         # Làm vườn
+
+@group education
+certificate   # Chứng chỉ, thi cử
+pencil        # Văn phòng phẩm
+notebook      # Vở, sổ
+calculator    # Máy tính bỏ túi
+language      # Học ngoại ngữ
+microscope    # Khoa học
+flask         # Thí nghiệm
+palette       # Học vẽ, mỹ thuật
+presentation  # Khóa học, hội thảo
+abacus        # Học toán
+backpack      # Cặp sách, đồ đi học
+
+@group entertainment
+microphone-2     # Karaoke
+piano            # Học nhạc, nhạc cụ
+balloon          # Tiệc, sinh nhật
+cards            # Bài, board game
+dice             # Trò chơi
+chess            # Cờ
+puzzle           # Đồ chơi, xếp hình
+photo            # Chụp ảnh
+masks-theater    # Kịch, biểu diễn
+player-play      # Phim online, streaming
+ball-tennis      # Tennis
+ball-volleyball  # Bóng chuyền
+ball-bowling     # Bowling
+golf             # Golf
+run              # Chạy bộ
+yoga             # Yoga
+karate           # Võ thuật
+trekking         # Leo núi, trekking
+fish-hook        # Câu cá
+kayak            # Chèo thuyền
+
+@group health
+stethoscope    # Khám bệnh
+vaccine        # Tiêm chủng
+first-aid-kit  # Tủ thuốc
+eye            # Mắt, kính thuốc
+bandage        # Băng gạc, vết thương
+thermometer    # Ốm, sốt
+wheelchair     # Chăm sóc người già
+massage        # Massage, spa
+brain          # Sức khỏe tinh thần
+zzz            # Giấc ngủ
+dna            # Xét nghiệm
+
+@group family
+baby-bottle  # Sữa, đồ cho bé
+mood-kid     # Con cái
+horse-toy    # Đồ chơi trẻ em
+bone         # Đồ ăn cho chó
+fish-bone    # Đồ ăn cho mèo
+heart        # Hẹn hò, người yêu
+man          # Bố, anh em trai
+woman        # Mẹ, chị em gái
+friends      # Bạn bè
+
+@group travel
+beach                # Biển
+mountain             # Núi
+map                  # Bản đồ, tour
+world                # Du lịch nước ngoài
+id                   # Hộ chiếu, visa
+building-skyscraper  # Du lịch thành phố
+hotel-service        # Khách sạn
+caravan              # Cắm trại xe
+compass              # Khám phá
+sunset               # Nghỉ dưỡng
+building-castle      # Tham quan, di tích
+torii                # Châu Á, đền chùa
+building-arch        # Châu Âu
+
+@group finance
+cash              # Tiền mặt
+cash-banknote     # Tiền giấy
+coins             # Tiền lẻ
+moneybag          # Tiền tiết kiệm
+report-money      # Báo cáo, kế toán
+chart-pie         # Phân bổ, quỹ
+chart-candle      # Chứng khoán
+currency-bitcoin  # Tiền mã hóa
+currency-dong     # Tiền Việt
+businessplan      # Kinh doanh
+award             # Giải thưởng
+trophy            # Thắng cuộc
+receipt-refund    # Hoàn tiền
+cash-register     # Bán hàng
+home-dollar       # Cho thuê nhà
+shield-dollar     # Bảo hiểm
+
+@group other
+printer   # In ấn
+mail      # Bưu phí, thư
+cloud     # Dịch vụ đăng ký, cloud
+calendar  # Phí định kỳ
+clock     # Theo giờ
+scale     # Pháp lý, luật

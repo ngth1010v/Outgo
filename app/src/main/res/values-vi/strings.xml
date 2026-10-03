@@ -230,11 +230,23 @@
     <string name="setting_section_about">Thông tin</string>
     <string name="setting_version">Phiên bản</string>
     <string name="setting_licenses">Giấy phép mã nguồn mở</string>
-    <string name="setting_licenses_body">Icon điều hướng và giao diện dựa trên Phosphor Icons (giấy phép MIT), phosphoricons.com.</string>
+    <string name="setting_licenses_body">Icon điều hướng và giao diện dựa trên Phosphor Icons (giấy phép MIT), phosphoricons.com. Một phần icon danh mục lấy từ Tabler Icons (giấy phép MIT), tabler.io/icons.</string>
 
     <string name="icon_picker_title">Chọn icon</string>
     <string name="icon_picker_import">Import từ thiết bị</string>
     <string name="icon_picker_import_error">Không thể import ảnh này</string>
+    <string name="icon_group_builtin">Có sẵn</string>
+    <string name="icon_group_food">Ăn uống</string>
+    <string name="icon_group_transport">Di chuyển</string>
+    <string name="icon_group_shopping">Mua sắm</string>
+    <string name="icon_group_home">Nhà cửa &amp; hóa đơn</string>
+    <string name="icon_group_education">Học tập</string>
+    <string name="icon_group_entertainment">Giải trí &amp; thể thao</string>
+    <string name="icon_group_health">Sức khỏe</string>
+    <string name="icon_group_family">Gia đình &amp; thú cưng</string>
+    <string name="icon_group_travel">Du lịch</string>
+    <string name="icon_group_finance">Tài chính &amp; thu nhập</string>
+    <string name="icon_group_other">Khác</string>
 
     <string name="common_save">Lưu</string>
     <string name="common_cancel">Huỷ</string>
