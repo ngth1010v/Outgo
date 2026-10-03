@@ -52,10 +52,24 @@
     <string name="home_savings">Tiết kiệm</string>
     <string name="home_available_balance">Số dư khả dụng</string>
     <string name="home_savings_balance">Số dư tiết kiệm</string>
-    <string name="home_show_available_balance">Hiện số dư khả dụng</string>
-    <string name="home_hide_available_balance">Ẩn số dư khả dụng</string>
-    <string name="home_show_savings_and_total_balance">Hiện số dư tiết kiệm và tổng tài sản</string>
-    <string name="home_hide_savings_and_total_balance">Ẩn số dư tiết kiệm và tổng tài sản</string>
+    <string name="home_free_balance">Số dư tự do</string>
+    <string name="home_budgets_balance">Số dư ngân sách</string>
+    <string name="home_show_balance">Hiện %1$s</string>
+    <string name="home_hide_balance">Ẩn %1$s</string>
+    <string name="home_balance_info">Giới thiệu về %1$s</string>
+    <string name="home_budgets_short_title">Không đủ tiền cho ngân sách</string>
+    <string name="home_budgets_short_message">Các ngân sách tháng này còn cần %1$s, nhưng số dư khả dụng chỉ có %2$s. Bạn đang thiếu %3$s.</string>
+    <string name="home_budgets_short_warning">Số dư khả dụng không đủ cho các ngân sách</string>
+    <string name="home_free_info">Tiền bạn có thể tiêu thoải mái: số tiền bạn có, trừ tiền tiết kiệm và phần ngân sách tháng này còn cần. Không bao giờ nhỏ hơn 0.</string>
+    <string name="home_free_formula">Tự do = Tổng − Tiết kiệm − Ngân sách\n= %1$s − %2$s − %3$s\n= %4$s</string>
+    <string name="home_budgets_info">Tiền dành riêng cho phần còn lại của các ngân sách đang áp dụng trong tháng này. Ngân sách đã chi lố được tính là 0. Không vượt quá số dư khả dụng.</string>
+    <string name="home_budgets_formula">Ngân sách = min(Ngân sách còn lại, Khả dụng)\n= min(%1$s, %2$s)\n= %3$s</string>
+    <string name="home_savings_info">Tổng số dư của tất cả tài khoản tiết kiệm.</string>
+    <string name="home_savings_formula">Tiết kiệm = tổng các tài khoản tiết kiệm\n= %1$s</string>
+    <string name="home_available_info">Tổng số dư của tất cả tài khoản, trừ tài khoản tiết kiệm.</string>
+    <string name="home_available_formula">Khả dụng = tổng các tài khoản không phải tiết kiệm\n= %1$s</string>
+    <string name="home_total_info">Tất cả tiền bạn có, trên mọi tài khoản.</string>
+    <string name="home_total_formula">Tổng = Khả dụng + Tiết kiệm\n= %1$s + %2$s\n= %3$s</string>
     <string name="home_income">Thu</string>
     <string name="home_expense">Chi</string>
     <string name="home_expense_history">Lịch sử Chi</string>

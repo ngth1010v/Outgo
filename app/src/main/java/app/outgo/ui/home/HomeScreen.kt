@@ -7,6 +7,15 @@ import kotlinx.coroutines.launch
 import app.outgo.data.db.entity.TradeEntity
 import app.outgo.ui.history.PendingBadge
 import androidx.annotation.StringRes
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.lerp
+import app.outgo.ui.component.rememberReorderState
+import app.outgo.ui.component.reorderableItem
 import androidx.compose.animation.core.EaseInOut
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.animateScrollBy
@@ -27,7 +36,11 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
@@ -53,6 +66,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.lerp
+import androidx.compose.ui.layout.layout
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
@@ -78,6 +94,7 @@ import app.outgo.ui.history.historyItems
 import app.outgo.ui.nav.HistoryType
 import app.outgo.ui.theme.ExpenseRed
 import app.outgo.ui.theme.IncomeGreen
+import app.outgo.ui.theme.WarningDarkYellow
 import app.outgo.util.Money
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.isActive
@@ -178,6 +195,27 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
     // new tab's prefix before the rows it goes with.
     val historyKeyPrefix = historyType.arg
 
+    // The balance rows' order while a drag works on it; the saved order's next emission replaces it.
+    var balanceOrder by remember(state.order) {
+        // Rows arriving or reordered from the database keep the list at the same index, not with
+        // its first visible row's key: opening Home at its top must show the new first row.
+        listState.requestScrollToItem(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset)
+        mutableStateOf(state.order)
+    }
+    val reorder = rememberReorderState(listState)
+    reorder.update(
+        keys = balanceOrder,
+        canDrag = { true },
+        isSlot = { _, _ -> true },
+        onMove = { key, to ->
+            val moved = key as HomeBalance
+            balanceOrder = balanceOrder.filter { it != moved }.toMutableList().apply { add(to, moved) }
+        },
+        onDrop = { viewModel.setOrder(balanceOrder) },
+    )
+    var info by rememberSaveable { mutableStateOf<HomeBalance?>(null) }
+    var shortfallOpen by rememberSaveable { mutableStateOf(false) }
+
     Scaffold { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             LazyColumn(
@@ -186,40 +224,27 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(top = HISTORY_TOP_PADDING, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(HISTORY_SPACING),
             ) {
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.3.dp), modifier = Modifier.padding(bottom = 10.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            BalanceBlock(
-                                R.string.home_available_balance,
-                                state.availableBalance,
-                                primary = true,
-                                visible = !state.availableBalanceHidden,
-                                modifier = Modifier.weight(1f),
-                            )
-                            RevealToggle(
-                                hidden = state.availableBalanceHidden,
-                                showLabel = R.string.home_show_available_balance,
-                                hideLabel = R.string.home_hide_available_balance,
-                                onClick = viewModel::toggleAvailableBalance,
-                            )
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.weight(1f)) {
-                                BalanceBlock(R.string.home_savings_balance, state.savingsBalance, primary = false, visible = !state.otherBalancesHidden)
-                                BalanceBlock(R.string.home_total_balance, state.totalBalance, primary = false, visible = !state.otherBalancesHidden)
-                            }
-                            RevealToggle(
-                                hidden = state.otherBalancesHidden,
-                                showLabel = R.string.home_show_savings_and_total_balance,
-                                hideLabel = R.string.home_hide_savings_and_total_balance,
-                                onClick = viewModel::toggleOtherBalances,
-                            )
-                        }
-                    }
+                items(balanceOrder, key = { it }) { balance ->
+                    BalanceRow(
+                        balance,
+                        state,
+                        // The first of the saved order, not of the one being dragged: the rows
+                        // keep their size while a finger moves them, then morph after the drop.
+                        large = balance == state.order.firstOrNull(),
+                        onToggle = viewModel::toggleHidden,
+                        onInfo = { info = it },
+                        onWarning = { shortfallOpen = true },
+                        // The rows are spaced by their own padding, not the list's item spacing.
+                        modifier = Modifier.absorbSpacingBelow(HISTORY_SPACING)
+                            .then(reorderableItem(reorder, balance))
+                            .fillMaxWidth()
+                            // Opaque, so a lifted row hides the rows it passes over.
+                            .background(MaterialTheme.colorScheme.background, RoundedCornerShape(12.dp)),
+                    )
                 }
 
                 item {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(bottom = 10.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 10.dp, bottom = 10.dp)) {
                         Text(stringResource(R.string.home_budgets), style = MaterialTheme.typography.titleMedium)
                         if (state.budgets.isEmpty()) {
                             Text(
@@ -303,6 +328,8 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
                     item(key = HOLD_SCROLL_KEY) { Spacer(Modifier.height(HOLD_SCROLL_HEIGHT)) }
                 }
             }
+            info?.let { BalanceInfoDialog(it, state, onDismiss = { info = null }) }
+            if (shortfallOpen) BudgetShortfallDialog(state, onDismiss = { shortfallOpen = false })
             // The neighbor tabs' rows, lined up with the current ones.
             if (historySwipe.moving) {
                 listOf(-1, 1).forEach { page ->
@@ -330,7 +357,7 @@ private const val HISTORY_HEADER_KEY = "history_header"
 /**
  * Whether [down] (in list coordinates) lands in the history section. With the header scrolled
  * out of view, the section fills the list iff the top row is a history row: those rows have String
- * keys, the unkeyed ones above the header do not.
+ * keys, the ones above the header have none or a [HomeBalance] key.
  */
 private fun LazyListState.isInHistory(down: Offset): Boolean {
     val info = layoutInfo
@@ -401,57 +428,214 @@ private const val HOLD_SCROLL_MS = 500
 private val HOLD_SCROLL_HEIGHT = 30_000.dp
 
 /**
- * Eye / eye-slash button masking a balance figure. The glyph is deliberately small next to the
- * balance type, but the [IconButton] keeps its default 48dp touch target.
+ * One of Home's balance rows: the label with its (i) over the amount, and the eye at the right
+ * edge. [large] (the first row) only changes the amount's size and weight, animated, so a row
+ * moved to or from the top grows or shrinks in place.
  */
 @Composable
-private fun RevealToggle(
-    hidden: Boolean,
-    @StringRes showLabel: Int,
-    @StringRes hideLabel: Int,
-    onClick: () -> Unit,
+private fun BalanceRow(
+    balance: HomeBalance,
+    state: HomeUiState,
+    large: Boolean,
+    onToggle: (HomeBalance) -> Unit,
+    onInfo: (HomeBalance) -> Unit,
+    onWarning: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    IconButton(onClick = onClick) {
-        Icon(
-            painterResource(if (hidden) R.drawable.ph_eye_slash else R.drawable.ph_eye),
-            contentDescription = stringResource(if (hidden) showLabel else hideLabel),
-            modifier = Modifier.size(REVEAL_ICON_SIZE),
-            tint = LocalContentColor.current.copy(alpha = REVEAL_ICON_ALPHA),
-        )
+    val t by animateFloatAsState(
+        if (large) 1f else 0f,
+        tween(ROW_MORPH_MS, easing = FastOutSlowInEasing),
+        label = "balance-row-size",
+    )
+    val amountStyle = lerp(
+        MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Normal),
+        MaterialTheme.typography.headlineMedium.scaled(1.2f).copy(fontWeight = FontWeight.Bold),
+        t,
+    )
+    val warn = balance == HomeBalance.BUDGETS && state.budgetShortfall > 0
+    Row(modifier.padding(horizontal = ROW_PADDING_H, vertical = ROW_PADDING_V), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(lerp(AMOUNT_GAP, LARGE_AMOUNT_GAP, t))) {
+            val labelBase = MaterialTheme.typography.labelLarge
+            // Compact rows get a smaller label; the large row keeps the full size.
+            BalanceLabel(balance, lerp(labelBase.scaled(0.8f), labelBase, t), onInfo)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    if (balance in state.hidden) Money.formatHidden() else Money.format(state.amount(balance)),
+                    style = amountStyle,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                )
+                if (warn) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .padding(start = 2.dp)
+                            // The compact amount's line height: any taller and this row's label
+                            // would sit further from its amount than on the other rows.
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .clickable(onClick = onWarning),
+                    ) {
+                        Icon(
+                            painterResource(R.drawable.ph_warning),
+                            contentDescription = stringResource(R.string.home_budgets_short_warning),
+                            modifier = Modifier.size(18.dp),
+                            tint = WarningDarkYellow,
+                        )
+                    }
+                }
+            }
+        }
+        RevealToggle(balance, hidden = balance in state.hidden, onClick = onToggle)
     }
 }
 
-/** 0.6x Material's 24dp default, so the toggles sit quietly beside the amounts. */
-private val REVEAL_ICON_SIZE = 14.4.dp
+/** Why the budgets balance shows its warning: what the budgets still need against what is available. */
+@Composable
+private fun BudgetShortfallDialog(state: HomeUiState, onDismiss: () -> Unit) {
+    fun fig(amount: Long, b: HomeBalance) = if (b in state.hidden) Money.formatHidden() else Money.format(amount)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(painterResource(R.drawable.ph_warning), contentDescription = null, tint = WarningDarkYellow) },
+        title = { Text(stringResource(R.string.home_budgets_short_title)) },
+        text = {
+            Text(
+                stringResource(
+                    R.string.home_budgets_short_message,
+                    fig(state.budgetRemaining, HomeBalance.BUDGETS),
+                    fig(state.availableBalance, HomeBalance.AVAILABLE),
+                    fig(state.budgetShortfall, HomeBalance.BUDGETS),
+                ),
+            )
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_ok)) } },
+    )
+}
 
-/** Faded to 30% of the inherited content colour, so the toggles read as secondary to the amounts. */
-private const val REVEAL_ICON_ALPHA = 0.2f
+private fun TextStyle.scaled(factor: Float) = copy(fontSize = fontSize * factor, lineHeight = lineHeight * factor)
+
+/** How long a balance row takes to grow or shrink when it moves to or from the top. */
+private const val ROW_MORPH_MS = 350
+
+/** Around each balance row's content; with no list spacing between them, two vertical ones part the rows. */
+private val ROW_PADDING_H = 3.6.dp
+private val ROW_PADDING_V = 2.4.dp
 
 /**
- * Balance label + amount. Primary amount is 1.2x headlineMedium; secondary label is 80% of the
- * primary label and secondary amount 60% of the primary amount, muted.
+ * Negative: pull the amount up under its label, into the line spacing of both texts. Tuned by
+ * measuring the glyph gap on screen: ~5dp on a compact row, ~6dp on the large one.
+ */
+private val AMOUNT_GAP = (-3.0).dp
+private val LARGE_AMOUNT_GAP = (-8.2).dp
+
+/**
+ * Reports [space] less height than the content takes, so the list's item spacing after this item
+ * falls on the content's own bottom instead of below it. The content still draws in full, but
+ * its bottom [space] lies outside the item's bounds and does not take touches.
+ */
+private fun Modifier.absorbSpacingBelow(space: Dp) = layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints)
+    layout(placeable.width, (placeable.height - space.roundToPx()).coerceAtLeast(0)) { placeable.place(0, 0) }
+}
+
+/**
+ * A balance's name followed by its small (i), all one button that opens [BalanceInfoDialog]. Its
+ * height is the text's own: a separate square touch box around the (i) would be taller than a
+ * compact label and push the rows apart.
  */
 @Composable
-private fun BalanceBlock(@StringRes label: Int, amount: Long, primary: Boolean, visible: Boolean = true, modifier: Modifier = Modifier) {
-    val labelBase = MaterialTheme.typography.labelLarge
-    val labelScale = if (primary) 1f else 0.8f
-    val base = MaterialTheme.typography.headlineMedium
-    val scale = if (primary) 1.2f else 1.2f * 0.6f
-    // Negative gap pulls the primary amount up to tighten label-amount spacing.
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(if (primary) (-3.1).dp else 0.dp)) {
-        Text(
-            stringResource(label),
-            style = labelBase.copy(fontSize = labelBase.fontSize * labelScale, lineHeight = labelBase.lineHeight * labelScale),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            if (visible) Money.format(amount) else Money.formatHidden(),
-            style = base.copy(fontSize = base.fontSize * scale, lineHeight = base.lineHeight * scale),
-            fontWeight = if (primary) FontWeight.Bold else FontWeight.Normal,
-            color = if (primary) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+private fun BalanceLabel(
+    balance: HomeBalance,
+    style: TextStyle,
+    onInfo: (HomeBalance) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val label = stringResource(balance.label)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .clip(RoundedCornerShape(4.dp))
+            .clickable(onClickLabel = stringResource(R.string.home_balance_info, label)) { onInfo(balance) },
+    ) {
+        Text(label, style = style, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Icon(
+            painterResource(R.drawable.ph_info),
+            contentDescription = null,
+            modifier = Modifier.padding(start = 6.dp).size(SMALL_ICON_SIZE),
+            tint = LocalContentColor.current.copy(alpha = SMALL_ICON_ALPHA),
         )
     }
 }
+
+/**
+ * Eye / eye-slash button masking one balance figure. A 32dp target rather than Material's 48dp
+ * keeps the four secondary rows compact; the glyph itself is deliberately small and faded.
+ */
+@Composable
+private fun RevealToggle(balance: HomeBalance, hidden: Boolean, onClick: (HomeBalance) -> Unit) {
+    val label = stringResource(balance.label)
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier.padding(start = 4.dp).size(SMALL_BUTTON_SIZE).clip(CircleShape).clickable { onClick(balance) },
+    ) {
+        Icon(
+            painterResource(if (hidden) R.drawable.ph_eye_slash else R.drawable.ph_eye),
+            contentDescription = stringResource(if (hidden) R.string.home_show_balance else R.string.home_hide_balance, label),
+            modifier = Modifier.size(SMALL_ICON_SIZE),
+            tint = LocalContentColor.current.copy(alpha = SMALL_ICON_ALPHA),
+        )
+    }
+}
+
+/** What a balance means, plus its formula filled in with the current figures (masked ones stay masked). */
+@Composable
+private fun BalanceInfoDialog(balance: HomeBalance, state: HomeUiState, onDismiss: () -> Unit) {
+    fun fig(b: HomeBalance, amount: Long = state.amount(b)) = if (b in state.hidden) Money.formatHidden() else Money.format(amount)
+    val free = fig(HomeBalance.FREE)
+    val budgets = fig(HomeBalance.BUDGETS)
+    val savings = fig(HomeBalance.SAVINGS)
+    val available = fig(HomeBalance.AVAILABLE)
+    val total = fig(HomeBalance.TOTAL)
+    val (explain, formula) = when (balance) {
+        HomeBalance.FREE -> R.string.home_free_info to stringResource(R.string.home_free_formula, total, savings, budgets, free)
+        HomeBalance.BUDGETS -> R.string.home_budgets_info to stringResource(
+            R.string.home_budgets_formula, fig(HomeBalance.BUDGETS, state.budgetRemaining), available, budgets,
+        )
+        HomeBalance.SAVINGS -> R.string.home_savings_info to stringResource(R.string.home_savings_formula, savings)
+        HomeBalance.AVAILABLE -> R.string.home_available_info to stringResource(R.string.home_available_formula, available)
+        HomeBalance.TOTAL -> R.string.home_total_info to stringResource(R.string.home_total_formula, available, savings, total)
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(balance.label)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(stringResource(explain))
+                Text(formula, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_ok)) } },
+    )
+}
+
+@get:StringRes
+private val HomeBalance.label: Int
+    get() = when (this) {
+        HomeBalance.FREE -> R.string.home_free_balance
+        HomeBalance.BUDGETS -> R.string.home_budgets_balance
+        HomeBalance.SAVINGS -> R.string.home_savings_balance
+        HomeBalance.AVAILABLE -> R.string.home_available_balance
+        HomeBalance.TOTAL -> R.string.home_total_balance
+    }
+
+/** Touch target of the eye buttons. */
+private val SMALL_BUTTON_SIZE = 28.dp
+
+/** 0.6x Material's 24dp default, so the buttons sit quietly beside the labels and amounts. */
+private val SMALL_ICON_SIZE = 14.4.dp
+
+/** Faded to 30% of the inherited content colour, so the buttons read as secondary to the amounts. */
+private const val SMALL_ICON_ALPHA = 0.3f
 
 @Composable
 private fun BudgetRow(budget: BudgetWithProgress, modifier: Modifier = Modifier) {

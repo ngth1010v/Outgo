@@ -8,6 +8,7 @@ import app.outgo.util.CurrencyPrefs
 import app.outgo.util.LocalePrefs
 import app.outgo.util.Money
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 
 class SettingRepository(private val context: Context, private val settingDao: SettingDao) {
@@ -32,19 +33,24 @@ class SettingRepository(private val context: Context, private val settingDao: Se
         LocalePrefs.set(context, languageTag)
     }
 
-    /** Whether Home masks its available-balance figure. No SharedPreferences mirror: Home is not
-     *  the start destination, and HomeViewModel reads this in the same flow as the balances, so the
-     *  figure and its mask always arrive together. */
-    fun observeAvailableBalanceHidden(): Flow<Boolean> = observeFlag(SettingKeys.AVAILABLE_BALANCE_HIDDEN)
+    /**
+     * Whether Home masks the balance figure stored under [key] (one of the `*_BALANCE_HIDDEN`
+     * [SettingKeys]). While [key] has no row, [legacyKey]'s value is used instead. No
+     * SharedPreferences mirror: Home is not the start destination, and HomeViewModel reads this in
+     * the same flow as the balances, so the figure and its mask always arrive together.
+     */
+    fun observeBalanceHidden(key: String, legacyKey: String? = null): Flow<Boolean> {
+        val own = settingDao.observe(key)
+        if (legacyKey == null) return own.map { it == "1" }
+        return combine(own, settingDao.observe(legacyKey)) { value, legacy -> (value ?: legacy) == "1" }
+    }
 
-    /** Whether Home masks its savings and total balance figures. */
-    fun observeOtherBalancesHidden(): Flow<Boolean> = observeFlag(SettingKeys.OTHER_BALANCES_HIDDEN)
+    suspend fun setBalanceHidden(key: String, hidden: Boolean) = setFlag(key, hidden)
 
-    suspend fun setAvailableBalanceHidden(hidden: Boolean) = setFlag(SettingKeys.AVAILABLE_BALANCE_HIDDEN, hidden)
+    /** Home's balance row order as stored (see [SettingKeys.HOME_BALANCE_ORDER]); null until the user reorders. */
+    fun observeHomeBalanceOrder(): Flow<String?> = settingDao.observe(SettingKeys.HOME_BALANCE_ORDER)
 
-    suspend fun setOtherBalancesHidden(hidden: Boolean) = setFlag(SettingKeys.OTHER_BALANCES_HIDDEN, hidden)
-
-    private fun observeFlag(key: String): Flow<Boolean> = settingDao.observe(key).map { it == "1" }
+    suspend fun setHomeBalanceOrder(order: String) = settingDao.set(SettingEntity(SettingKeys.HOME_BALANCE_ORDER, order))
 
     private suspend fun setFlag(key: String, value: Boolean) {
         settingDao.set(SettingEntity(key, if (value) "1" else "0"))

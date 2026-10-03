@@ -57,10 +57,24 @@
     <string name="home_savings">Savings</string>
     <string name="home_available_balance">Available balance</string>
     <string name="home_savings_balance">Savings balance</string>
-    <string name="home_show_available_balance">Show available balance</string>
-    <string name="home_hide_available_balance">Hide available balance</string>
-    <string name="home_show_savings_and_total_balance">Show savings and total balance</string>
-    <string name="home_hide_savings_and_total_balance">Hide savings and total balance</string>
+    <string name="home_free_balance">Free balance</string>
+    <string name="home_budgets_balance">Budgets balance</string>
+    <string name="home_show_balance">Show %1$s</string>
+    <string name="home_hide_balance">Hide %1$s</string>
+    <string name="home_balance_info">About %1$s</string>
+    <string name="home_budgets_short_title">Not enough for your budgets</string>
+    <string name="home_budgets_short_message">Your budgets still need %1$s this month, but your available balance is %2$s. You are short %3$s.</string>
+    <string name="home_budgets_short_warning">Not enough available money to cover your budgets</string>
+    <string name="home_free_info">Money you can spend freely: what you have, minus your savings and what your budgets still need this month. Never below 0.</string>
+    <string name="home_free_formula">Free = Total − Savings − Budgets\n= %1$s − %2$s − %3$s\n= %4$s</string>
+    <string name="home_budgets_info">Money set aside for what your active budgets still have left this month. An overspent budget counts as 0. It can\'t be more than your available balance.</string>
+    <string name="home_budgets_formula">Budgets = min(Budgets left, Available)\n= min(%1$s, %2$s)\n= %3$s</string>
+    <string name="home_savings_info">The combined balance of all your savings accounts.</string>
+    <string name="home_savings_formula">Savings = sum of savings accounts\n= %1$s</string>
+    <string name="home_available_info">The combined balance of all your accounts except savings accounts.</string>
+    <string name="home_available_formula">Available = sum of non-savings accounts\n= %1$s</string>
+    <string name="home_total_info">Everything you have, across all accounts.</string>
+    <string name="home_total_formula">Total = Available + Savings\n= %1$s + %2$s\n= %3$s</string>
     <string name="home_income">Income</string>
     <string name="home_expense">Expense</string>
     <string name="home_expense_history">Expense history</string>
