@@ -39,6 +39,8 @@
     <string name="trade_account_label">Tài khoản</string>
     <string name="trade_from_account_label">Từ tài khoản</string>
     <string name="trade_to_account_label">Đến tài khoản</string>
+    <string name="trade_from_budget_label">Từ ngân sách (không bắt buộc)</string>
+    <string name="trade_no_budget">Không</string>
     <string name="trade_note_hint">Ghi chú</string>
     <string name="trade_save">LƯU</string>
     <string name="trade_saved">Đã lưu</string>
@@ -262,6 +264,7 @@
 
     <string name="history_empty">Chưa có giao dịch nào</string>
     <string name="history_adjustment_note">Điều chỉnh số dư</string>
+    <string name="history_from_budget">Ngân sách: %1$s</string>
     <string name="history_delete_confirm_title">Xoá giao dịch này?</string>
 
     <string name="backup_export_success">Đã lưu backup (%1$s)</string>

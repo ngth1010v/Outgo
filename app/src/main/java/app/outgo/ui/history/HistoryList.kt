@@ -177,6 +177,15 @@ private fun TradeRow(
                 (if (isTransfer) toAccount?.name else category?.name) ?: stringResource(R.string.history_adjustment_note),
                 style = MaterialTheme.typography.bodyLarge,
             )
+            // A transfer's category is the budget it was taken from.
+            if (isTransfer && category != null) {
+                Text(
+                    stringResource(R.string.history_from_budget, category.name),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
             if (!trade.note.isNullOrBlank()) {
                 Text(trade.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }

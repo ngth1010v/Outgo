@@ -54,13 +54,16 @@ interface TradeDao {
     /**
      * Analysis: whole months of the given types, narrow columns. `type` rides along so one pass
      * over the result can split expense from income. Uses `index_trade_month_key_type`.
+     * A transfer taken from a budget (one with a category) comes back as an EXPENSE when EXPENSE
+     * is asked for, matching how the triggers count it into `category_month_stat`.
      */
     @Query(
         """
-        SELECT id, type, amount, occurred_at AS occurredAt, category_id AS categoryId, note,
-               account_id AS accountId
+        SELECT id, CASE WHEN type = 4 THEN 0 ELSE type END AS type, amount, occurred_at AS occurredAt,
+               category_id AS categoryId, note, account_id AS accountId
         FROM trade
-        WHERE type IN (:types) AND month_key IN (:monthKeys)
+        WHERE month_key IN (:monthKeys)
+          AND (type IN (:types) OR (type = 4 AND category_id IS NOT NULL AND 0 IN (:types)))
         """,
     )
     suspend fun amountsAndTimesForMonths(monthKeys: List<Int>, types: List<Int>): List<TradeSlim>

@@ -5,7 +5,7 @@ data class TradeDraft(
     val type: Int, // TradeType.EXPENSE, INCOME or TRANSFER
     val amount: Long,
     val accountId: Long,
-    val categoryId: Long?, // null for TradeType.TRANSFER
+    val categoryId: Long?, // on a TradeType.TRANSFER, the optional "From budget"'s category
     val toAccountId: Long? = null, // set for TradeType.TRANSFER
     val occurredAt: Long,
     val note: String?,

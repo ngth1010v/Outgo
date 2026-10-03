@@ -49,6 +49,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -60,6 +61,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.outgo.R
+import app.outgo.data.db.dao.BudgetWithProgress
 import app.outgo.data.db.entity.AccountEntity
 import app.outgo.data.db.entity.CategoryEntity
 import app.outgo.domain.CategoryKind
@@ -87,7 +89,7 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit) {
         key = "trade-$editingTradeId",
         factory = viewModelFactory {
             initializer {
-                TradeViewModel(container.categoryRepository, container.accountRepository, container.tradeRepository, editingTradeId)
+                TradeViewModel(container.categoryRepository, container.accountRepository, container.tradeRepository, container.budgetRepository, editingTradeId)
             }
         },
     )
@@ -238,6 +240,13 @@ private fun TradeForm(
         Spacer(Modifier.height(16.dp))
 
         if (state.isTransfer) {
+            BudgetDropdown(
+                budgets = state.budgetOptions,
+                selected = state.selectedCategory,
+                onSelect = viewModel::onBudgetSelected,
+            )
+            Spacer(Modifier.height(16.dp))
+
             AccountDropdown(
                 label = stringResource(R.string.trade_to_account_label),
                 accounts = state.accounts,
@@ -437,6 +446,57 @@ private fun AccountDropdown(
                         text = { Text(account.name) },
                         leadingIcon = { IconView(iconId = account.iconId, size = 24.dp, color = account.color) },
                         onClick = { onSelect(account); expanded = false },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * A transfer's optional "From budget", styled like [AccountDropdown]. [selected] is the transfer's
+ * category; a budget removed since still shows by that category's name.
+ */
+@Composable
+private fun BudgetDropdown(
+    budgets: List<BudgetWithProgress>,
+    selected: CategoryEntity?,
+    onSelect: (Long?) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val budget = budgets.find { it.categoryId == selected?.id }
+    Column {
+        Text(stringResource(R.string.trade_from_budget_label), style = MaterialTheme.typography.labelLarge)
+        Box {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
+                    .clickable { expanded = true }
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (selected != null) {
+                    IconView(iconId = budget?.displayIconId ?: selected.iconId, size = 24.dp, color = budget?.categoryColor ?: selected.color)
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(
+                    budget?.displayName ?: selected?.name ?: stringResource(R.string.trade_no_budget),
+                    color = if (selected == null) MaterialTheme.colorScheme.onSurfaceVariant else Color.Unspecified,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(painterResource(R.drawable.ph_caret_down), contentDescription = null)
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.trade_no_budget)) },
+                    onClick = { onSelect(null); expanded = false },
+                )
+                budgets.forEach { b ->
+                    DropdownMenuItem(
+                        text = { Text(b.displayName) },
+                        leadingIcon = { IconView(iconId = b.displayIconId, size = 24.dp, color = b.categoryColor) },
+                        onClick = { onSelect(b.categoryId); expanded = false },
                     )
                 }
             }

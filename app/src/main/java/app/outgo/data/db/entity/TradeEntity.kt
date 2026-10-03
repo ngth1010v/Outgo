@@ -46,6 +46,10 @@ data class TradeEntity(
     val amount: Long,
     @ColumnInfo(name = "account_id")
     val accountId: Long,
+    /**
+     * On a [app.outgo.domain.TradeType.TRANSFER], the category of the budget it was taken from
+     * ("From budget"), or null: the triggers then count it as that category's spending.
+     */
     @ColumnInfo(name = "category_id")
     val categoryId: Long?,
     /** Destination account for [app.outgo.domain.TradeType.TRANSFER]; null otherwise. */

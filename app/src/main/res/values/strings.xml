@@ -43,6 +43,8 @@
     <string name="trade_account_label">Account</string>
     <string name="trade_from_account_label">From account</string>
     <string name="trade_to_account_label">To account</string>
+    <string name="trade_from_budget_label">From budget (optional)</string>
+    <string name="trade_no_budget">None</string>
     <string name="trade_note_hint">Note</string>
     <string name="trade_save">SAVE</string>
     <string name="trade_saved">Saved</string>
@@ -273,6 +275,7 @@
     <!-- History -->
     <string name="history_empty">No transactions yet</string>
     <string name="history_adjustment_note">Balance adjustment</string>
+    <string name="history_from_budget">Budget: %1$s</string>
     <string name="history_delete_confirm_title">Delete this transaction?</string>
 
     <!-- Backup / restore -->

@@ -4,13 +4,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.outgo.data.db.entity.AccountEntity
 import app.outgo.data.db.entity.CategoryEntity
+import app.outgo.data.db.dao.BudgetWithProgress
 import app.outgo.data.repo.AccountRepository
+import app.outgo.data.repo.BudgetRepository
 import app.outgo.data.repo.CategoryRepository
 import app.outgo.data.repo.TradeRepository
 import app.outgo.domain.CategoryKind
 import app.outgo.domain.CategoryPicker
 import app.outgo.domain.TradeDraft
 import app.outgo.domain.TradeType
+import app.outgo.util.MonthKey
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -31,6 +34,8 @@ data class TradeUiState(
     /** Per [CategoryKind], both loaded so a swipe can draw the other type's picker too. */
     val pickers: Map<Int, CategoryPicker> = emptyMap(),
     val accounts: List<AccountEntity> = emptyList(),
+    /** Every LIMIT budget with a category; [budgetOptions] narrows it to what the transfer form offers. */
+    val budgets: List<BudgetWithProgress> = emptyList(),
     val isLoading: Boolean = true,
     val isSaving: Boolean = false,
     val editingTradeId: Long? = null,
@@ -46,6 +51,14 @@ data class TradeUiState(
         }
     val selectedAccount: AccountEntity? get() = accounts.find { it.id == selectedAccountId }
     val selectedToAccount: AccountEntity? get() = accounts.find { it.id == selectedToAccountId }
+
+    /**
+     * A transfer's "From budget" choices: the enabled budgets, plus the one an edited transfer
+     * already draws from even if it was paused since. On a transfer, [selectedCategory] is that
+     * budget's category: the transfer is saved with it and counts as that category's spending.
+     */
+    val budgetOptions: List<BudgetWithProgress>
+        get() = budgets.filter { it.enabled || it.categoryId == selectedCategory?.id }
 }
 
 sealed interface TradeEvent {
@@ -59,6 +72,7 @@ class TradeViewModel(
     private val categoryRepository: CategoryRepository,
     private val accountRepository: AccountRepository,
     private val tradeRepository: TradeRepository,
+    private val budgetRepository: BudgetRepository,
     editingTradeId: Long? = null,
 ) : ViewModel() {
 
@@ -77,6 +91,12 @@ class TradeViewModel(
                     val fallbackAccount = if (s.isLoading) null else accounts.firstOrNull()?.id
                     s.copy(accounts = accounts, selectedAccountId = s.selectedAccountId ?: fallbackAccount)
                 }
+            }
+        }
+
+        viewModelScope.launch {
+            budgetRepository.observeWithProgress(MonthKey.current()).collect { budgets ->
+                _state.update { it.copy(budgets = budgets.filter { b -> b.categoryId != null }) }
             }
         }
 
@@ -140,6 +160,17 @@ class TradeViewModel(
         }
     }
 
+    /** A transfer's "From budget": the budget's category id, or null for none. */
+    fun onBudgetSelected(categoryId: Long?) {
+        if (categoryId == null) {
+            _state.update { it.copy(selectedCategory = null, selectedParentCategory = null) }
+            return
+        }
+        viewModelScope.launch {
+            categoryRepository.findById(categoryId)?.let { category -> _state.update { it.copy(selectedCategory = category) } }
+        }
+    }
+
     fun onAccountSelected(accountId: Long) {
         _state.update { it.copy(selectedAccountId = accountId) }
     }
@@ -176,7 +207,8 @@ class TradeViewModel(
             type = s.type,
             amount = s.amount,
             accountId = s.selectedAccountId!!,
-            categoryId = if (s.isTransfer) null else s.selectedCategory!!.id,
+            // A transfer's category is its optional "From budget".
+            categoryId = if (s.isTransfer) s.selectedCategory?.id else s.selectedCategory!!.id,
             toAccountId = if (s.isTransfer) s.selectedToAccountId else null,
             occurredAt = s.occurredAt,
             note = s.note,
