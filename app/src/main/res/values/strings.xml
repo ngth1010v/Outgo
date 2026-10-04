@@ -117,11 +117,15 @@
     <string name="category_color_label">Color</string>
     <string name="category_budget_hint">Monthly budget (optional)</string>
     <string name="budget_over_action">Over limit: take from</string>
-    <string name="budget_under_action">Under limit: take from</string>
+    <string name="budget_under_action">Under limit: add to</string>
     <string name="budget_offset_none">None</string>
     <string name="budget_offset_self">This budget</string>
     <string name="category_section_general">General</string>
     <string name="category_section_budget">Monthly budget</string>
+    <string name="category_general_info">How the category looks and what it is called.\n\n• Choose icon: the picture shown in lists, on the Add screen and in charts.\n• Category name: the name shown everywhere the category appears.\n• Color: tints its icon, progress bars and chart slices.</string>
+    <string name="category_budget_info">A monthly spending limit for this category. Spending in its sub-categories counts too. The switch turns the budget off without losing its settings.\n\n• Monthly budget limit: how much you plan to spend each month.\n• Apply from: the first month the budget counts. Earlier months show no bar and carry nothing over.\n• Over limit: take from: when a month goes over the limit, the overspend is taken off next month\'s limit of the budget you pick (this one or another).\n• Under limit: add to: when a month ends under the limit, the unspent amount is added to next month\'s limit of the budget you pick. With Account, it is moved as real money instead: a transfer From one account To another, made the first time you open the app next month.</string>
+    <string name="balance_general_info">The account\'s basic details.\n\n• Choose icon: the picture shown in lists and on trades.\n• Normal / Savings: a savings account holds money set aside. Its balance is kept apart from the money you can spend, and it can have a monthly target.\n• Account name: the name shown everywhere the account appears.\n• Current balance: the money in the account now. Changing it records an adjustment for the difference, so your history stays correct.\n• Color: tints its icon and chart lines.</string>
+    <string name="balance_savings_info">A monthly goal for how much to put into this account. Only savings accounts can have one.\n\n• Monthly savings target: the amount to add each month. Income and transfers into the account count toward it.\n• Saving from: the first month the target applies. Earlier months have no target.</string>
     <string name="category_budget_limit">Monthly budget limit</string>
     <string name="budget_apply_from">Apply from</string>
     <string name="budget_offset_budget">Budget</string>
@@ -324,6 +328,7 @@
     <string name="analysis_group_over_time">Over time</string>
     <string name="analysis_group_details">Details</string>
     <string name="progress_per_day">%1$s/day</string>
+    <string name="progress_today">%1$s/today</string>
     <string name="progress_line_spent">Spent</string>
     <string name="progress_line_saved">Saved</string>
     <string name="progress_line_plan">Plan</string>

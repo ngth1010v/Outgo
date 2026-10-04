@@ -7,7 +7,9 @@ import androidx.compose.material3.Switch
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material3.Surface
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.foundation.shape.CircleShape
@@ -501,7 +503,7 @@ private fun EditCategoryScreen(
         saveEnabled = name.isNotBlank() && budgetComplete,
         onDelete = if (existing != null) { { showDeleteConfirm = true } } else null,
     ) {
-        SectionHeader(stringResource(R.string.category_section_general))
+        SectionHeader(stringResource(R.string.category_section_general), stringResource(R.string.category_general_info))
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconView(iconId = iconId, size = 48.dp, color = color, modifier = Modifier.padding(end = 12.dp))
             OutlinedButton(onClick = { showIconPicker = true }) { Text(stringResource(R.string.common_choose_icon)) }
@@ -522,7 +524,7 @@ private fun EditCategoryScreen(
         // Only spending categories have a budget.
         if (effectiveType == CategoryKind.EXPENSE) {
             Spacer(Modifier.height(24.dp))
-            SectionHeader(stringResource(R.string.category_section_budget)) {
+            SectionHeader(stringResource(R.string.category_section_budget), stringResource(R.string.category_budget_info)) {
                 SectionSwitch(checked = budgetOn, onCheckedChange = { budgetOn = it })
             }
             if (budgetOn) {
@@ -607,16 +609,40 @@ private fun EditCategoryScreen(
     }
 }
 
-/** A section's title, with an optional control (a [SectionSwitch]) at its right end. */
+/**
+ * A section's title, then a small (i) opening [info] (what the section and its inputs do) in a
+ * dialog, with an optional control (a [SectionSwitch]) at its right end.
+ */
 @Composable
-internal fun SectionHeader(title: String, action: (@Composable () -> Unit)? = null) {
+internal fun SectionHeader(title: String, info: String, action: (@Composable () -> Unit)? = null) {
+    var showInfo by rememberSaveable { mutableStateOf(false) }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         // Title sits 10dp below the section above and 8dp above its content.
         modifier = Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 4.dp).heightIn(min = 28.dp),
     ) {
-        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.padding(start = 2.dp).size(28.dp).clip(CircleShape).clickable { showInfo = true },
+        ) {
+            Icon(
+                painterResource(R.drawable.ph_info),
+                contentDescription = stringResource(R.string.home_balance_info, title),
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.weight(1f))
         action?.invoke()
+    }
+    if (showInfo) {
+        AlertDialog(
+            onDismissRequest = { showInfo = false },
+            title = { Text(title) },
+            text = { Text(info, modifier = Modifier.verticalScroll(rememberScrollState())) },
+            confirmButton = { TextButton(onClick = { showInfo = false }) { Text(stringResource(R.string.common_ok)) } },
+        )
     }
 }
 

@@ -230,7 +230,7 @@ private fun EditAccountScreen(account: AccountEntity?, onDismiss: () -> Unit, vi
         saveEnabled = name.isNotBlank() && (!savingsOn || (targetText.toLongOrNull() ?: 0L) > 0),
         onDelete = if (account != null) { { showDeleteConfirm = true } } else null,
     ) {
-        SectionHeader(stringResource(R.string.category_section_general))
+        SectionHeader(stringResource(R.string.category_section_general), stringResource(R.string.balance_general_info))
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconView(iconId = iconId, size = 48.dp, color = color, modifier = Modifier.padding(end = 12.dp))
             OutlinedButton(onClick = { showIconPicker = true }) { Text(stringResource(R.string.common_choose_icon)) }
@@ -275,7 +275,7 @@ private fun EditAccountScreen(account: AccountEntity?, onDismiss: () -> Unit, vi
         // Only a savings account has a target; a normal one shows the switch off and disabled.
         Spacer(Modifier.height(24.dp))
         val switchDescription = stringResource(R.string.balance_savings_target_switch)
-        SectionHeader(stringResource(R.string.balance_savings_label)) {
+        SectionHeader(stringResource(R.string.balance_savings_label), stringResource(R.string.balance_savings_info)) {
             SectionSwitch(
                 checked = savingsOn,
                 onCheckedChange = { savingsOn = it },

@@ -107,11 +107,16 @@ private fun PacePanel(color: Color, current: Long, total: Long, lineName: String
     // [current] changes whenever a trade lands in this month, so it doubles as the reload key.
     val days by produceState<List<Long>?>(null, current) { value = loadDays() }
     val perDay = (total - current).coerceAtLeast(0) / (daysInMonth - today.dayOfMonth + 1)
+    // Even share of [total] from the 1st through today. Budget: what can still be spent today;
+    // savings: how far ahead of that pace.
+    val pace = total * today.dayOfMonth / daysInMonth
+    val todayAmount = (if (greenWhenLower) pace - current else current - pace).coerceAtLeast(0)
     val planColor = MaterialTheme.colorScheme.outlineVariant.toArgb()
     val planName = stringResource(R.string.progress_line_plan)
     Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
         Text(
-            stringResource(R.string.progress_per_day, Money.format(perDay)),
+            stringResource(R.string.progress_per_day, Money.format(perDay)) + " · " +
+                stringResource(R.string.progress_today, Money.format(todayAmount)),
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Bold,
             color = color,

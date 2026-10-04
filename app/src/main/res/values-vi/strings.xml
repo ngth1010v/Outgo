@@ -110,11 +110,15 @@
     <string name="category_color_label">Màu sắc</string>
     <string name="category_budget_hint">Ngân sách theo tháng (không bắt buộc)</string>
     <string name="budget_over_action">Vượt hạn mức: trừ vào</string>
-    <string name="budget_under_action">Chưa chi hết: lấy từ</string>
+    <string name="budget_under_action">Chưa chi hết: cộng vào</string>
     <string name="budget_offset_none">Không</string>
     <string name="budget_offset_self">Ngân sách này</string>
     <string name="category_section_general">Chung</string>
     <string name="category_section_budget">Ngân sách tháng</string>
+    <string name="category_general_info">Hình thức và tên của danh mục.\n\n• Chọn icon: hình hiển thị trong danh sách, màn hình Thêm và biểu đồ.\n• Tên danh mục: tên hiển thị ở mọi nơi có danh mục này.\n• Màu sắc: màu của biểu tượng, thanh tiến độ và phần biểu đồ.</string>
+    <string name="category_budget_info">Hạn mức chi tiêu hằng tháng cho danh mục này. Chi tiêu ở các danh mục con cũng được tính. Công tắc tắt ngân sách mà không mất cài đặt.\n\n• Hạn mức mỗi tháng: số tiền bạn dự định chi mỗi tháng.\n• Áp dụng từ: tháng đầu tiên ngân sách được tính. Các tháng trước không có thanh tiến độ và không chuyển dư.\n• Vượt hạn mức: trừ vào: khi một tháng chi vượt, phần vượt bị trừ vào hạn mức tháng sau của ngân sách bạn chọn (ngân sách này hoặc ngân sách khác).\n• Chưa chi hết: cộng vào: khi một tháng chi chưa hết, phần dư được cộng vào hạn mức tháng sau của ngân sách bạn chọn. Nếu chọn Tài khoản, số tiền được chuyển thật: một giao dịch chuyển Từ tài khoản này Đến tài khoản khác, thực hiện lần đầu bạn mở ứng dụng vào tháng sau.</string>
+    <string name="balance_general_info">Thông tin cơ bản của tài khoản.\n\n• Chọn icon: hình hiển thị trong danh sách và trên giao dịch.\n• Thường / Tiết kiệm: tài khoản tiết kiệm giữ tiền để dành. Số dư của nó tách khỏi số tiền bạn có thể tiêu, và có thể đặt mục tiêu hằng tháng.\n• Tên tài khoản: tên hiển thị ở mọi nơi có tài khoản này.\n• Số dư hiện tại: số tiền đang có trong tài khoản. Khi đổi, ứng dụng ghi một điều chỉnh cho phần chênh lệch để lịch sử luôn đúng.\n• Màu sắc: màu của biểu tượng và đường biểu đồ.</string>
+    <string name="balance_savings_info">Mục tiêu hằng tháng cho số tiền cần bỏ vào tài khoản này. Chỉ tài khoản tiết kiệm mới có.\n\n• Mục tiêu tiết kiệm hàng tháng: số tiền cần thêm mỗi tháng. Thu nhập và tiền chuyển vào tài khoản đều được tính.\n• Tiết kiệm từ: tháng đầu tiên mục tiêu áp dụng. Các tháng trước không có mục tiêu.</string>
     <string name="category_budget_limit">Hạn mức mỗi tháng</string>
     <string name="budget_apply_from">Áp dụng từ</string>
     <string name="budget_offset_budget">Ngân sách</string>
@@ -310,6 +314,7 @@
     <string name="analysis_group_over_time">Theo thời gian</string>
     <string name="analysis_group_details">Chi tiết</string>
     <string name="progress_per_day">%1$s/ngày</string>
+    <string name="progress_today">%1$s/hôm nay</string>
     <string name="progress_line_spent">Đã chi</string>
     <string name="progress_line_saved">Đã tiết kiệm</string>
     <string name="progress_line_plan">Kế hoạch</string>
