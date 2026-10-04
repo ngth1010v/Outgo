@@ -328,7 +328,8 @@
     <string name="analysis_group_over_time">Over time</string>
     <string name="analysis_group_details">Details</string>
     <string name="progress_per_day">%1$s/day</string>
-    <string name="progress_today">%1$s/today</string>
+    <string name="progress_today_spend">%1$s can spend today</string>
+    <string name="progress_today_save">%1$s need to save today</string>
     <string name="progress_line_spent">Spent</string>
     <string name="progress_line_saved">Saved</string>
     <string name="progress_line_plan">Plan</string>

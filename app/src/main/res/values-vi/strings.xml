@@ -314,7 +314,8 @@
     <string name="analysis_group_over_time">Theo thời gian</string>
     <string name="analysis_group_details">Chi tiết</string>
     <string name="progress_per_day">%1$s/ngày</string>
-    <string name="progress_today">%1$s/hôm nay</string>
+    <string name="progress_today_spend">%1$s có thể chi hôm nay</string>
+    <string name="progress_today_save">%1$s cần tiết kiệm hôm nay</string>
     <string name="progress_line_spent">Đã chi</string>
     <string name="progress_line_saved">Đã tiết kiệm</string>
     <string name="progress_line_plan">Kế hoạch</string>

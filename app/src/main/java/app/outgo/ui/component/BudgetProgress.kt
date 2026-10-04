@@ -107,20 +107,31 @@ private fun PacePanel(color: Color, current: Long, total: Long, lineName: String
     // [current] changes whenever a trade lands in this month, so it doubles as the reload key.
     val days by produceState<List<Long>?>(null, current) { value = loadDays() }
     val perDay = (total - current).coerceAtLeast(0) / (daysInMonth - today.dayOfMonth + 1)
-    // Even share of [total] from the 1st through today. Budget: what can still be spent today;
-    // savings: how far ahead of that pace.
+    // Even share of [total] from the 1st through today, minus [current]. Budget: what can still be
+    // spent today; savings: what still has to be saved today to catch up with that pace.
     val pace = total * today.dayOfMonth / daysInMonth
-    val todayAmount = (if (greenWhenLower) pace - current else current - pace).coerceAtLeast(0)
+    val todayAmount = (pace - current).coerceAtLeast(0)
     val planColor = MaterialTheme.colorScheme.outlineVariant.toArgb()
     val planName = stringResource(R.string.progress_line_plan)
     Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
-        Text(
-            stringResource(R.string.progress_per_day, Money.format(perDay)) + " · " +
-                stringResource(R.string.progress_today, Money.format(todayAmount)),
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Bold,
-            color = color,
-        )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(
+                stringResource(R.string.progress_per_day, Money.format(perDay)),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.alignByBaseline(),
+                fontWeight = FontWeight.Bold,
+                color = color,
+            )
+            Text(
+                stringResource(
+                    if (greenWhenLower) R.string.progress_today_spend else R.string.progress_today_save,
+                    Money.format(todayAmount),
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.alignByBaseline(),
+                color = color,
+            )
+        }
         val lines = remember(days, total, color, planColor, lineName, planName) {
             val plan = (0 until daysInMonth).map { total * it / (daysInMonth - 1).coerceAtLeast(1) }
             listOfNotNull(
