@@ -34,6 +34,8 @@ import androidx.room.PrimaryKey
         Index(value = ["category_id", "created_at"]),
         // Monthly sums (account income, budget spend) filter by month first.
         Index(value = ["month_key", "type"]),
+        // Home's pending-transfer badge counts these after every trade write; without it, a full scan.
+        Index("pending_amount"),
     ],
 )
 data class TradeEntity(

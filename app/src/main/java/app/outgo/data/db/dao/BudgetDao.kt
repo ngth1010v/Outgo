@@ -105,6 +105,10 @@ interface BudgetDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun putMonth(month: BudgetMonthEntity)
 
+    /** Budgets whose account transfers aren't made up to [monthKey] yet. */
+    @Query("SELECT COUNT(*) FROM budget WHERE settled_month IS NULL OR settled_month < :monthKey")
+    suspend fun countUnsettled(monthKey: Int): Int
+
     @Query("UPDATE budget SET settled_month = :monthKey")
     suspend fun markAccountOffsetsSettled(monthKey: Int)
 

@@ -115,6 +115,30 @@ interface TradeDao {
     )
     suspend fun balancesBefore(monthKey: Int): List<AccountBalance>
 
+    /**
+     * The same balances as [balancesBefore], worked back from today's: `account.balance` minus every
+     * move from [monthKey] on. Reads only the months after [monthKey], so it is the cheap way in for
+     * a recent month. Also lists accounts with no trade before [monthKey], at 0.
+     */
+    @Query(
+        """
+        SELECT accountId, SUM(delta) AS balance FROM (
+            SELECT id AS accountId, balance AS delta FROM account
+            UNION ALL
+            SELECT account_id, CASE WHEN type IN (1,2) THEN -amount ELSE amount END
+            FROM trade WHERE month_key >= :monthKey
+            UNION ALL
+            SELECT to_account_id, -amount FROM trade
+            WHERE type = 4 AND to_account_id IS NOT NULL AND month_key >= :monthKey
+        )
+        GROUP BY accountId
+        """,
+    )
+    suspend fun balancesBeforeFromNow(monthKey: Int): List<AccountBalance>
+
+    @Query("SELECT MIN(month_key) FROM trade")
+    suspend fun earliestMonthKey(): Int?
+
     /** Analysis daily balance: every balance change in [monthKey], signed the way the balance triggers do. */
     @Query(
         """

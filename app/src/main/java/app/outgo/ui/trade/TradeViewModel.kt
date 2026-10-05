@@ -97,12 +97,6 @@ class TradeViewModel(
         }
 
         viewModelScope.launch {
-            budgetRepository.observeWithProgress(MonthKey.current()).collect { budgets ->
-                _state.update { it.copy(budgets = budgets.filter { b -> b.categoryId != null }) }
-            }
-        }
-
-        viewModelScope.launch {
             if (editingTradeId != null) {
                 loadForEdit(editingTradeId)
             } else {
@@ -111,6 +105,11 @@ class TradeViewModel(
             }
             loadPickers()
             _state.update { it.copy(isLoading = false) }
+            // Budgets only feed the transfer form's "From budget": started after the pickers, so on
+            // a cold start their queries and carry walk don't compete with the first screen's data.
+            budgetRepository.observeWithProgress(MonthKey.current()).collect { budgets ->
+                _state.update { it.copy(budgets = budgets.filter { b -> b.categoryId != null }) }
+            }
         }
     }
 

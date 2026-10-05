@@ -210,8 +210,22 @@ class TradeRepository(private val tradeDao: TradeDao) {
     suspend fun accountFlows(fromMonth: Int, toMonth: Int): List<AccountFlow> =
         withContext(Dispatchers.IO) { tradeDao.accountFlows(fromMonth, toMonth) }
 
-    suspend fun balancesBefore(monthKey: Int): List<AccountBalance> =
-        withContext(Dispatchers.IO) { tradeDao.balancesBefore(monthKey) }
+    /**
+     * Every account's balance at the start of [monthKey]. Sums whichever side of history is shorter:
+     * the months before it, or (back from today's balances) the months since. Both give the same
+     * figures, since the triggers keep `account.balance` equal to the sum of the account's trades.
+     */
+    suspend fun balancesBefore(monthKey: Int): List<AccountBalance> = withContext(Dispatchers.IO) {
+        val earliest = tradeDao.earliestMonthKey() ?: return@withContext emptyList()
+        if (monthIndex(monthKey) - monthIndex(earliest) <= monthIndex(MonthKey.current()) - monthIndex(monthKey)) {
+            tradeDao.balancesBefore(monthKey)
+        } else {
+            tradeDao.balancesBeforeFromNow(monthKey)
+        }
+    }
+
+    /** Months since year 0, so two month keys subtract to the months between them. */
+    private fun monthIndex(monthKey: Int) = monthKey / 100 * 12 + monthKey % 100
 
     suspend fun accountMovesForMonth(monthKey: Int): List<AccountMove> =
         withContext(Dispatchers.IO) { tradeDao.accountMovesForMonth(monthKey) }

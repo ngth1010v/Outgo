@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 
 /**
@@ -26,6 +27,7 @@ fun SingleChoiceSegmentedButtonRowScope.OutgoSegmentedButton(
     enabled: Boolean = true,
     label: @Composable () -> Unit,
 ) {
+    // Read in the offset lambdas (layout), so the 3dp slide doesn't recompose the button every frame.
     val shift by animateDpAsState(if (selected) (-3).dp else 0.dp, label = "segmentShift")
     SegmentedButton(
         selected = selected,
@@ -41,9 +43,9 @@ fun SingleChoiceSegmentedButtonRowScope.OutgoSegmentedButton(
         icon = {
             SegmentedButtonDefaults.Icon(
                 active = selected,
-                activeContent = { Box(Modifier.offset(x = 4.dp + shift)) { SegmentedButtonDefaults.ActiveIcon() } },
+                activeContent = { Box(Modifier.offset { IntOffset((4.dp + shift).roundToPx(), 0) }) { SegmentedButtonDefaults.ActiveIcon() } },
             )
         },
-        label = { Box(Modifier.offset(x = shift)) { label() } },
+        label = { Box(Modifier.offset { IntOffset(shift.roundToPx(), 0) }) { label() } },
     )
 }

@@ -8,6 +8,7 @@ import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.Direction
 import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.Until
+import java.util.regex.Pattern
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -70,6 +71,20 @@ internal fun MacrobenchmarkScope.animationJourney() {
     tap(By.text("Income"))
     tap(By.text("Expense"))
 
+    // Editors: a category's (Budget section and its month picker), then an account's Savings
+    // section. Names are the first-launch seed's, which is Vietnamese whatever the UI language.
+    tap(By.text("Ăn uống"))
+    openMonthPicker()
+    device.pressBack()
+    tap(By.desc("Accounts"))
+    tap(By.text("Tiền mặt"))
+    tap(By.text("Savings"))
+    openMonthPicker()
+    tap(By.text("Normal"))
+    device.pressBack()
+    device.waitForIdle()
+    Thread.sleep(700)
+
     // Analysis: the month list and the year list scrolled through, plus a step back a month (the
     // neighbour page follows the scroll position) — that is what compiles the hand-drawn charts.
     tap(By.desc("Analysis"))
@@ -81,11 +96,27 @@ internal fun MacrobenchmarkScope.animationJourney() {
     tap(By.text("Now"))
 }
 
-private fun MacrobenchmarkScope.flingDownAndUp() {
-    device.findObject(By.scrollable(true))?.let {
-        it.fling(Direction.DOWN)
+/** Opens an editor section's month picker (its "MM/yyyy" label), then closes it with Back. */
+private fun MacrobenchmarkScope.openMonthPicker() {
+    tap(By.text(Pattern.compile("\\d{2}/\\d{4}")))
+    if (device.wait(Until.hasObject(By.text("This month")), TIMEOUT)) {
+        device.pressBack()
         device.waitForIdle()
-        it.fling(Direction.UP)
+        Thread.sleep(700)
+    }
+}
+
+private fun MacrobenchmarkScope.flingDownAndUp() {
+    for (direction in listOf(Direction.DOWN, Direction.UP)) {
+        // The list can be recomposed (a page settling in) between finding and flinging it; find it again.
+        for (attempt in 1..3) {
+            try {
+                device.findObject(By.scrollable(true))?.fling(direction)
+                break
+            } catch (_: StaleObjectException) {
+                device.waitForIdle()
+            }
+        }
         device.waitForIdle()
     }
 }

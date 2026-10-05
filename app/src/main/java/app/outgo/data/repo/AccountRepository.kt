@@ -8,8 +8,12 @@ import app.outgo.data.db.entity.AccountEntity
 import app.outgo.data.db.entity.SavingsMonthEntity
 import app.outgo.domain.AccountType
 import app.outgo.util.MonthKey
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.withContext
 
 /** A savings account's target for one month, as the account editor shows and saves it. */
@@ -27,7 +31,16 @@ class AccountRepository(
     private val tradeRepository: TradeRepository,
 ) {
     fun observeActive(): Flow<List<AccountEntity>> = accountDao.observeActive()
-    fun observeActiveWithProgress(monthKey: Int): Flow<List<AccountWithProgress>> = accountDao.observeActiveWithProgress(monthKey, MonthKey.minus(monthKey, 1))
+    /** Shared by Home and Accounts: one live query per month however many screens watch it. */
+    fun observeActiveWithProgress(monthKey: Int): Flow<List<AccountWithProgress>> = synchronized(progress) {
+        progress.getOrPut(monthKey) {
+            accountDao.observeActiveWithProgress(monthKey, MonthKey.minus(monthKey, 1))
+                .shareIn(shareScope, SharingStarted.WhileSubscribed(replayExpirationMillis = 0), replay = 1)
+        }
+    }
+
+    private val progress = HashMap<Int, Flow<List<AccountWithProgress>>>()
+    private val shareScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     fun observeAll(): Flow<List<AccountEntity>> = accountDao.observeAll()
 
     suspend fun findById(id: Long): AccountEntity? = withContext(Dispatchers.IO) { accountDao.findById(id) }

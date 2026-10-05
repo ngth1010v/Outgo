@@ -71,14 +71,17 @@ import kotlin.math.min
 
 private val DashEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f))
 
-/** Grows 0f -> 1f the first time a page is shown, and sits at 1f on a revisit. */
+/**
+ * Grows 0f -> 1f the first time a page is shown, and sits at 1f on a revisit. A lambda, read by
+ * the charts in their draw code: the intro redraws them without recomposing their sections.
+ */
 @Composable
-internal fun introProgress(animate: Boolean): Float {
+internal fun introProgress(animate: Boolean): () -> Float {
     val progress = remember { Animatable(0f) }
     LaunchedEffect(animate) {
         if (animate) progress.animateTo(1f, tween(durationMillis = 450)) else progress.snapTo(1f)
     }
-    return progress.value
+    return remember(progress) { { progress.value } }
 }
 
 internal fun colorOf(mode: AnalysisMode): Color = if (mode == AnalysisMode.INCOME) IncomeGreen else ExpenseRed
@@ -102,7 +105,7 @@ fun DonutChart(
     centerDelta: String,
     centerDeltaColor: Color,
     onSelect: (Long?) -> Unit,
-    progress: Float,
+    progress: () -> Float,
     modifier: Modifier = Modifier,
 ) {
     val outline = MaterialTheme.colorScheme.onSurfaceVariant
@@ -140,7 +143,7 @@ fun DonutChart(
                     drawArc(
                         color = Color(slice.color),
                         startAngle = slice.startAngle,
-                        sweepAngle = slice.sweepAngle * progress,
+                        sweepAngle = slice.sweepAngle * progress(),
                         useCenter = false,
                         topLeft = topLeft,
                         size = arcSize,
@@ -247,7 +250,7 @@ private fun sliceAt(rings: List<DonutUi>, tap: Offset, width: Float, height: Flo
  * axis rescales to whichever kind the mode switch shows, so a single kind always fills the chart.
  */
 @Composable
-fun PaceChart(pace: PaceUi, mode: AnalysisMode, zero: Boolean, progress: Float, modifier: Modifier = Modifier) {
+fun PaceChart(pace: PaceUi, mode: AnalysisMode, zero: Boolean, progress: () -> Float, modifier: Modifier = Modifier) {
     val gridColor = MaterialTheme.colorScheme.outlineVariant
     val fadedColor = MaterialTheme.colorScheme.onSurfaceVariant
     val axisColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -306,7 +309,7 @@ fun PaceChart(pace: PaceUi, mode: AnalysisMode, zero: Boolean, progress: Float, 
             if (color == null) {
                 drawPath(pathOf(points[index]), fadedColor, alpha = hit.alpha(index, 0.4f), style = Stroke(3f * grow, pathEffect = DashEffect))
             } else {
-                drawPath(pathOf(points[index]), color, alpha = hit.alpha(index, progress), style = Stroke(5f * grow))
+                drawPath(pathOf(points[index]), color, alpha = hit.alpha(index, progress()), style = Stroke(5f * grow))
             }
         }
         hit?.let {
@@ -534,7 +537,7 @@ fun MonthBars(
     average: Long,
     zero: Boolean,
     onSelect: (Int) -> Unit,
-    progress: Float,
+    progress: () -> Float,
     modifier: Modifier = Modifier,
 ) {
     val axisColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -584,7 +587,7 @@ fun MonthBars(
             val alpha = if (bar.selected || bars.none { it.selected }) 1f else 0.4f
             // Positive grows up from the baseline, negative down.
             fun drawBar(value: Long, color: Color) {
-                val grown = (baseline - y(value)) * progress
+                val grown = (baseline - y(value)) * progress()
                 drawRect(color, Offset(x, if (grown >= 0f) baseline - grown else baseline), Size(barWidth, abs(grown)), alpha = alpha)
             }
             if (diverging) {
@@ -615,11 +618,11 @@ fun MonthBars(
 
 /** One diverging row: increases run right, decreases left. */
 @Composable
-fun MoverBar(fraction: Float, increase: Boolean, kindColor: Color, progress: Float, modifier: Modifier = Modifier) {
+fun MoverBar(fraction: Float, increase: Boolean, kindColor: Color, progress: () -> Float, modifier: Modifier = Modifier) {
     val gridColor = MaterialTheme.colorScheme.outlineVariant
     Canvas(modifier = modifier) {
         val centre = size.width / 2f
-        val width = fraction * centre * progress
+        val width = fraction * centre * progress()
         drawRect(
             color = kindColor,
             topLeft = Offset(if (increase) centre else centre - width, size.height * 0.2f),
@@ -683,7 +686,7 @@ fun HeatmapGrid(
 
 /** Average spend per weekday. Unless [zero], the axis fits the bars, which then grow from the bottom of the plot. */
 @Composable
-fun WeekdayBars(bars: List<WeekdayBar>, labels: List<String>, zero: Boolean, progress: Float, modifier: Modifier = Modifier) {
+fun WeekdayBars(bars: List<WeekdayBar>, labels: List<String>, zero: Boolean, progress: () -> Float, modifier: Modifier = Modifier) {
     val axisColor = MaterialTheme.colorScheme.onSurfaceVariant
     val gridColor = MaterialTheme.colorScheme.outlineVariant
     val style = MaterialTheme.typography.labelSmall
@@ -708,7 +711,7 @@ fun WeekdayBars(bars: List<WeekdayBar>, labels: List<String>, zero: Boolean, pro
             drawText(label, color = axisColor, topLeft = Offset(plotWidth + AxisGap.toPx(), lineY - label.size.height / 2f))
         }
         bars.forEachIndexed { index, bar ->
-            val height = (baseline - y(bar.average)).coerceAtLeast(0f) * progress
+            val height = (baseline - y(bar.average)).coerceAtLeast(0f) * progress()
             drawRect(
                 color = ExpenseRed,
                 topLeft = Offset(index * slot + (slot - barWidth) / 2f, baseline - height),
@@ -730,7 +733,7 @@ fun WeekdayBars(bars: List<WeekdayBar>, labels: List<String>, zero: Boolean, pro
 
 /** Two bars per bucket: share of transactions next to share of money. */
 @Composable
-fun BucketBars(bucket: SizeBucket, progress: Float, modifier: Modifier = Modifier) {
+fun BucketBars(bucket: SizeBucket, progress: () -> Float, modifier: Modifier = Modifier) {
     val countColor = MaterialTheme.colorScheme.primary
     val track = MaterialTheme.colorScheme.surfaceVariant
     Canvas(modifier = modifier) {
@@ -743,7 +746,7 @@ fun BucketBars(bucket: SizeBucket, progress: Float, modifier: Modifier = Modifie
                 drawRoundRect(
                     color = color,
                     topLeft = Offset(0f, y),
-                    size = Size(size.width * (percent / 100f) * progress, barHeight),
+                    size = Size(size.width * (percent / 100f) * progress(), barHeight),
                     cornerRadius = CornerRadius(barHeight / 2f),
                 )
             }
@@ -754,7 +757,7 @@ fun BucketBars(bucket: SizeBucket, progress: Float, modifier: Modifier = Modifie
 
 /** A single filled bar on a track, used by the transfer rows. */
 @Composable
-fun TransferBar(fraction: Float, progress: Float, modifier: Modifier = Modifier) {
+fun TransferBar(fraction: Float, progress: () -> Float, modifier: Modifier = Modifier) {
     val track = MaterialTheme.colorScheme.surfaceVariant
     Canvas(modifier = modifier) {
         val barHeight = size.height * 0.5f
@@ -763,7 +766,7 @@ fun TransferBar(fraction: Float, progress: Float, modifier: Modifier = Modifier)
         drawRoundRect(
             color = TransferBlue,
             topLeft = Offset(0f, y),
-            size = Size(size.width * fraction * progress, barHeight),
+            size = Size(size.width * fraction * progress(), barHeight),
             cornerRadius = CornerRadius(barHeight / 2f),
         )
     }
@@ -781,7 +784,7 @@ private fun DrawScope.drawTrackBar(y: Float, height: Float, width: Float, color:
  * otherwise they start at January's total and the axis fits the lines.
  */
 @Composable
-fun YoyChart(series: YoySeries, year: Int, mode: AnalysisMode, zero: Boolean, progress: Float, modifier: Modifier = Modifier) {
+fun YoyChart(series: YoySeries, year: Int, mode: AnalysisMode, zero: Boolean, progress: () -> Float, modifier: Modifier = Modifier) {
     val color = colorOf(mode)
     val fadedColor = MaterialTheme.colorScheme.onSurfaceVariant
     val gridColor = MaterialTheme.colorScheme.outlineVariant
@@ -832,7 +835,7 @@ fun YoyChart(series: YoySeries, year: Int, mode: AnalysisMode, zero: Boolean, pr
         }
         val hit = hoverHit(scrub, points, HoverStickiness.toPx())
         drawPath(pathOf(points[0]), fadedColor, alpha = hit.alpha(0, 0.4f), style = Stroke(3f * hit.grow(0), pathEffect = DashEffect))
-        drawPath(pathOf(points[1]), color, alpha = hit.alpha(1, progress), style = Stroke(5f * hit.grow(1)))
+        drawPath(pathOf(points[1]), color, alpha = hit.alpha(1, progress()), style = Stroke(5f * hit.grow(1)))
         hit?.let {
             val month = it.point - lead
             val date = if (month < 0) Year.of(year).atDay(1) else YearMonth.of(year, month + 1).atEndOfMonth()
@@ -854,7 +857,7 @@ fun ColorDot(color: Color, modifier: Modifier = Modifier, size: Dp = 10.dp) {
 
 /** One line per account through its month-end balances; [zero] makes the axis take in 0. */
 @Composable
-fun BalanceChart(balance: BalanceTrendUi, labels: List<String>, zero: Boolean, progress: Float, modifier: Modifier = Modifier) {
+fun BalanceChart(balance: BalanceTrendUi, labels: List<String>, zero: Boolean, progress: () -> Float, modifier: Modifier = Modifier) {
     val gridColor = MaterialTheme.colorScheme.outlineVariant
     val axisColor = MaterialTheme.colorScheme.onSurfaceVariant
     val style = MaterialTheme.typography.labelSmall
@@ -885,7 +888,7 @@ fun BalanceChart(balance: BalanceTrendUi, labels: List<String>, zero: Boolean, p
         xLabels.forEachIndexed { index, label ->
             drawText(label, color = axisColor, topLeft = Offset(x(index) - label.size.width / 2f, plotHeight + AxisGap.toPx()))
         }
-        drawBalanceLines(balance.lines, ::x, ::y, scrub, progress, look, plotWidth, plotHeight) { labels.getOrElse(it) { "" } }
+        drawBalanceLines(balance.lines, ::x, ::y, scrub, progress(), look, plotWidth, plotHeight) { labels.getOrElse(it) { "" } }
     }
 }
 
@@ -954,7 +957,7 @@ fun DailyBalanceChart(
     lines: List<BalanceLine>,
     daysInMonth: Int,
     zero: Boolean,
-    progress: Float,
+    progress: () -> Float,
     modifier: Modifier = Modifier,
     gapColors: Pair<Color, Color>? = null,
     pad: Boolean = true,
@@ -994,7 +997,7 @@ fun DailyBalanceChart(
         if (gapColors != null && lines.size >= 2) {
             drawGap(lines[0].values, lines[1].values, ::x, ::y, gapColors.first, gapColors.second)
         }
-        drawBalanceLines(lines, ::x, ::y, scrub, progress, look, plotWidth, plotHeight) {
+        drawBalanceLines(lines, ::x, ::y, scrub, progress(), look, plotWidth, plotHeight) {
             String.format(Locale.US, "%02d", it + 1)
         }
     }

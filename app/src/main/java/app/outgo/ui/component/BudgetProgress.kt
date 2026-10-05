@@ -143,7 +143,7 @@ private fun PacePanel(color: Color, current: Long, total: Long, lineName: String
             lines,
             daysInMonth,
             zero = true,
-            progress = 1f,
+            progress = { 1f },
             modifier = Modifier.fillMaxWidth().height(140.dp),
             gapColors = if (greenWhenLower) ExpenseRed to IncomeGreen else IncomeGreen to ExpenseRed,
             pad = false,

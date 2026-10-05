@@ -10,9 +10,13 @@ import app.outgo.data.db.entity.BudgetMonthEntity
 import app.outgo.domain.BudgetKind
 import app.outgo.domain.BudgetOffset
 import app.outgo.util.MonthKey
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.withContext
 import java.time.YearMonth
 import java.time.ZoneId
@@ -39,14 +43,26 @@ class BudgetRepository(
     private val tradeRepository: TradeRepository,
 ) {
 
-    fun observeWithProgress(monthKey: Int): Flow<List<BudgetWithProgress>> = combine(
-        budgetDao.observeBudgetsWithProgress(monthKey, MonthKey.minus(monthKey, 1)),
-        budgetDao.observeMonths(),
-        budgetDao.observeCarrySpend(monthKey),
-    ) { budgets, months, spend ->
-        val carry = budgetCarry(budgets, months, spend, monthKey)
-        budgets.map { b -> carry[b.categoryId]?.let { b.copy(carry = it) } ?: b }
+    /**
+     * Budgets with [monthKey]'s settings, progress and carried offsets. Home, Category, Trade and
+     * Analysis all watch this month at once: they share one live query set (and one carry walk,
+     * off the main thread) per month instead of each running its own after every trade write.
+     */
+    fun observeWithProgress(monthKey: Int): Flow<List<BudgetWithProgress>> = synchronized(progress) {
+        progress.getOrPut(monthKey) {
+            combine(
+                budgetDao.observeBudgetsWithProgress(monthKey, MonthKey.minus(monthKey, 1)),
+                budgetDao.observeMonths(),
+                budgetDao.observeCarrySpend(monthKey),
+            ) { budgets, months, spend ->
+                val carry = budgetCarry(budgets, months, spend, monthKey)
+                budgets.map { b -> carry[b.categoryId]?.let { b.copy(carry = it) } ?: b }
+            }.shareIn(shareScope, SharingStarted.WhileSubscribed(replayExpirationMillis = 0), replay = 1)
+        }
     }
+
+    private val progress = HashMap<Int, Flow<List<BudgetWithProgress>>>()
+    private val shareScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     suspend fun findByCategory(categoryId: Long): BudgetEntity? =
         withContext(Dispatchers.IO) { budgetDao.findByCategory(categoryId) }
@@ -156,6 +172,8 @@ class BudgetRepository(
      */
     suspend fun settleAccountOffsets() = withContext(Dispatchers.IO) {
         val month = MonthKey.current()
+        // After a month's first start every budget is settled up to last month: nothing to walk.
+        if (budgetDao.countUnsettled(MonthKey.minus(month, 1)) == 0) return@withContext
         val months = budgetDao.months()
         if (months.none { it.underFromAccount != null }) return@withContext
         val budgets = budgetDao.budgetsWithProgress(month, MonthKey.minus(month, 1))

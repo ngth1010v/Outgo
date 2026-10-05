@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.ZoneId
@@ -248,12 +249,18 @@ class AnalysisViewModel(
                     // lastN(month, 3) already contains the previous month, so the pace line and
                     // the 3-month weekday average share a single query.
                     val months = MonthKey.lastN(page.monthKey, 3)
-                    val rows = tradeRepository.amountsAndTimesForMonths(months, TRADE_TYPES)
-                    val transfers = tradeRepository.transferTotalsForMonths(listOf(page.monthKey))
                     val trend = MonthKey.lastN(page.monthKey, TREND_MONTH_COUNT)
-                    val flows = tradeRepository.accountFlows(trend.first(), page.monthKey)
-                    val opening = tradeRepository.balancesBefore(trend.first())
-                    val moves = tradeRepository.accountMovesForMonth(page.monthKey)
+                    // Independent reads: run side by side (WAL lets them share the database).
+                    val rowsAsync = async { tradeRepository.amountsAndTimesForMonths(months, TRADE_TYPES) }
+                    val transfersAsync = async { tradeRepository.transferTotalsForMonths(listOf(page.monthKey)) }
+                    val flowsAsync = async { tradeRepository.accountFlows(trend.first(), page.monthKey) }
+                    val openingAsync = async { tradeRepository.balancesBefore(trend.first()) }
+                    val movesAsync = async { tradeRepository.accountMovesForMonth(page.monthKey) }
+                    val rows = rowsAsync.await()
+                    val transfers = transfersAsync.await()
+                    val flows = flowsAsync.await()
+                    val opening = openingAsync.await()
+                    val moves = movesAsync.await()
                     val stage = withContext(Dispatchers.Default) {
                         val current = rows.filter { monthKeyOf(it.occurredAt, zone) == page.monthKey }
                         val previous = listOf(MonthKey.minus(page.monthKey, 1))
@@ -266,13 +273,18 @@ class AnalysisViewModel(
                 }
                 is AnalysisPage.Year -> {
                     val months = monthsOfYear(page.year)
-                    val rows = tradeRepository.amountsAndTimesForMonths(months, TRADE_TYPES)
-                    val transfers = tradeRepository.transferTotalsForMonths(months)
                     val counted = countedMonths(page.year, zone)
                     val trend = months.take(counted)
                     val previous = monthsOfYear(page.year - 1).take(counted)
-                    val flows = tradeRepository.accountFlows(previous.first(), trend.last())
-                    val opening = tradeRepository.balancesBefore(trend.first())
+                    // Independent reads: run side by side (WAL lets them share the database).
+                    val rowsAsync = async { tradeRepository.amountsAndTimesForMonths(months, TRADE_TYPES) }
+                    val transfersAsync = async { tradeRepository.transferTotalsForMonths(months) }
+                    val flowsAsync = async { tradeRepository.accountFlows(previous.first(), trend.last()) }
+                    val openingAsync = async { tradeRepository.balancesBefore(trend.first()) }
+                    val rows = rowsAsync.await()
+                    val transfers = transfersAsync.await()
+                    val flows = flowsAsync.await()
+                    val opening = openingAsync.await()
                     val stage = withContext(Dispatchers.Default) {
                         val inYear = rows.filter { monthKeyOf(it.occurredAt, zone) in trend }
                         val accountsUi = buildAccounts(
