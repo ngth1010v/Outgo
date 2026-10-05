@@ -71,4 +71,15 @@ data class TradeEntity(
      */
     @ColumnInfo(name = "pending_amount")
     val pendingAmount: Long? = null,
+    /**
+     * On an automatic budget-offset transfer: the category of the budget whose month [offsetMonth]
+     * (yyyyMM) left the unspent amount it moves. Such a transfer follows that budget's settings (see
+     * BudgetRepository.setMonth), shows that budget as its source, and can't be edited by hand.
+     * Not [categoryId]: that would count the transfer as the category's spending. Null on every
+     * other trade.
+     */
+    @ColumnInfo(name = "offset_category_id")
+    val offsetCategoryId: Long? = null,
+    @ColumnInfo(name = "offset_month")
+    val offsetMonth: Int? = null,
 )

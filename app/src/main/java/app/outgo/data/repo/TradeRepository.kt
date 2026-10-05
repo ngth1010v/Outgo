@@ -107,7 +107,15 @@ class TradeRepository(private val tradeDao: TradeDao) {
      * least that much, otherwise records a 0 transfer holding [amount] as pending (see [settle]).
      * Skipped when either account is gone.
      */
-    suspend fun insertOffsetTransfer(fromAccountId: Long, toAccountId: Long, amount: Long, occurredAt: Long, note: String) =
+    suspend fun insertOffsetTransfer(
+        fromAccountId: Long,
+        toAccountId: Long,
+        amount: Long,
+        occurredAt: Long,
+        note: String,
+        categoryId: Long,
+        month: Int,
+    ) =
         withContext(Dispatchers.IO) {
             val balance = tradeDao.accountBalance(fromAccountId) ?: return@withContext
             tradeDao.accountBalance(toAccountId) ?: return@withContext
@@ -126,10 +134,41 @@ class TradeRepository(private val tradeDao: TradeDao) {
                     createdAt = now,
                     updatedAt = now,
                     pendingAmount = if (covered) null else amount,
+                    offsetCategoryId = categoryId,
+                    offsetMonth = month,
                 ),
             )
             signalChange()
         }
+
+    /**
+     * Brings an automatic transfer in line with its budget month's settings: [amount] between these
+     * accounts, or pending as in [insertOffsetTransfer] when the source can't cover it (counting
+     * what this transfer already took from it). Left as it is when either account is gone.
+     */
+    suspend fun updateOffsetTransfer(trade: TradeEntity, fromAccountId: Long, toAccountId: Long, amount: Long, note: String) =
+        withContext(Dispatchers.IO) {
+            val balance = tradeDao.accountBalance(fromAccountId) ?: return@withContext
+            tradeDao.accountBalance(toAccountId) ?: return@withContext
+            val covered = balance + (if (trade.accountId == fromAccountId) trade.amount else 0L) >= amount
+            tradeDao.update(
+                trade.copy(
+                    accountId = fromAccountId,
+                    toAccountId = toAccountId,
+                    amount = if (covered) amount else 0L,
+                    pendingAmount = if (covered) null else amount,
+                    note = note,
+                    updatedAt = System.currentTimeMillis(),
+                ),
+            )
+            signalChange()
+        }
+
+    suspend fun offsetTransfersFrom(fromMonth: Int): List<TradeEntity> =
+        withContext(Dispatchers.IO) { tradeDao.offsetTransfersFrom(fromMonth) }
+
+    suspend fun unlinkedOffsetTransfer(fromAccountId: Long, toAccountId: Long, monthText: String): TradeEntity? =
+        withContext(Dispatchers.IO) { tradeDao.unlinkedOffsetTransfer(fromAccountId, toAccountId, monthText) }
 
     /**
      * Retries a pending offset transfer: moves the whole amount now, dated now, when the source

@@ -39,6 +39,8 @@ data class TradeUiState(
     val isLoading: Boolean = true,
     val isSaving: Boolean = false,
     val editingTradeId: Long? = null,
+    /** The edited trade is an automatic budget-offset transfer: it follows its budget, so it is read-only. */
+    val locked: Boolean = false,
 ) {
     val isEditing: Boolean get() = editingTradeId != null
     val picker: CategoryPicker get() = pickers[type] ?: CategoryPicker(emptyList(), emptyList())
@@ -114,7 +116,8 @@ class TradeViewModel(
 
     private suspend fun loadForEdit(tradeId: Long) {
         val trade = tradeRepository.findById(tradeId) ?: return
-        val category = trade.categoryId?.let { categoryRepository.findById(it) }
+        // An automatic transfer shows the budget it moves the unspent amount of (read-only).
+        val category = (trade.categoryId ?: trade.offsetCategoryId)?.let { categoryRepository.findById(it) }
         val parent = category?.parentId?.let { categoryRepository.findById(it) }
         _state.update {
             it.copy(
@@ -126,6 +129,7 @@ class TradeViewModel(
                 selectedToAccountId = trade.toAccountId,
                 occurredAt = trade.occurredAt,
                 note = trade.note.orEmpty(),
+                locked = trade.offsetMonth != null,
             )
         }
     }
@@ -202,7 +206,7 @@ class TradeViewModel(
 
     fun save() {
         val s = _state.value
-        if (!s.isValid || s.isSaving) return
+        if (!s.isValid || s.isSaving || s.locked) return
         val draft = TradeDraft(
             type = s.type,
             amount = s.amount,
@@ -234,6 +238,7 @@ class TradeViewModel(
 
     fun deleteEditingTrade() {
         val id = _state.value.editingTradeId ?: return
+        if (_state.value.locked) return
         viewModelScope.launch {
             tradeRepository.delete(id)
             _events.emit(TradeEvent.DeletedAndClose)

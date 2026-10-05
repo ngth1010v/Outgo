@@ -48,7 +48,7 @@ import app.outgo.domain.IconKind
         BudgetMonthEntity::class,
         SavingsMonthEntity::class,
     ],
-    version = 10,
+    version = 11,
     exportSchema = true,
 )
 abstract class OutgoDatabase : RoomDatabase() {
@@ -62,7 +62,7 @@ abstract class OutgoDatabase : RoomDatabase() {
 
     companion object {
         const val FILE_NAME = "outgo.sqlite"
-        const val SCHEMA_VERSION = 10
+        const val SCHEMA_VERSION = 11
 
         // "OUTO" packed into 4 bytes, stamped once via PRAGMA application_id so a
         // restore can reject a file that isn't an Outgo backup before touching real data.
@@ -165,11 +165,30 @@ abstract class OutgoDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // The trade triggers list their columns, so they don't need recreating.
+                db.execSQL("ALTER TABLE trade ADD COLUMN offset_category_id INTEGER")
+                db.execSQL("ALTER TABLE trade ADD COLUMN offset_month INTEGER")
+                // Link the automatic transfers made so far, by their "<budget name> · MM/yyyy" note.
+                // One whose budget was renamed since stays unlinked (an ordinary, editable transfer).
+                db.execSQL(
+                    "UPDATE trade SET offset_category_id = (SELECT b.category_id FROM budget b JOIN category c ON c.id = b.category_id " +
+                        "WHERE trade.note = COALESCE(b.name, c.name) || ' · ' || substr(trade.note, -7)) " +
+                        "WHERE type = 4 AND category_id IS NULL AND note LIKE '% · __/____'",
+                )
+                db.execSQL(
+                    "UPDATE trade SET offset_month = CAST(substr(note, -4) AS INTEGER) * 100 + CAST(substr(note, -7, 2) AS INTEGER) " +
+                        "WHERE offset_category_id IS NOT NULL",
+                )
+            }
+        }
+
         fun build(context: Context): OutgoDatabase =
             Room.databaseBuilder(context.applicationContext, OutgoDatabase::class.java, FILE_NAME)
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
                 .addCallback(OutgoCallback)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
                 .build()
     }
 }

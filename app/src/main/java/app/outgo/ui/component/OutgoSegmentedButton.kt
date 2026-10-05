@@ -3,6 +3,7 @@ package app.outgo.ui.component
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRowScope
@@ -31,6 +32,12 @@ fun SingleChoiceSegmentedButtonRowScope.OutgoSegmentedButton(
         onClick = onClick,
         shape = shape,
         enabled = enabled,
+        // Disabled borders keep the enabled outline: the selected segment is drawn over its
+        // neighbours' edges, and Material's faint disabled border left a gap in the frame there.
+        colors = SegmentedButtonDefaults.colors(
+            disabledActiveBorderColor = MaterialTheme.colorScheme.outline,
+            disabledInactiveBorderColor = MaterialTheme.colorScheme.outline,
+        ),
         icon = {
             SegmentedButtonDefaults.Icon(
                 active = selected,

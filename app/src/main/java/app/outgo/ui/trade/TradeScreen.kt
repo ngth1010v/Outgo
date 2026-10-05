@@ -40,6 +40,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.background
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -202,76 +205,104 @@ private fun TradeForm(
     Column(modifier) {
         Spacer(Modifier.height(16.dp))
 
-        AmountField(
-            amount = state.amount,
-            onAmountChange = viewModel::onAmountChange,
-            isIncome = state.type == CategoryKind.INCOME,
-            isTransfer = state.isTransfer,
-            modifier = Modifier.padding(vertical = 8.dp),
-        )
+        // An automatic transfer shows its fields but takes no input: a layer on top eats the taps.
+        Box {
+            Column {
+                AmountField(
+                    amount = state.amount,
+                    onAmountChange = viewModel::onAmountChange,
+                    isIncome = state.type == CategoryKind.INCOME,
+                    isTransfer = state.isTransfer,
+                    modifier = Modifier.padding(vertical = 8.dp),
+                )
 
-        if (!state.isTransfer) {
-            SelectedCategoryChip(state.selectedParentCategory, state.selectedCategory)
-            Spacer(Modifier.height(8.dp))
+                if (!state.isTransfer) {
+                    SelectedCategoryChip(state.selectedParentCategory, state.selectedCategory)
+                    Spacer(Modifier.height(8.dp))
 
-            CategoryPickerSection(
-                title = stringResource(R.string.trade_recent),
-                categories = state.picker.recent,
-                selectedId = state.selectedCategory?.id,
-                onSelect = viewModel::onCategorySelected,
-                onSeeAll = onSeeAll,
-            )
-            Spacer(Modifier.height(16.dp))
-            CategoryPickerSection(
-                title = stringResource(R.string.trade_top_used),
-                categories = state.picker.top,
-                selectedId = state.selectedCategory?.id,
-                onSelect = viewModel::onCategorySelected,
-            )
-            Spacer(Modifier.height(16.dp))
+                    CategoryPickerSection(
+                        title = stringResource(R.string.trade_recent),
+                        categories = state.picker.recent,
+                        selectedId = state.selectedCategory?.id,
+                        onSelect = viewModel::onCategorySelected,
+                        onSeeAll = onSeeAll,
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    CategoryPickerSection(
+                        title = stringResource(R.string.trade_top_used),
+                        categories = state.picker.top,
+                        selectedId = state.selectedCategory?.id,
+                        onSelect = viewModel::onCategorySelected,
+                    )
+                    Spacer(Modifier.height(16.dp))
+                }
+
+                AccountDropdown(
+                    label = if (state.isTransfer) stringResource(R.string.trade_from_account_label) else stringResource(R.string.trade_account_label),
+                    accounts = state.accounts,
+                    selectedAccount = state.selectedAccount,
+                    onSelect = { viewModel.onAccountSelected(it.id) },
+                )
+                Spacer(Modifier.height(16.dp))
+
+                if (state.isTransfer) {
+                    BudgetDropdown(
+                        budgets = state.budgetOptions,
+                        selected = state.selectedCategory,
+                        onSelect = viewModel::onBudgetSelected,
+                    )
+                    Spacer(Modifier.height(16.dp))
+
+                    AccountDropdown(
+                        label = stringResource(R.string.trade_to_account_label),
+                        accounts = state.accounts,
+                        selectedAccount = state.selectedToAccount,
+                        onSelect = { viewModel.onToAccountSelected(it.id) },
+                    )
+                    Spacer(Modifier.height(16.dp))
+                }
+
+                DateTimeRow(
+                    occurredAt = state.occurredAt,
+                    onDateChange = viewModel::onDateChange,
+                    onTimeChange = viewModel::onTimeChange,
+                )
+                Spacer(Modifier.height(16.dp))
+
+                OutlinedTextField(
+                    value = state.note,
+                    onValueChange = viewModel::onNoteChange,
+                    label = { Text(stringResource(R.string.trade_note_hint)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            if (state.locked) Box(Modifier.matchParentSize().pointerInput(Unit) { detectTapGestures { } })
         }
-
-        AccountDropdown(
-            label = if (state.isTransfer) stringResource(R.string.trade_from_account_label) else stringResource(R.string.trade_account_label),
-            accounts = state.accounts,
-            selectedAccount = state.selectedAccount,
-            onSelect = { viewModel.onAccountSelected(it.id) },
-        )
         Spacer(Modifier.height(16.dp))
 
-        if (state.isTransfer) {
-            BudgetDropdown(
-                budgets = state.budgetOptions,
-                selected = state.selectedCategory,
-                onSelect = viewModel::onBudgetSelected,
+        if (state.locked) {
+            Text(
+                stringResource(R.string.trade_auto_transfer_locked),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(12.dp))
+                    .padding(12.dp),
             )
             Spacer(Modifier.height(16.dp))
-
-            AccountDropdown(
-                label = stringResource(R.string.trade_to_account_label),
-                accounts = state.accounts,
-                selectedAccount = state.selectedToAccount,
-                onSelect = { viewModel.onToAccountSelected(it.id) },
-            )
-            Spacer(Modifier.height(16.dp))
+            TextButton(
+                onClick = onClose,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(20.dp)),
+            ) {
+                Text(stringResource(R.string.common_close))
+            }
+            return@Column
         }
-
-        DateTimeRow(
-            occurredAt = state.occurredAt,
-            onDateChange = viewModel::onDateChange,
-            onTimeChange = viewModel::onTimeChange,
-        )
-        Spacer(Modifier.height(16.dp))
-
-        OutlinedTextField(
-            value = state.note,
-            onValueChange = viewModel::onNoteChange,
-            label = { Text(stringResource(R.string.trade_note_hint)) },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(16.dp))
 
         if (state.isEditing) {
             TextButton(onClick = onClose, modifier = Modifier.fillMaxWidth()) {

@@ -269,6 +269,7 @@
     <string name="common_save">Save</string>
     <string name="common_cancel">Cancel</string>
     <string name="common_close">Close</string>
+    <string name="trade_auto_transfer_locked">This is an automatic transfer: it moves a budget month\'s unspent amount and follows that budget. To change it, change the budget\'s settings for that month.</string>
     <string name="month_picker_label">Choose month</string>
     <string name="month_picker_prev_year">Previous year</string>
     <string name="month_picker_next_year">Next year</string>

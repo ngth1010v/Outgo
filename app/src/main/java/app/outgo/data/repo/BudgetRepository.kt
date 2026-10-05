@@ -13,7 +13,6 @@ import app.outgo.util.MonthKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.time.YearMonth
 import java.time.ZoneId
@@ -68,6 +67,7 @@ class BudgetRepository(
      * Saves [setting] as [categoryId]'s budget from [monthKey] on, creating the budget on first use.
      * Later months without a snapshot of their own follow it, except after a past month: there the
      * month after first gets a snapshot of what it had, so a past edit changes only that month.
+     * A month whose account transfer was already made gets it redone, see [resyncAccountOffsets].
      */
     suspend fun setMonth(categoryId: Long, monthKey: Int, setting: BudgetSetting) = withContext(Dispatchers.IO) {
         db.withTransaction {
@@ -102,6 +102,48 @@ class BudgetRepository(
                     underToAccount = setting.underToAccount,
                 ),
             )
+            if (monthKey <= (budget.settledMonth ?: Int.MIN_VALUE)) resyncAccountOffsets(monthKey)
+        }
+    }
+
+    /**
+     * Makes the automatic transfers already made for months from [fromMonth] on match what the
+     * budgets' monthly settings give now: the amount follows, a month that no longer leaves money
+     * to move loses its transfer, and one that now does gets it. Offsets carry across budgets and
+     * months, so every budget is checked, not only the edited one. A transfer whose budget is gone
+     * is left alone.
+     */
+    private suspend fun resyncAccountOffsets(fromMonth: Int) {
+        val month = MonthKey.current()
+        val budgets = budgetDao.budgetsWithProgress(month, MonthKey.minus(month, 1))
+        val months = budgetDao.months()
+        val spend = budgetDao.carrySpend(month)
+        val due = ArrayList<OffsetMove>()
+        budgetCarry(budgets, months, spend, month) { budget, setting, m, left ->
+            if (m >= fromMonth && m <= (budget.settledMonth ?: Int.MIN_VALUE)) due += OffsetMove(budget, setting, m, left)
+        }
+        val ids = budgets.mapNotNull { it.categoryId }.toSet()
+        val linked = tradeRepository.offsetTransfersFrom(fromMonth).filter { it.offsetCategoryId in ids }
+            .groupBy { it.offsetCategoryId!! to it.offsetMonth!! }
+        val made = linked.mapValues { it.value.first() }
+        // Removals first: they give money back to source accounts the updates may need. A month
+        // only ever has one transfer, so any second one for it goes too.
+        val kept = due.map { it.budget.categoryId!! to it.month }.toSet()
+        linked.forEach { (key, trades) ->
+            (if (key in kept) trades.drop(1) else trades).forEach { tradeRepository.delete(it.id) }
+        }
+        due.sortedBy { it.month }.forEach { move ->
+            val from = move.setting.underFromAccount!!
+            val to = move.setting.underToAccount!!
+            val note = offsetNote(move.budget.displayName, move.month)
+            val trade = made[move.budget.categoryId!! to move.month]
+                ?: tradeRepository.unlinkedOffsetTransfer(from, to, monthText(move.month))
+                    ?.copy(offsetCategoryId = move.budget.categoryId, offsetMonth = move.month)
+            if (trade != null) {
+                tradeRepository.updateOffsetTransfer(trade, from, to, move.left, note)
+            } else {
+                tradeRepository.insertOffsetTransfer(from, to, move.left, firstOfNext(move.month), note, move.budget.categoryId!!, move.month)
+            }
         }
     }
 
@@ -114,29 +156,41 @@ class BudgetRepository(
      */
     suspend fun settleAccountOffsets() = withContext(Dispatchers.IO) {
         val month = MonthKey.current()
-        val months = budgetDao.observeMonths().first()
+        val months = budgetDao.months()
         if (months.none { it.underFromAccount != null }) return@withContext
-        val budgets = budgetDao.observeBudgetsWithProgress(month, MonthKey.minus(month, 1)).first()
-        val spend = budgetDao.observeCarrySpend(month).first()
-        val moves = ArrayList<Pair<String, Triple<BudgetMonthEntity, Int, Long>>>()
+        val budgets = budgetDao.budgetsWithProgress(month, MonthKey.minus(month, 1))
+        val spend = budgetDao.carrySpend(month)
+        val moves = ArrayList<OffsetMove>()
         budgetCarry(budgets, months, spend, month) { budget, setting, m, left ->
-            if (m > (budget.settledMonth ?: Int.MIN_VALUE)) moves += budget.displayName to Triple(setting, m, left)
+            if (m > (budget.settledMonth ?: Int.MIN_VALUE)) moves += OffsetMove(budget, setting, m, left)
         }
         db.withTransaction {
             // Oldest first, so each month's balance check sees the earlier months' transfers.
-            moves.sortedBy { it.second.second }.forEach { (name, move) ->
-                val (setting, m, left) = move
-                val firstOfNext = YearMonth.of(m / 100, m % 100).plusMonths(1).atDay(1)
-                    .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            moves.sortedBy { it.month }.forEach { move ->
                 tradeRepository.insertOffsetTransfer(
-                    setting.underFromAccount!!, setting.underToAccount!!, left, firstOfNext,
-                    note = name + " · " + String.format(Locale.US, "%02d/%d", m % 100, m / 100),
+                    move.setting.underFromAccount!!, move.setting.underToAccount!!, move.left, firstOfNext(move.month),
+                    note = offsetNote(move.budget.displayName, move.month),
+                    categoryId = move.budget.categoryId!!,
+                    month = move.month,
                 )
             }
             budgetDao.markAccountOffsetsSettled(MonthKey.minus(month, 1))
         }
     }
 }
+
+/** One month's unspent amount a budget moves to an account. */
+private class OffsetMove(val budget: BudgetWithProgress, val setting: BudgetMonthEntity, val month: Int, val left: Long)
+
+/** `09/2026`. */
+private fun monthText(month: Int) = String.format(Locale.US, "%02d/%d", month % 100, month / 100)
+
+/** An automatic transfer's note, e.g. "Food & Drink · 09/2026"; the 10 -> 11 migration matched on it. */
+private fun offsetNote(budgetName: String, month: Int) = budgetName + " · " + monthText(month)
+
+/** A month's automatic transfer is dated the 1st of the month after, local time. */
+private fun firstOfNext(month: Int): Long = YearMonth.of(month / 100, month % 100).plusMonths(1).atDay(1)
+    .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
 
 /**
  * Offset each budget (by category id) carries into [monthKey]. Walks month by month from the

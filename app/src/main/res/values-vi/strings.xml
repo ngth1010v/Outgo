@@ -258,6 +258,7 @@
     <string name="common_save">Lưu</string>
     <string name="common_cancel">Huỷ</string>
     <string name="common_close">Đóng</string>
+    <string name="trade_auto_transfer_locked">Đây là giao dịch chuyển tự động: chuyển phần chưa chi hết của một tháng ngân sách và đi theo ngân sách đó. Muốn đổi, hãy sửa cài đặt ngân sách của tháng đó.</string>
     <string name="month_picker_label">Chọn tháng</string>
     <string name="month_picker_prev_year">Năm trước</string>
     <string name="month_picker_next_year">Năm sau</string>

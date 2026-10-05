@@ -19,7 +19,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Icon
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.draw.shadow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -141,7 +143,8 @@ internal fun HistoryItem(
         }
         is HistoryListItem.Row -> TradeRow(
             trade = item.trade,
-            category = categoriesById[item.trade.categoryId],
+            // An automatic transfer shows the budget it moves the unspent amount of.
+            category = categoriesById[item.trade.categoryId ?: item.trade.offsetCategoryId],
             fromAccount = accountsById[item.trade.accountId],
             toAccount = accountsById[item.trade.toAccountId],
             onClick = { onOpenTrade(item.trade.id) },
@@ -274,7 +277,8 @@ private fun TransferIconStack(fromAccount: AccountEntity?, toAccount: AccountEnt
                     iconId = budget.iconId,
                     size = 17.25.dp,
                     color = budget.color,
-                    modifier = Modifier.align(Alignment.BottomEnd).offset(x = 3.5.dp, y = 5.75.dp),
+                    // A small shadow lifts the badge off the account icon it overlaps.
+                    modifier = Modifier.align(Alignment.BottomEnd).offset(x = 3.5.dp, y = 5.75.dp).shadow(2.dp, CircleShape),
                 )
             }
         }

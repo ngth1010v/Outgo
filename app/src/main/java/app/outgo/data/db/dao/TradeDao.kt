@@ -166,6 +166,24 @@ interface TradeDao {
     @Query("SELECT COUNT(*) FROM trade WHERE pending_amount IS NOT NULL")
     fun observePendingCount(): Flow<Int>
 
+    /** Automatic budget-offset transfers for months from [fromMonth] on. */
+    @Query("SELECT * FROM trade WHERE offset_month >= :fromMonth")
+    suspend fun offsetTransfersFrom(fromMonth: Int): List<TradeEntity>
+
+    /**
+     * An automatic transfer made before transfers were linked whose note no longer matched its
+     * budget's name: same accounts, note ending in " · [monthText]" (MM/yyyy).
+     */
+    @Query(
+        """
+        SELECT * FROM trade
+        WHERE type = 4 AND category_id IS NULL AND offset_month IS NULL
+          AND account_id = :fromAccountId AND to_account_id = :toAccountId AND note LIKE '% · ' || :monthText
+        LIMIT 1
+        """,
+    )
+    suspend fun unlinkedOffsetTransfer(fromAccountId: Long, toAccountId: Long, monthText: String): TradeEntity?
+
     @Query("SELECT balance FROM account WHERE id = :accountId")
     suspend fun accountBalance(accountId: Long): Long?
 }
