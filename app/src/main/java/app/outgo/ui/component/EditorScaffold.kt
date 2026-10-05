@@ -1,6 +1,7 @@
 package app.outgo.ui.component
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -25,6 +26,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -37,13 +40,15 @@ private val CloseButtonSize = 44.dp
  * Cancel / Save / Delete at the bottom, and a round cancel button fixed at the top right that
  * stays put while the fields scroll under it. [onDelete] null hides Delete (creating, not editing).
  * While [dirty], leaving by Cancel or the system Back asks first; see [rememberDiscardGuard].
+ * [onSave] null: an editor that saves as it goes (editing an existing item), so Cancel becomes
+ * Close and there is no Save.
  */
 @Composable
 fun EditorScaffold(
     title: String,
     onCancel: () -> Unit,
     dirty: Boolean,
-    onSave: () -> Unit,
+    onSave: (() -> Unit)?,
     saveEnabled: Boolean,
     onDelete: (() -> Unit)?,
     content: @Composable ColumnScope.() -> Unit,
@@ -52,7 +57,13 @@ fun EditorScaffold(
     Scaffold { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             // Scrollable so a field stays reachable above the keyboard.
-            Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding().padding(16.dp)) {
+            // A tap outside the fields drops their focus, so a field's blur check runs.
+            val focusManager = LocalFocusManager.current
+            Column(
+                modifier = Modifier.fillMaxSize()
+                    .pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } }
+                    .verticalScroll(rememberScrollState()).imePadding().padding(16.dp),
+            ) {
                 // Level with the close button, and clear of it.
                 Box(Modifier.fillMaxWidth().height(CloseButtonSize).padding(end = CloseButtonSize + 12.dp), contentAlignment = Alignment.CenterStart) {
                     val style = MaterialTheme.typography.titleMedium
@@ -63,10 +74,14 @@ fun EditorScaffold(
                 content()
 
                 Spacer(Modifier.height(16.dp))
-                OutlinedButton(onClick = cancel, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.common_cancel)) }
-                Spacer(Modifier.height(8.dp))
-                Button(onClick = onSave, enabled = saveEnabled, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.common_save))
+                OutlinedButton(onClick = cancel, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(if (onSave != null) R.string.common_cancel else R.string.common_close))
+                }
+                if (onSave != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Button(onClick = onSave, enabled = saveEnabled, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.common_save))
+                    }
                 }
                 if (onDelete != null) {
                     Spacer(Modifier.height(8.dp))

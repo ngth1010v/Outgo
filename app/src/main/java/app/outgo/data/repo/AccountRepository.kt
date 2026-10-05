@@ -5,11 +5,15 @@ import app.outgo.data.db.OutgoDatabase
 import app.outgo.data.db.dao.AccountDao
 import app.outgo.data.db.dao.AccountWithProgress
 import app.outgo.data.db.entity.AccountEntity
+import app.outgo.data.db.entity.SavingsMonthEntity
 import app.outgo.domain.AccountType
 import app.outgo.util.MonthKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
+
+/** A savings account's target for one month, as the account editor shows and saves it. */
+data class SavingsSetting(val enabled: Boolean, val target: Long)
 
 /**
  * `account.balance` is never assigned directly here — editing "current
@@ -39,8 +43,8 @@ class AccountRepository(
         color: Int,
         initialBalance: Long,
         accountType: Int = AccountType.NORMAL,
-        savingsTarget: Long? = null,
-        savingsFrom: Int? = null,
+        savings: SavingsSetting? = null,
+        monthKey: Int = MonthKey.current(),
     ): Long = withContext(Dispatchers.IO) {
         db.withTransaction {
             val now = System.currentTimeMillis()
@@ -52,14 +56,13 @@ class AccountRepository(
                     balance = 0,
                     color = color,
                     accountType = accountType,
-                    savingsTarget = savingsTarget.takeIf { accountType == AccountType.SAVINGS },
-                    savingsFrom = savingsFrom.takeIf { accountType == AccountType.SAVINGS && savingsTarget != null },
                     sortOrder = order,
                     createdAt = now,
                     updatedAt = now,
                 ),
             )
             if (initialBalance != 0L) tradeRepository.recordAdjustment(id, initialBalance)
+            if (savings != null && accountType == AccountType.SAVINGS) setSavingsMonth(id, monthKey, savings)
             id
         }
     }
@@ -71,8 +74,6 @@ class AccountRepository(
         color: Int,
         newBalance: Long,
         accountType: Int,
-        savingsTarget: Long?,
-        savingsFrom: Int?,
     ) = withContext(Dispatchers.IO) {
         db.withTransaction {
             val existing = accountDao.findById(accountId) ?: return@withTransaction
@@ -82,13 +83,36 @@ class AccountRepository(
                     iconId = iconId,
                     color = color,
                     accountType = accountType,
-                    savingsTarget = savingsTarget.takeIf { accountType == AccountType.SAVINGS },
-                    savingsFrom = savingsFrom.takeIf { accountType == AccountType.SAVINGS && savingsTarget != null },
                     updatedAt = System.currentTimeMillis(),
                 ),
             )
             val delta = newBalance - existing.balance
             if (delta != 0L) tradeRepository.recordAdjustment(accountId, delta)
+        }
+    }
+
+    /** [accountId]'s savings target in effect in [monthKey], or null when it has none by then. */
+    suspend fun savingsAt(accountId: Long, monthKey: Int): SavingsSetting? = withContext(Dispatchers.IO) {
+        accountDao.savingsAt(accountId, monthKey)?.let { SavingsSetting(it.enabled, it.target) }
+    }
+
+    /**
+     * Saves [setting] as [accountId]'s savings target from [monthKey] on. Like
+     * [BudgetRepository.setMonth], a past month's edit first gives the month after a snapshot of
+     * what it had, so it changes only that month.
+     */
+    suspend fun setSavingsMonth(accountId: Long, monthKey: Int, setting: SavingsSetting) = withContext(Dispatchers.IO) {
+        db.withTransaction {
+            if (monthKey < MonthKey.current()) {
+                val next = MonthKey.minus(monthKey, -1)
+                if (!accountDao.hasSavingsMonth(accountId, next)) {
+                    accountDao.putSavingsMonth(
+                        accountDao.savingsAt(accountId, next)?.copy(monthKey = next)
+                            ?: SavingsMonthEntity(accountId, next, enabled = false, target = 0),
+                    )
+                }
+            }
+            accountDao.putSavingsMonth(SavingsMonthEntity(accountId, monthKey, setting.enabled, setting.target))
         }
     }
 

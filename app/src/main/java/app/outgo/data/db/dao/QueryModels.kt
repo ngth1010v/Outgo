@@ -3,11 +3,13 @@ package app.outgo.data.db.dao
 import androidx.room.Embedded
 import app.outgo.data.db.entity.AccountEntity
 
-/** An account joined with how much income it's received this month, toward [AccountEntity.savingsTarget]. */
+/** An account joined with how much income it's received this month, toward [monthlyTarget]. */
 data class AccountWithProgress(
     @Embedded val account: AccountEntity,
     val monthlyIncome: Long,
     val prevMonthlyIncome: Long,
+    /** This month's savings target: a savings account whose target in effect is on, else null. */
+    val monthlyTarget: Long?,
 )
 
 /** One (month, parent category) bar segment for the Home stacked chart. */
@@ -21,7 +23,6 @@ data class MonthCategoryTotal(
     val total: Long,
 )
 
-/** A LIMIT budget joined with how much of it has been spent this month. */
 /** Spend of one LIMIT budget (its category plus children) in one month. */
 data class BudgetMonthSpend(
     val categoryId: Long,
@@ -29,6 +30,7 @@ data class BudgetMonthSpend(
     val spent: Long,
 )
 
+/** A LIMIT budget with the settings in effect in one month, joined with how much it spent then. */
 data class BudgetWithProgress(
     val id: Long,
     val kind: Int,
@@ -44,13 +46,14 @@ data class BudgetWithProgress(
     val categoryColor: Int?,
     val overTarget: Long?,
     val underTarget: Long?,
-    val carryFrom: Int?,
     val underFromAccount: Long?,
     val underToAccount: Long?,
     val settledMonth: Int?,
+    /**
+     * On in the month asked for (its [app.outgo.data.db.entity.BudgetMonthEntity] in effect then is
+     * on): only then does it show a bar. The limit and offsets above are that month's.
+     */
     val enabled: Boolean,
-    /** Enabled and started (apply-from reached) in the month asked for: only then does it show a bar. */
-    val active: Boolean,
     /** Offset carried in from earlier months (negative: overspend taken off). Filled by BudgetRepository. */
     val carry: Long,
 ) {

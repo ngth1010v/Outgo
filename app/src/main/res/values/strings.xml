@@ -100,7 +100,6 @@
     <string name="balance_savings_label">Savings</string>
     <string name="balance_target_hint">Monthly savings target</string>
     <string name="balance_savings_target_switch">Savings target</string>
-    <string name="balance_savings_from">Saving from</string>
     <string name="balance_savings_remain">%1$s remain</string>
     <string name="balance_savings_of_target">%1$s/%2$s</string>
     <string name="balance_savings_to_go">%1$s to go</string>
@@ -123,11 +122,10 @@
     <string name="category_section_general">General</string>
     <string name="category_section_budget">Monthly budget</string>
     <string name="category_general_info">How the category looks and what it is called.\n\n• Choose icon: the picture shown in lists, on the Add screen and in charts.\n• Category name: the name shown everywhere the category appears.\n• Color: tints its icon, progress bars and chart slices.</string>
-    <string name="category_budget_info">A monthly spending limit for this category. Spending in its sub-categories counts too. The switch turns the budget off without losing its settings.\n\n• Monthly budget limit: how much you plan to spend each month.\n• Apply from: the first month the budget counts. Earlier months show no bar and carry nothing over.\n• Over limit: take from: when a month goes over the limit, the overspend is taken off next month\'s limit of the budget you pick (this one or another).\n• Under limit: add to: when a month ends under the limit, the unspent amount is added to next month\'s limit of the budget you pick. With Account, it is moved as real money instead: a transfer From one account To another, made the first time you open the app next month.</string>
+    <string name="category_budget_info">A monthly spending limit for this category. Spending in its sub-categories counts too. Each month has its own settings: pick the month next to the title, and every change is saved for that month right away. A later month with no settings of its own uses the last month before it; a change to a past month changes only that month. The switch turns the budget off for that month without losing its settings.\n\n• Monthly budget limit: how much you plan to spend that month.\n• Over limit: take from: when a month goes over the limit, the overspend is taken off next month\'s limit of the budget you pick (this one or another).\n• Under limit: add to: when a month ends under the limit, the unspent amount is added to next month\'s limit of the budget you pick. With Account, it is moved as real money instead: a transfer From one account To another, made the first time you open the app next month.</string>
     <string name="balance_general_info">The account\'s basic details.\n\n• Choose icon: the picture shown in lists and on trades.\n• Normal / Savings: a savings account holds money set aside. Its balance is kept apart from the money you can spend, and it can have a monthly target.\n• Account name: the name shown everywhere the account appears.\n• Current balance: the money in the account now. Changing it records an adjustment for the difference, so your history stays correct.\n• Color: tints its icon and chart lines.</string>
-    <string name="balance_savings_info">A monthly goal for how much to put into this account. Only savings accounts can have one.\n\n• Monthly savings target: the amount to add each month. Income and transfers into the account count toward it.\n• Saving from: the first month the target applies. Earlier months have no target.</string>
+    <string name="balance_savings_info">A monthly goal for how much to put into this account. Only savings accounts can have one.\n\nEach month has its own target: pick the month next to the title, and every change is saved for that month right away. A later month with no target of its own uses the last month before it; a change to a past month changes only that month.\n\n• Monthly savings target: the amount to add that month. Income and transfers into the account count toward it.</string>
     <string name="category_budget_limit">Monthly budget limit</string>
-    <string name="budget_apply_from">Apply from</string>
     <string name="budget_offset_budget">Budget</string>
     <string name="budget_offset_account">Account</string>
     <string name="budget_offset_from_account">From</string>
@@ -270,6 +268,11 @@
     <!-- Common -->
     <string name="common_save">Save</string>
     <string name="common_cancel">Cancel</string>
+    <string name="common_close">Close</string>
+    <string name="month_picker_label">Choose month</string>
+    <string name="month_picker_prev_year">Previous year</string>
+    <string name="month_picker_next_year">Next year</string>
+    <string name="month_picker_this_month">This month</string>
     <string name="discard_title">Discard changes?</string>
     <string name="discard_message">Your changes won\'t be saved.</string>
     <string name="discard_confirm">Discard</string>

@@ -3,9 +3,11 @@ package app.outgo.data.db.dao
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import app.outgo.data.db.entity.BudgetEntity
+import app.outgo.data.db.entity.BudgetMonthEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -26,7 +28,8 @@ interface BudgetDao {
     suspend fun findById(id: Long): BudgetEntity?
 
     /**
-     * LIMIT budgets joined with this month's progress. A LIMIT budget on a
+     * LIMIT budgets with the settings in effect in [monthKey] (newest snapshot at or before it;
+     * none: off, null limit and offsets), joined with that month's progress. A LIMIT budget on a
      * parent category also counts its children's spend. (Budgets used to
      * also have a SAVING kind tied to an account; that's been replaced by
      * savings accounts, see [app.outgo.domain.AccountType.SAVINGS].)
@@ -35,7 +38,7 @@ interface BudgetDao {
     @Query(
         """
         SELECT b.id, b.kind, b.name, b.icon_id AS iconId, b.category_id AS categoryId,
-               b.limit_amount AS limitAmount, b.sort_order AS sortOrder,
+               m.limit_amount AS limitAmount, b.sort_order AS sortOrder,
                COALESCE((
                    SELECT SUM(s.total) FROM category_month_stat s JOIN category c ON c.id = s.category_id
                    WHERE s.month_key = :monthKey AND (c.id = b.category_id OR c.parent_id = b.category_id)
@@ -47,12 +50,13 @@ interface BudgetDao {
                cat.name AS categoryName,
                cat.icon_id AS categoryIconId,
                cat.color AS categoryColor,
-               b.over_target AS overTarget, b.under_target AS underTarget, b.carry_from AS carryFrom,
-               b.under_from_account AS underFromAccount, b.under_to_account AS underToAccount,
-               b.settled_month AS settledMonth, b.enabled,
-               (b.enabled = 1 AND (b.carry_from IS NULL OR b.carry_from <= :monthKey)) AS active,
+               m.over_target AS overTarget, m.under_target AS underTarget,
+               m.under_from_account AS underFromAccount, m.under_to_account AS underToAccount,
+               b.settled_month AS settledMonth, COALESCE(m.enabled, 0) AS enabled,
                0 AS carry
         FROM budget b
+        LEFT JOIN budget_month m ON m.budget_id = b.id AND m.month_key =
+            (SELECT MAX(month_key) FROM budget_month WHERE budget_id = b.id AND month_key <= :monthKey)
         LEFT JOIN category cat ON cat.id = b.category_id
         LEFT JOIN category parent ON parent.id = cat.parent_id
         WHERE b.kind = 0
@@ -63,21 +67,35 @@ interface BudgetDao {
     )
     fun observeBudgetsWithProgress(monthKey: Int, prevMonthKey: Int): Flow<List<BudgetWithProgress>>
 
-    /** Monthly spend of enabled budgets that carry an offset, from each one's apply-from up to before [monthKey]. */
+    /** Monthly spend of every budget, from its first snapshot's month up to before [monthKey]. */
     @Query(
         """
         SELECT b.category_id AS categoryId, s.month_key AS monthKey, SUM(s.total) AS spent
         FROM budget b
         JOIN category c ON c.id = b.category_id OR c.parent_id = b.category_id
         JOIN category_month_stat s ON s.category_id = c.id
-        WHERE b.kind = 0 AND b.enabled = 1 AND (b.over_target IS NOT NULL OR b.under_target IS NOT NULL OR b.under_from_account IS NOT NULL)
-          AND s.month_key >= b.carry_from AND s.month_key < :monthKey
+        WHERE b.kind = 0 AND s.month_key < :monthKey
+          AND s.month_key >= (SELECT MIN(month_key) FROM budget_month WHERE budget_id = b.id)
         GROUP BY b.category_id, s.month_key
         """,
     )
     fun observeCarrySpend(monthKey: Int): Flow<List<BudgetMonthSpend>>
 
-    @Query("UPDATE budget SET settled_month = :monthKey WHERE under_from_account IS NOT NULL")
+    /** Every budget's monthly snapshots, oldest first within a budget. */
+    @Query("SELECT * FROM budget_month ORDER BY budget_id, month_key")
+    fun observeMonths(): Flow<List<BudgetMonthEntity>>
+
+    /** The snapshot in effect in [monthKey]: the newest at or before it. */
+    @Query("SELECT * FROM budget_month WHERE budget_id = :budgetId AND month_key <= :monthKey ORDER BY month_key DESC LIMIT 1")
+    suspend fun monthAt(budgetId: Long, monthKey: Int): BudgetMonthEntity?
+
+    @Query("SELECT EXISTS(SELECT 1 FROM budget_month WHERE budget_id = :budgetId AND month_key = :monthKey)")
+    suspend fun hasMonth(budgetId: Long, monthKey: Int): Boolean
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putMonth(month: BudgetMonthEntity)
+
+    @Query("UPDATE budget SET settled_month = :monthKey")
     suspend fun markAccountOffsetsSettled(monthKey: Int)
 
     @Query("SELECT COALESCE(MAX(sort_order), -1) FROM budget WHERE kind = :kind")

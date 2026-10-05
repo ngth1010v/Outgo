@@ -16,9 +16,11 @@ import app.outgo.data.db.dao.StatDao
 import app.outgo.data.db.dao.TradeDao
 import app.outgo.data.db.entity.AccountEntity
 import app.outgo.data.db.entity.BudgetEntity
+import app.outgo.data.db.entity.BudgetMonthEntity
 import app.outgo.data.db.entity.CategoryEntity
 import app.outgo.data.db.entity.CategoryMonthStatEntity
 import app.outgo.data.db.entity.IconEntity
+import app.outgo.data.db.entity.SavingsMonthEntity
 import app.outgo.data.db.entity.SettingEntity
 import app.outgo.data.db.entity.TradeEntity
 import app.outgo.domain.CategoryKind
@@ -43,8 +45,10 @@ import app.outgo.domain.IconKind
         CategoryMonthStatEntity::class,
         BudgetEntity::class,
         SettingEntity::class,
+        BudgetMonthEntity::class,
+        SavingsMonthEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = true,
 )
 abstract class OutgoDatabase : RoomDatabase() {
@@ -58,7 +62,7 @@ abstract class OutgoDatabase : RoomDatabase() {
 
     companion object {
         const val FILE_NAME = "outgo.sqlite"
-        const val SCHEMA_VERSION = 9
+        const val SCHEMA_VERSION = 10
 
         // "OUTO" packed into 4 bytes, stamped once via PRAGMA application_id so a
         // restore can reject a file that isn't an Outgo backup before touching real data.
@@ -134,11 +138,38 @@ abstract class OutgoDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `budget_month` (`budget_id` INTEGER NOT NULL, `month_key` INTEGER NOT NULL, " +
+                        "`enabled` INTEGER NOT NULL, `limit_amount` INTEGER NOT NULL, `over_target` INTEGER, `under_target` INTEGER, " +
+                        "`under_from_account` INTEGER, `under_to_account` INTEGER, PRIMARY KEY(`budget_id`, `month_key`), " +
+                        "FOREIGN KEY(`budget_id`) REFERENCES `budget`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `savings_month` (`account_id` INTEGER NOT NULL, `month_key` INTEGER NOT NULL, " +
+                        "`enabled` INTEGER NOT NULL, `target` INTEGER NOT NULL, PRIMARY KEY(`account_id`, `month_key`), " +
+                        "FOREIGN KEY(`account_id`) REFERENCES `account`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+                )
+                // Each budget/target becomes one snapshot at its old apply-from / saving-from month;
+                // one without a start month starts at the month it was created.
+                val createdMonth = "CAST(strftime('%Y%m', created_at / 1000, 'unixepoch', 'localtime') AS INTEGER)"
+                db.execSQL(
+                    "INSERT INTO budget_month SELECT id, COALESCE(carry_from, $createdMonth), enabled, COALESCE(limit_amount, 0), " +
+                        "over_target, under_target, under_from_account, under_to_account FROM budget WHERE kind = 0",
+                )
+                db.execSQL(
+                    "INSERT INTO savings_month SELECT id, COALESCE(savings_from, $createdMonth), 1, savings_target " +
+                        "FROM account WHERE account_type = 1 AND savings_target > 0",
+                )
+            }
+        }
+
         fun build(context: Context): OutgoDatabase =
             Room.databaseBuilder(context.applicationContext, OutgoDatabase::class.java, FILE_NAME)
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
                 .addCallback(OutgoCallback)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                 .build()
     }
 }

@@ -11,7 +11,9 @@ import androidx.room.PrimaryKey
  *
  * account_id/target_amount/deadline are leftover columns from a removed
  * SAVING budget kind (replaced by savings accounts, [app.outgo.domain.AccountType.SAVINGS])
- * and are no longer written or read by app code.
+ * and are no longer written or read by app code. limit_amount, over_target, under_target,
+ * under_from_account, under_to_account, enabled and carry_from are likewise leftovers: since
+ * schema 10 each month's settings live in [BudgetMonthEntity], and these only seeded it.
  */
 @Entity(
     tableName = "budget",

@@ -434,6 +434,31 @@ CREATE TABLE budget (
   CHECK ((kind = 0 AND category_id IS NOT NULL AND limit_amount > 0)
       OR (kind = 1 AND account_id IS NOT NULL AND target_amount > 0 AND name IS NOT NULL))
 );
+-- Từ schema 10: limit_amount, over/under_*, carry_from, enabled của budget và
+-- savings_target/savings_from của account là cột cũ, chỉ dùng để migrate sang 2 bảng dưới.
+
+-- Cài đặt ngân sách theo tháng: tháng M dùng dòng mới nhất có month_key <= M.
+-- Tháng chưa có dòng riêng lặp lại tháng trước nó; trước dòng đầu tiên = chưa có budget.
+CREATE TABLE budget_month (
+  budget_id          INTEGER NOT NULL REFERENCES budget(id) ON DELETE CASCADE,
+  month_key          INTEGER NOT NULL,     -- yyyyMM
+  enabled            INTEGER NOT NULL,     -- 0 = tắt trong tháng đó, giữ nguyên cài đặt
+  limit_amount       INTEGER NOT NULL,
+  over_target        INTEGER,
+  under_target       INTEGER,
+  under_from_account INTEGER,
+  under_to_account   INTEGER,
+  PRIMARY KEY (budget_id, month_key)
+);
+
+-- Mục tiêu tiết kiệm theo tháng, cùng cách tra như budget_month.
+CREATE TABLE savings_month (
+  account_id INTEGER NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+  month_key  INTEGER NOT NULL,
+  enabled    INTEGER NOT NULL,
+  target     INTEGER NOT NULL,
+  PRIMARY KEY (account_id, month_key)
+);
 
 CREATE TABLE setting (key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID;
 
@@ -859,8 +884,10 @@ fun budgetColor(spent: Long, limit: Long): BudgetLevel = when {
 - **Hàng dưới:** `LinearProgressIndicator(progress = min(spent / limit, 1f))`, cùng màu.
 - Budget của **danh mục cha** tính tổng chi của **tất cả danh mục con** trong tháng hiện tại.
 - Chỉ **danh mục Chi** mới có mục "Đặt budget" trong popup.
-- **Bù trừ sang tháng sau:** popup có 2 lựa chọn "Khi vượt hạn mức" / "Khi chưa chi hết": Không bù trừ, Ngân sách này, hoặc một budget khác. Phần vượt (âm) hoặc phần dư (dương) của tháng trước được cộng vào hạn mức tháng này của budget đích. Tính lần lượt từng tháng từ `carry_from` (`budgetCarry` trong `BudgetRepository`), nên phần đã bù ở tháng sau không bị tính lại. Hạn mức quá khứ dùng hạn mức hiện tại (không lưu lịch sử hạn mức).
-  - Màn sửa danh mục chia 2 phần: "Chung" (icon, tên, màu) và "Ngân sách tháng" (công tắc bật/tắt ở tiêu đề, hạn mức, "Áp dụng từ" MM/yyyy, các lựa chọn bù trừ). Tắt công tắc = tạm dừng budget (`enabled = 0`, không thanh tiến độ, không bù trừ), cài đặt được giữ lại. Tháng trước "Áp dụng từ" không có budget: không hiện thanh, không tính bù trừ, và không nhận bù trừ từ budget khác. Đổi lựa chọn bù trừ không còn tự đặt lại tháng bắt đầu. Bù trừ Tài khoản chỉ chuyển tiền cho các tháng kết thúc sau khi cài đặt (hoặc bật lại).
+- **Bù trừ sang tháng sau:** popup có 2 lựa chọn "Khi vượt hạn mức" / "Khi chưa chi hết": Không bù trừ, Ngân sách này, hoặc một budget khác. Phần vượt (âm) hoặc phần dư (dương) của tháng trước được cộng vào hạn mức tháng này của budget đích. Tính lần lượt từng tháng từ snapshot đầu tiên có bù trừ (`budgetCarry` trong `BudgetRepository`), mỗi tháng dùng hạn mức và lựa chọn bù trừ của chính tháng đó (`budget_month`), nên phần đã bù ở tháng sau không bị tính lại.
+  - Màn sửa danh mục chia 2 phần: "Chung" (icon, tên, màu) và "Ngân sách tháng" (tiêu đề có ô chọn tháng MM/yyyy không viền và công tắc; bên dưới là hạn mức và các lựa chọn bù trừ). Phần ngân sách hiển thị và lưu cho tháng đang chọn (mặc định tháng này, chọn được mọi tháng quá khứ/tương lai). Khi sửa danh mục có sẵn, mọi thay đổi tự lưu (~0,5 giây sau lần sửa cuối, và khi rời màn hình); không có nút Lưu, chỉ còn Đóng và Xoá. Tạo mới vẫn có Huỷ/Lưu.
+  - Sửa tháng M ghi snapshot `budget_month` cho M; các tháng sau chưa có snapshot riêng sẽ theo M (chỉ khi đọc, không ghi DB). Ngoại lệ: M ở quá khứ thì tháng M+1 (nếu chưa có snapshot riêng) được ghi snapshot giữ nguyên cài đặt cũ trước, nên sửa quá khứ chỉ đổi đúng tháng đó. Tắt công tắc = không có budget trong tháng đó (không thanh tiến độ, không bù trừ, không nhận bù trừ), cài đặt được giữ lại. Bù trừ Tài khoản chỉ chuyển tiền cho các tháng chưa xử lý (`settled_month`), nên sửa tháng đã qua không tạo giao dịch chuyển bù.
+  - Màn sửa tài khoản dùng cùng cách cho phần "Tiết kiệm" (`savings_month`): ô chọn tháng cạnh công tắc, mục tiêu theo tháng, tự lưu khi sửa. Loại tài khoản (Thường/Tiết kiệm) thuộc phần Chung, không theo tháng.
   - "Vượt hạn mức: trừ vào": Không / Ngân sách (chọn 1 budget, gồm cả budget này).
   - "Chưa chi hết: lấy từ": Không / Ngân sách (cộng vào hạn mức của 1 budget) / Tài khoản (chọn "Từ tài khoản" và "Cộng vào" là 2 tài khoản khác nhau). Chế độ Tài khoản chuyển tiền thật: lần mở app đầu tiên của tháng mới, `settleAccountOffsets` tạo 1 giao dịch chuyển (ngày 1) cho mỗi tháng chưa xử lý (`settled_month`). Tài khoản nguồn không đủ tiền thì tạo giao dịch chuyển 0 với `trade.pending_amount` = số cần chuyển; Home hiện huy hiệu vàng trên tab Chuyển khoản và nút "Thử lại" trên dòng đó (`TradeRepository.settle`: chuyển đủ số tiền khi nguồn đã đủ, nếu không thì giữ nguyên). Chọn chế độ Tài khoản trong tháng này thì lần chuyển đầu tiên là cho tháng này, vào đầu tháng sau.
 

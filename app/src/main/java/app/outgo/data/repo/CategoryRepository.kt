@@ -46,7 +46,7 @@ class CategoryRepository(
      * picks a child), so a budget set on it could never accrue spend. Every new
      * parent gets one default child up front so it's reachable right away.
      */
-    suspend fun createParent(type: Int, name: String, iconId: Long?, color: Int, budget: BudgetSetting?, defaultChildName: String): Long =
+    suspend fun createParent(type: Int, name: String, iconId: Long?, color: Int, budget: BudgetSetting?, monthKey: Int, defaultChildName: String): Long =
         withContext(Dispatchers.IO) {
             db.withTransaction {
                 val order = categoryDao.maxSortOrder(null) + 1
@@ -61,7 +61,7 @@ class CategoryRepository(
                         createdAt = System.currentTimeMillis(),
                     ),
                 )
-                budgetRepository.setLimitForCategory(id, budget)
+                budget?.takeIf { it.enabled }?.let { budgetRepository.setMonth(id, monthKey, it) }
                 categoryDao.insert(
                     CategoryEntity(
                         parentId = id,
@@ -77,7 +77,7 @@ class CategoryRepository(
             }
         }
 
-    suspend fun createChild(parentId: Long, name: String, iconId: Long?, color: Int, budget: BudgetSetting?): Long = withContext(Dispatchers.IO) {
+    suspend fun createChild(parentId: Long, name: String, iconId: Long?, color: Int, budget: BudgetSetting?, monthKey: Int): Long = withContext(Dispatchers.IO) {
         db.withTransaction {
             val parent = categoryDao.findById(parentId) ?: error("parent category not found")
             val order = categoryDao.maxSortOrder(parentId) + 1
@@ -92,16 +92,13 @@ class CategoryRepository(
                     createdAt = System.currentTimeMillis(),
                 ),
             )
-            budgetRepository.setLimitForCategory(id, budget)
+            budget?.takeIf { it.enabled }?.let { budgetRepository.setMonth(id, monthKey, it) }
             id
         }
     }
 
-    suspend fun update(category: CategoryEntity, name: String, iconId: Long?, color: Int, budget: BudgetSetting?) = withContext(Dispatchers.IO) {
-        db.withTransaction {
-            categoryDao.update(category.copy(name = name, iconId = iconId, color = color))
-            budgetRepository.setLimitForCategory(category.id, budget)
-        }
+    suspend fun update(category: CategoryEntity, name: String, iconId: Long?, color: Int) = withContext(Dispatchers.IO) {
+        categoryDao.update(category.copy(name = name, iconId = iconId, color = color))
     }
 
     /**

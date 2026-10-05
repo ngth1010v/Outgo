@@ -18,6 +18,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 data class CategoryUiState(
     val type: Int = CategoryKind.EXPENSE,
@@ -68,16 +70,30 @@ class CategoryViewModel(
     suspend fun childCount(parentId: Long): Int = categoryRepository.childCount(parentId)
     suspend fun hasTrades(categoryId: Long): Boolean = categoryRepository.hasTrades(categoryId)
 
-    fun createParent(name: String, iconId: Long?, color: Int, budget: BudgetSetting?, defaultChildName: String) {
-        viewModelScope.launch { categoryRepository.createParent(type.value, name, iconId, color, budget, defaultChildName) }
+    fun createParent(name: String, iconId: Long?, color: Int, budget: BudgetSetting?, monthKey: Int, defaultChildName: String) {
+        write { categoryRepository.createParent(type.value, name, iconId, color, budget, monthKey, defaultChildName) }
     }
 
-    fun createChild(parentId: Long, name: String, iconId: Long?, color: Int, budget: BudgetSetting?) {
-        viewModelScope.launch { categoryRepository.createChild(parentId, name, iconId, color, budget) }
+    fun createChild(parentId: Long, name: String, iconId: Long?, color: Int, budget: BudgetSetting?, monthKey: Int) {
+        write { categoryRepository.createChild(parentId, name, iconId, color, budget, monthKey) }
     }
 
-    fun update(category: CategoryEntity, name: String, iconId: Long?, color: Int, budget: BudgetSetting?) {
-        viewModelScope.launch { categoryRepository.update(category, name, iconId, color, budget) }
+    fun update(category: CategoryEntity, name: String, iconId: Long?, color: Int) {
+        write { categoryRepository.update(category, name, iconId, color) }
+    }
+
+    suspend fun budgetAt(categoryId: Long, monthKey: Int): BudgetSetting? = 
+        // After any queued save, so a month just left reads back what was saved.
+        writes.withLock { budgetRepository.settingAt(categoryId, monthKey) }
+
+    fun setBudgetMonth(categoryId: Long, monthKey: Int, setting: BudgetSetting) {
+        write { budgetRepository.setMonth(categoryId, monthKey, setting) }
+    }
+
+    /** Runs editor saves one after another, in the order they were asked for. */
+    private val writes = Mutex()
+    private fun write(block: suspend () -> Unit) {
+        viewModelScope.launch { writes.withLock { block() } }
     }
 
     fun reorder(lists: Map<Long?, List<Long>>) {
@@ -85,6 +101,6 @@ class CategoryViewModel(
     }
 
     fun deleteOrArchive(category: CategoryEntity) {
-        viewModelScope.launch { categoryRepository.deleteOrArchive(category) }
+        write { categoryRepository.deleteOrArchive(category) }
     }
 }

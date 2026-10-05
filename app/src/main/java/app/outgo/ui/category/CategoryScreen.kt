@@ -1,6 +1,5 @@
 package app.outgo.ui.category
 
-import java.util.Locale
 import app.outgo.util.MonthKey
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.Switch
@@ -56,7 +55,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
@@ -87,6 +88,9 @@ import app.outgo.ui.component.ConfirmDialog
 import app.outgo.ui.component.EditorScaffold
 import app.outgo.ui.component.IconPickerSheet
 import app.outgo.ui.component.IconView
+import app.outgo.ui.component.MonthPicker
+import app.outgo.ui.component.onBlur
+import app.outgo.ui.component.rememberAutoSave
 import app.outgo.ui.component.PlusRow
 import app.outgo.ui.component.budgetRemainingColor
 import app.outgo.ui.component.budgetRemainingText
@@ -98,6 +102,7 @@ import app.outgo.ui.component.swipeShift
 import app.outgo.ui.component.swipeStep
 import app.outgo.util.Money
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collectLatest
 
 private sealed interface EditTarget {
@@ -333,7 +338,7 @@ private fun CategoryList(
                     val parent = entry.category
                     CategoryRow(
                         category = parent,
-                        budget = state.budgetsByCategory[parent.id]?.takeIf { it.active },
+                        budget = state.budgetsByCategory[parent.id]?.takeIf { it.enabled },
                         onRowClick = { edit(EditTarget.Edit(parent)) },
                         modifier = reorderableItem(reorder, entry.key),
                         trailing = {
@@ -351,7 +356,7 @@ private fun CategoryList(
                 }
                 is ChildEntry -> CategoryRow(
                     category = entry.category,
-                    budget = state.budgetsByCategory[entry.category.id]?.takeIf { it.active },
+                    budget = state.budgetsByCategory[entry.category.id]?.takeIf { it.enabled },
                     onRowClick = { edit(EditTarget.Edit(entry.category)) },
                     modifier = Modifier.padding(start = 20.dp).then(reorderableItem(reorder, entry.key)),
                 )
@@ -435,38 +440,46 @@ private fun EditCategoryScreen(
     var color by remember {
         mutableStateOf(existing?.color ?: (target as? EditTarget.NewChild)?.parentColor ?: DefaultCategoryColor)
     }
-    val budget = existing?.let { budgets[it.id] }
-    var budgetOn by remember { mutableStateOf(budget?.enabled ?: false) }
-    var budgetText by remember { mutableStateOf(budget?.limitAmount?.toString().orEmpty()) }
-    var applyFrom by remember { mutableStateOf(budget?.carryFrom ?: MonthKey.current()) }
-    var overOn by remember { mutableStateOf(budget?.overTarget != null) }
-    var overTarget by remember { mutableStateOf(budget?.overTarget ?: BudgetOffset.SELF) }
-    var underMode by remember {
-        mutableStateOf(
-            when {
-                budget?.underFromAccount != null -> UnderMode.ACCOUNT
-                budget?.underTarget != null -> UnderMode.BUDGET
-                else -> UnderMode.NONE
-            },
-        )
-    }
-    var underTarget by remember { mutableStateOf(budget?.underTarget ?: BudgetOffset.SELF) }
-    var fromAccount by remember { mutableStateOf(budget?.underFromAccount) }
-    var toAccount by remember { mutableStateOf(budget?.underToAccount) }
-    val budgetShown = budgetOn && effectiveType == CategoryKind.EXPENSE
-    // A budget that is on needs a limit, and an account offset two different accounts.
-    val budgetComplete = !budgetShown || ((budgetText.toLongOrNull() ?: 0L) > 0 &&
-        (underMode != UnderMode.ACCOUNT || (fromAccount != null && toAccount != null && fromAccount != toAccount)))
+    // The Budget section shows (and saves) one month's settings; it opens on this month's.
+    var month by remember { mutableIntStateOf(MonthKey.current()) }
+    var form by remember { mutableStateOf(BudgetForm.of(existing?.let { budgets[it.id] })) }
     var showIconPicker by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var hasTrades by remember { mutableStateOf(false) }
     var childCount by remember { mutableStateOf(0) }
     val defaultChildName = stringResource(R.string.category_default_child_name)
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(existing?.id) {
         if (existing != null) {
             hasTrades = viewModel.hasTrades(existing.id)
             if (existing.isParent) childCount = viewModel.childCount(existing.id)
+        }
+    }
+
+    // Editing saves as it goes: General as one, the Budget section as the shown month's settings.
+    val generalSave = existing?.let {
+        rememberAutoSave(Triple(name, iconId, color)) { (n, i, c) ->
+            n.isNotBlank().also { ok -> if (ok) viewModel.update(it, n, i, c) }
+        }
+    }
+    val budgetSave = existing?.takeIf { effectiveType == CategoryKind.EXPENSE }?.let {
+        rememberAutoSave(form) { f ->
+            f.complete.also { ok -> if (ok) viewModel.setBudgetMonth(it.id, month, f.toSetting()) }
+        }
+    }
+    fun showMonth(m: Int) {
+        if (budgetSave == null || existing == null) {
+            month = m
+            return
+        }
+        // The month being left keeps its pending change.
+        budgetSave.flush()
+        month = m
+        scope.launch {
+            val loaded = BudgetForm.of(viewModel.budgetAt(existing.id, m))
+            budgetSave.reset(loaded)
+            form = loaded
         }
     }
 
@@ -476,31 +489,27 @@ private fun EditCategoryScreen(
         else -> stringResource(R.string.category_create_parent_title)
     }
 
-    // Compared against the values the editor opened with.
-    val fields = listOf(name, iconId, color, budgetOn, budgetText, applyFrom, overOn, overTarget, underMode, underTarget, fromAccount, toAccount)
+    // Creating: compared against the values the editor opened with, for the discard check.
+    val fields = listOf(name, iconId, color, month, form)
     val initialFields = remember { fields }
     EditorScaffold(
         title = title,
         onCancel = onDismiss,
-        dirty = fields != initialFields,
-        onSave = {
-            val setting = BudgetSetting(
-                enabled = budgetShown,
-                limit = budgetText.toLongOrNull(),
-                applyFrom = applyFrom,
-                overTarget = overTarget.takeIf { overOn },
-                underTarget = underTarget.takeIf { underMode == UnderMode.BUDGET },
-                underFromAccount = fromAccount.takeIf { underMode == UnderMode.ACCOUNT },
-                underToAccount = toAccount.takeIf { underMode == UnderMode.ACCOUNT },
-            )
-            when {
-                existing != null -> viewModel.update(existing, name, iconId, color, setting)
-                target is EditTarget.NewChild -> viewModel.createChild(target.parentId, name, iconId, color, setting)
-                else -> viewModel.createParent(name, iconId, color, setting, defaultChildName)
+        dirty = existing == null && fields != initialFields,
+        onSave = if (existing != null) {
+            null
+        } else {
+            {
+                val setting = form.toSetting().takeIf { form.enabled && effectiveType == CategoryKind.EXPENSE }
+                if (target is EditTarget.NewChild) {
+                    viewModel.createChild(target.parentId, name, iconId, color, setting, month)
+                } else {
+                    viewModel.createParent(name, iconId, color, setting, month, defaultChildName)
+                }
+                onDismiss()
             }
-            onDismiss()
         },
-        saveEnabled = name.isNotBlank() && budgetComplete,
+        saveEnabled = name.isNotBlank() && (effectiveType != CategoryKind.EXPENSE || form.complete),
         onDelete = if (existing != null) { { showDeleteConfirm = true } } else null,
     ) {
         SectionHeader(stringResource(R.string.category_section_general), stringResource(R.string.category_general_info))
@@ -514,7 +523,9 @@ private fun EditCategoryScreen(
             onValueChange = { name = it },
             label = { Text(stringResource(R.string.category_name_hint)) },
             singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
+            isError = existing != null && name.isBlank(),
+            // Editing: a blank name goes back to the saved one when the field is left.
+            modifier = Modifier.fillMaxWidth().onBlur { if (name.isBlank()) generalSave?.let { name = it.saved.first } },
         )
         Spacer(Modifier.height(12.dp))
         Text(stringResource(R.string.category_color_label), style = MaterialTheme.typography.labelLarge)
@@ -525,60 +536,63 @@ private fun EditCategoryScreen(
         if (effectiveType == CategoryKind.EXPENSE) {
             Spacer(Modifier.height(24.dp))
             SectionHeader(stringResource(R.string.category_section_budget), stringResource(R.string.category_budget_info)) {
-                SectionSwitch(checked = budgetOn, onCheckedChange = { budgetOn = it })
+                MonthPicker(month, ::showMonth)
+                SectionSwitch(checked = form.enabled, onCheckedChange = { form = form.copy(enabled = it) })
             }
-            if (budgetOn) {
+            if (form.enabled) {
                 val none = stringResource(R.string.budget_offset_none)
                 val budgetLabel = stringResource(R.string.budget_offset_budget)
                 val budgetTargets = listOf(PickOption(BudgetOffset.SELF, stringResource(R.string.budget_offset_self), iconId, color)) +
-                    budgets.values.filter { it.enabled && it.categoryId != null && it.categoryId != existing?.id }
+                    budgets.values.filter { it.categoryId != null && it.categoryId != existing?.id }
                         .map { PickOption(it.categoryId!!, it.displayName, it.displayIconId, it.categoryColor) }
                 val accountOptions = accounts.map { PickOption<Long?>(it.id, it.name, it.iconId, it.color) }
                 val to = stringResource(R.string.budget_offset_add_to)
-                // Two years back to a year ahead, newest first; an older saved month stays pickable.
-                val current = MonthKey.current()
-                val months = ((-12..24).map { MonthKey.minus(current, it.toLong()) } + applyFrom).distinct().sortedDescending()
-                    .map { PickOption(it, monthNumber(it)) }
 
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
-                        value = budgetText,
-                        onValueChange = { budgetText = it.filter { c -> c.isDigit() } },
+                        value = form.limitText,
+                        onValueChange = { form = form.copy(limitText = it.filter { c -> c.isDigit() }) },
                         label = { Text(stringResource(R.string.category_budget_limit)) },
                         singleLine = true,
+                        isError = existing != null && (form.limitText.toLongOrNull() ?: 0L) <= 0,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.fillMaxWidth(),
+                        // Editing: an invalid limit goes back to the saved one when the field is left,
+                        // and the whole section too if that month had none (it was off).
+                        modifier = Modifier.fillMaxWidth().onBlur {
+                            val saved = budgetSave?.saved ?: return@onBlur
+                            if (!form.complete) form = form.copy(limitText = saved.limitText).takeIf { it.complete } ?: saved
+                        },
                     )
-                    OffsetPicker(stringResource(R.string.budget_apply_from), applyFrom, months) { applyFrom = it }
 
                     OffsetPicker(
                         stringResource(R.string.budget_over_action),
-                        overOn,
+                        form.overOn,
                         listOf(PickOption(false, none), PickOption(true, budgetLabel)),
-                    ) { overOn = it }
-                    if (overOn) {
-                        OffsetPicker(budgetLabel, overTarget, budgetTargets, indent = true) { overTarget = it }
+                    ) { form = form.copy(overOn = it) }
+                    if (form.overOn) {
+                        OffsetPicker(budgetLabel, form.overTarget, budgetTargets, indent = true) { form = form.copy(overTarget = it) }
                     }
 
                     OffsetPicker(
                         stringResource(R.string.budget_under_action),
-                        underMode,
+                        form.underMode,
                         listOf(
                             PickOption(UnderMode.NONE, none),
                             PickOption(UnderMode.BUDGET, budgetLabel),
                             PickOption(UnderMode.ACCOUNT, stringResource(R.string.budget_offset_account)),
                         ),
-                    ) { underMode = it }
-                    when (underMode) {
+                    ) { form = form.copy(underMode = it) }
+                    when (form.underMode) {
                         UnderMode.NONE -> Unit
                         UnderMode.BUDGET ->
-                            OffsetPicker(to, underTarget, budgetTargets, indent = true) { underTarget = it }
+                            OffsetPicker(to, form.underTarget, budgetTargets, indent = true) { form = form.copy(underTarget = it) }
                         UnderMode.ACCOUNT -> {
-                            OffsetPicker(stringResource(R.string.budget_offset_from_account), fromAccount, accountOptions, indent = true) {
-                                fromAccount = it
-                                if (toAccount == it) toAccount = null
+                            OffsetPicker(stringResource(R.string.budget_offset_from_account), form.fromAccount, accountOptions, indent = true) {
+                                form = form.copy(fromAccount = it, toAccount = form.toAccount.takeIf { a -> a != it })
                             }
-                            OffsetPicker(to, toAccount, accountOptions.filter { it.value != fromAccount }, indent = true) { toAccount = it }
+                            OffsetPicker(to, form.toAccount, accountOptions.filter { it.value != form.fromAccount }, indent = true) {
+                                form = form.copy(toAccount = it)
+                            }
                         }
                     }
                 }
@@ -600,6 +614,8 @@ private fun EditCategoryScreen(
             title = stringResource(R.string.category_delete_confirm_title),
             message = message,
             onConfirm = {
+                generalSave?.stop()
+                budgetSave?.stop()
                 viewModel.deleteOrArchive(existing)
                 showDeleteConfirm = false
                 onDismiss()
@@ -660,11 +676,56 @@ internal fun SectionSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit,
     )
 }
 
-/** `09/2026`: a month key as numbers (a budget's apply-from, a savings account's saving-from). */
-internal fun monthNumber(monthKey: Int): String = String.format(Locale.US, "%02d/%d", monthKey % 100, monthKey / 100)
-
 /** Where a budget's unspent amount goes: nowhere, another budget's limit, or another account. */
 private enum class UnderMode { NONE, BUDGET, ACCOUNT }
+
+/** The Budget section's inputs for one month, as typed (the limit is still text). */
+private data class BudgetForm(
+    val enabled: Boolean,
+    val limitText: String,
+    val overOn: Boolean,
+    val overTarget: Long,
+    val underMode: UnderMode,
+    val underTarget: Long,
+    val fromAccount: Long?,
+    val toAccount: Long?,
+) {
+    /** On needs a limit, and an account offset two different accounts. */
+    val complete: Boolean
+        get() = !enabled || ((limitText.toLongOrNull() ?: 0L) > 0 &&
+            (underMode != UnderMode.ACCOUNT || (fromAccount != null && toAccount != null && fromAccount != toAccount)))
+
+    fun toSetting() = BudgetSetting(
+        enabled = enabled,
+        limit = limitText.toLongOrNull() ?: 0L,
+        overTarget = overTarget.takeIf { overOn },
+        underTarget = underTarget.takeIf { underMode == UnderMode.BUDGET },
+        underFromAccount = fromAccount.takeIf { underMode == UnderMode.ACCOUNT },
+        underToAccount = toAccount.takeIf { underMode == UnderMode.ACCOUNT },
+    )
+
+    companion object {
+        fun of(s: BudgetSetting?) = BudgetForm(
+            enabled = s?.enabled ?: false,
+            limitText = s?.limit?.takeIf { it > 0 }?.toString().orEmpty(),
+            overOn = s?.overTarget != null,
+            overTarget = s?.overTarget ?: BudgetOffset.SELF,
+            underMode = when {
+                s?.underFromAccount != null -> UnderMode.ACCOUNT
+                s?.underTarget != null -> UnderMode.BUDGET
+                else -> UnderMode.NONE
+            },
+            underTarget = s?.underTarget ?: BudgetOffset.SELF,
+            fromAccount = s?.underFromAccount,
+            toAccount = s?.underToAccount,
+        )
+
+        /** A budget row's settings in the month it was read for. */
+        fun of(b: BudgetWithProgress?) = of(
+            b?.let { BudgetSetting(it.enabled, it.limitAmount ?: 0L, it.overTarget, it.underTarget, it.underFromAccount, it.underToAccount) },
+        )
+    }
+}
 
 /** One choice of an [OffsetPicker]; a budget or account choice carries its icon. */
 internal data class PickOption<T>(val value: T, val label: String, val iconId: Long? = null, val color: Int? = null) {

@@ -87,7 +87,7 @@ class HomeViewModel(
             availableBalance = normal.sumOf { it.account.balance },
             savingsBalance = savings.sumOf { it.account.balance },
             // Paused budgets and ones whose apply-from is still ahead have no bar this month.
-            budgets = budgets.filter { it.active },
+            budgets = budgets.filter { it.enabled },
             savingsAccounts = savings,
             hidden = hidden,
             order = parseOrder(order),
