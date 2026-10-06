@@ -41,6 +41,38 @@ interface TradeDao {
     )
     suspend fun nextPage(type: Int, beforeOccurredAt: Long, beforeId: Long, limit: Int): List<TradeEntity>
 
+    /**
+     * The History tab's filtered list, newest first, after the (occurred_at, id) cursor. Each
+     * null filter matches everything. [categoryId] matches a trade's category or, on a transfer,
+     * its budget (manual: category_id, automatic: offset_category_id); [parentId] matches a parent
+     * category and all its children; [automatic] matches automatic budget transfers or the rest.
+     */
+    @Query(
+        """
+        SELECT * FROM trade
+        WHERE type = :type AND (occurred_at, id) < (:beforeOccurredAt, :beforeId)
+            AND (:accountId IS NULL OR account_id = :accountId)
+            AND (:toAccountId IS NULL OR to_account_id = :toAccountId)
+            AND (:categoryId IS NULL OR COALESCE(category_id, offset_category_id) = :categoryId)
+            AND (:parentId IS NULL OR category_id = :parentId
+                OR category_id IN (SELECT id FROM category WHERE parent_id = :parentId))
+            AND (:automatic IS NULL OR (offset_month IS NOT NULL) = :automatic)
+        ORDER BY occurred_at DESC, id DESC
+        LIMIT :limit
+        """,
+    )
+    suspend fun filteredPage(
+        type: Int,
+        beforeOccurredAt: Long,
+        beforeId: Long,
+        accountId: Long?,
+        toAccountId: Long?,
+        categoryId: Long?,
+        parentId: Long?,
+        automatic: Boolean?,
+        limit: Int,
+    ): List<TradeEntity>
+
     /** One day of one type, for History opened from the Analysis heatmap. A day never pages. */
     @Query(
         """

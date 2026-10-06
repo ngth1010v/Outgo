@@ -29,6 +29,19 @@
     <string name="nav_category">Danh mục</string>
     <string name="nav_analysis">Phân tích</string>
     <string name="nav_history">Lịch sử</string>
+    <string name="history_filter">Bộ lọc</string>
+    <string name="history_filter_none">Không lọc</string>
+    <string name="history_filter_any">Tất cả</string>
+    <string name="history_filter_account">Tài khoản</string>
+    <string name="history_filter_category">Danh mục</string>
+    <string name="history_filter_subcategory">Danh mục con</string>
+    <string name="history_filter_kind">Loại</string>
+    <string name="history_filter_automatic">Tự động</string>
+    <string name="history_filter_manual">Thủ công</string>
+    <string name="history_filter_from">Từ tài khoản</string>
+    <string name="history_filter_budget">Ngân sách</string>
+    <string name="history_filter_to">Đến tài khoản</string>
+    <string name="history_filter_clear">Xóa bộ lọc</string>
     <string name="nav_setting">Cài đặt</string>
 
     <string name="trade_expense">Chi</string>

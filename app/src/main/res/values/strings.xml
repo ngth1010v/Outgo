@@ -32,6 +32,19 @@
     <string name="nav_category">Categories</string>
     <string name="nav_analysis">Analysis</string>
     <string name="nav_history">History</string>
+    <string name="history_filter">Filter</string>
+    <string name="history_filter_none">No filter</string>
+    <string name="history_filter_any">All</string>
+    <string name="history_filter_account">Account</string>
+    <string name="history_filter_category">Category</string>
+    <string name="history_filter_subcategory">Subcategory</string>
+    <string name="history_filter_kind">Kind</string>
+    <string name="history_filter_automatic">Automatic</string>
+    <string name="history_filter_manual">Manual</string>
+    <string name="history_filter_from">From account</string>
+    <string name="history_filter_budget">Budget</string>
+    <string name="history_filter_to">To account</string>
+    <string name="history_filter_clear">Clear filter</string>
     <string name="nav_setting">Settings</string>
 
     <!-- Trade screen -->

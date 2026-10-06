@@ -17,6 +17,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import app.outgo.data.db.entity.TradeEntity
+import app.outgo.util.MonthKey
 import app.outgo.ui.component.OutgoSegmentedButton
 import app.outgo.ui.component.rememberSwipeLevel
 import app.outgo.ui.component.swipeShift
@@ -144,6 +145,10 @@ fun HistoryTabScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
     viewModels.values.forEach { vm -> LaunchedEffect(vm, visible) { vm.refresh() } }
     val listStates = HistoryType.entries.associateWith { rememberLazyListState() }
     val pendingTransfers by remember { container.tradeRepository.pendingCount }.collectAsStateWithLifecycle(0)
+    // The Transfer filter's budget choices.
+    val budgets by remember { container.budgetRepository.observeWithProgress(MonthKey.current()) }
+        .collectAsStateWithLifecycle(emptyList())
+    var filterSheetFor by rememberSaveable { mutableStateOf<HistoryType?>(null) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val transferVm = viewModels.getValue(HistoryType.TRANSFER)
@@ -165,7 +170,7 @@ fun HistoryTabScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
     Scaffold(topBar = { CenterAlignedTopAppBar(title = { Text(stringResource(R.string.nav_history)) }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).swipeStep(typeSwipe)) {
             SingleChoiceSegmentedButtonRow(
-                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 4.dp, end = 16.dp, bottom = 16.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 4.dp, end = 16.dp),
             ) {
                 HistoryType.entries.forEachIndexed { index, type ->
                     OutgoSegmentedButton(
@@ -190,6 +195,13 @@ fun HistoryTabScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
                     }
                 }
             }
+            // Fixed under the type buttons, like them: the shown type's filter.
+            val shownState by viewModels.getValue(historyType).state.collectAsStateWithLifecycle()
+            HistoryFilterRow(
+                historyType, shownState.filter, shownState.accountsById, shownState.categoriesById, budgets,
+                onOpen = { filterSheetFor = historyType },
+                modifier = Modifier.padding(start = 16.dp, top = 4.dp, end = 8.dp),
+            )
             Box(Modifier.weight(1f)) {
                 listOf(0, -1, 1).forEach { page ->
                     if (page != 0 && !typeSwipe.moving) return@forEach
@@ -207,6 +219,15 @@ fun HistoryTabScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
                 }
             }
         }
+    }
+    filterSheetFor?.let { type ->
+        val vm = viewModels.getValue(type)
+        val state by vm.state.collectAsStateWithLifecycle()
+        HistoryFilterSheet(
+            type, state.filter, state.accountsById, state.categoriesById, budgets,
+            onChange = vm::setFilter,
+            onDismiss = { filterSheetFor = null },
+        )
     }
 }
 

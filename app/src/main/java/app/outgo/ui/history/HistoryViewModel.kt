@@ -12,12 +12,29 @@ import app.outgo.domain.CategoryKind
 import app.outgo.domain.TradeType
 import app.outgo.ui.nav.HistoryType
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+/**
+ * The History tab's filter for one type; null fields match everything. Expense/Income use
+ * [accountId], [categoryId] (a parent) and [subCategoryId] (one of its children). Transfer uses
+ * [accountId] (source), [budgetId] (the budget's category), [toAccountId] and [automatic].
+ */
+data class HistoryFilter(
+    val accountId: Long? = null,
+    val categoryId: Long? = null,
+    val subCategoryId: Long? = null,
+    val budgetId: Long? = null,
+    val toAccountId: Long? = null,
+    val automatic: Boolean? = null,
+) {
+    val isEmpty: Boolean get() = this == HistoryFilter()
+}
 
 data class HistoryUiState(
     val trades: List<TradeEntity> = emptyList(),
@@ -28,6 +45,7 @@ data class HistoryUiState(
     val isLoading: Boolean = true,
     val isLoadingMore: Boolean = false,
     val canLoadMore: Boolean = true,
+    val filter: HistoryFilter = HistoryFilter(),
 )
 
 private const val PAGE_SIZE = 50
@@ -67,12 +85,39 @@ class HistoryViewModel(
         // what re-reads the list after an edit. Calling it here too ran the first page twice.
     }
 
+    /** Loads in flight; a new filter or refresh cancels them so an older page can't land after it. */
+    private var loadJob: Job? = null
+
+    fun setFilter(filter: HistoryFilter) {
+        if (filter == _state.value.filter) return
+        // Emptied so a loadMore can't page the old filter's rows under the new one.
+        _state.update { it.copy(filter = filter, trades = emptyList(), items = emptyList(), isLoading = true) }
+        refresh()
+    }
+
+    /** A page after [before] (null: the first), through the filtered query when a filter is set. */
+    private suspend fun page(filter: HistoryFilter, before: TradeEntity?): List<TradeEntity> = when {
+        !filter.isEmpty -> tradeRepository.filteredPage(
+            tradeType, before,
+            accountId = filter.accountId,
+            toAccountId = filter.toAccountId,
+            categoryId = filter.subCategoryId ?: filter.budgetId,
+            parentId = filter.categoryId.takeIf { filter.subCategoryId == null },
+            automatic = filter.automatic,
+            limit = PAGE_SIZE,
+        )
+        before == null -> tradeRepository.firstPage(tradeType, PAGE_SIZE)
+        else -> tradeRepository.nextPage(tradeType, before, PAGE_SIZE)
+    }
+
     /** Re-runs the first page query. Call when the screen re-enters composition — the trade list is a one-shot fetch, not a Flow, so an edit made elsewhere (e.g. the trade-edit screen) isn't seen until this runs again. */
     fun refresh() {
-        viewModelScope.launch {
+        loadJob?.cancel()
+        _state.update { it.copy(isLoadingMore = false) }
+        loadJob = viewModelScope.launch {
             // A single day is small enough to come back in one query, so it never pages.
             val first = if (dayStartMillis == null) {
-                tradeRepository.firstPage(tradeType, PAGE_SIZE)
+                page(_state.value.filter, null)
             } else {
                 tradeRepository.pageInRange(tradeType, dayStartMillis, dayStartMillis + DAY_MILLIS)
             }
@@ -91,9 +136,9 @@ class HistoryViewModel(
     fun loadMore() {
         val s = _state.value
         if (s.isLoadingMore || !s.canLoadMore || s.trades.isEmpty()) return
-        viewModelScope.launch {
+        loadJob = viewModelScope.launch {
             _state.update { it.copy(isLoadingMore = true) }
-            val next = tradeRepository.nextPage(tradeType, s.trades.last(), PAGE_SIZE)
+            val next = page(s.filter, s.trades.last())
             val trades = s.trades + next
             val items = withContext(Dispatchers.Default) { buildHistoryItems(trades) }
             _state.update {

@@ -192,6 +192,23 @@ class TradeRepository(private val tradeDao: TradeDao) {
     suspend fun nextPage(type: Int, before: TradeEntity, limit: Int = 50): List<TradeEntity> =
         withContext(Dispatchers.IO) { tradeDao.nextPage(type, before.occurredAt, before.id, limit) }
 
+    /** A page of [type] after [before] (null: the first page), narrowed by the History filter; see TradeDao.filteredPage. */
+    suspend fun filteredPage(
+        type: Int,
+        before: TradeEntity?,
+        accountId: Long?,
+        toAccountId: Long?,
+        categoryId: Long?,
+        parentId: Long?,
+        automatic: Boolean?,
+        limit: Int = 50,
+    ): List<TradeEntity> = withContext(Dispatchers.IO) {
+        tradeDao.filteredPage(
+            type, before?.occurredAt ?: Long.MAX_VALUE, before?.id ?: Long.MAX_VALUE,
+            accountId, toAccountId, categoryId, parentId, automatic, limit,
+        )
+    }
+
     suspend fun firstPageForAccount(accountId: Long, limit: Int = 50): List<TradeEntity> =
         withContext(Dispatchers.IO) { tradeDao.firstPageForAccount(accountId, limit) }
 

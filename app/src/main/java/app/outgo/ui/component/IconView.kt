@@ -75,7 +75,7 @@ fun IconView(iconId: Long?, modifier: Modifier = Modifier, size: Dp = 28.dp, col
 }
 
 /** Lightens a color toward white — used for the "blanker" background behind a tinted icon. */
-private fun Color.lighten(fraction: Float = 0.75f): Color = lerp(this, Color.White, fraction)
+internal fun Color.lighten(fraction: Float = 0.75f): Color = lerp(this, Color.White, fraction)
 
 /** Same rendering, but by builtin asset key directly — used by the icon picker gallery before a DB row exists. */
 @Composable
