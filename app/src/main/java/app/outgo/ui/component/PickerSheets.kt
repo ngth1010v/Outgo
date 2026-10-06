@@ -10,12 +10,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -23,12 +25,15 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -146,6 +151,8 @@ fun <T> GroupedPickerSheet(
     onDismiss: () -> Unit,
     header: (@Composable () -> Unit)? = null,
 ) {
+    // Both live only while the sheet is open: closing it forgets the search.
+    var searching by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     val parents = remember(items) { items.filter { parentId(it) == null } }
     val childrenByParent = remember(items) { items.filter { parentId(it) != null }.groupBy { parentId(it)!! } }
@@ -159,15 +166,26 @@ fun <T> GroupedPickerSheet(
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
         Column(modifier = Modifier.padding(16.dp).fillMaxSize()) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                placeholder = { Text(searchHint) },
-                leadingIcon = { Icon(painterResource(R.drawable.ph_magnifying_glass), contentDescription = null) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                // Turning search off also clears it, so no hidden query keeps filtering.
+                IconToggleButton(checked = searching, onCheckedChange = { searching = it; if (!it) query = "" }) {
+                    Icon(painterResource(R.drawable.ph_magnifying_glass), contentDescription = stringResource(R.string.common_search))
+                }
+            }
+            if (searching) {
+                val focus = remember { FocusRequester() }
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = { Text(searchHint) },
+                    leadingIcon = { Icon(painterResource(R.drawable.ph_magnifying_glass), contentDescription = null) },
+                    singleLine = true,
+                    // Sits close under the title: the toggle's touch area already leaves space below its icon.
+                    modifier = Modifier.fillMaxWidth().offset(y = (-2).dp).padding(bottom = 6.dp).focusRequester(focus),
+                )
+                LaunchedEffect(Unit) { focus.requestFocus() }
+            }
             header?.invoke()
             LazyColumn(verticalArrangement = Arrangement.spacedBy(20.dp)) {
                 groups.forEach { (parent, children) ->
