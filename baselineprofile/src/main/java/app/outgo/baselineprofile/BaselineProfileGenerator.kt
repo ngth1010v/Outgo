@@ -51,11 +51,12 @@ internal fun MacrobenchmarkScope.animationJourney() {
     }
 
     // Every bottom-bar destination, left to right and back.
-    for (tab in listOf("Home", "Accounts", "Categories", "Analysis", "Settings", "Add", "Home")) {
+    for (tab in listOf("Home", "Accounts", "Categories", "Add", "Analysis", "History", "Settings", "Home")) {
         tap(By.desc(tab))
     }
 
-    // Home: history tabs and a scroll through the list.
+    // History: type tabs and a scroll through the list.
+    tap(By.desc("History"))
     tap(By.text("Income"))
     tap(By.text("Transfer"))
     tap(By.text("Expense"))

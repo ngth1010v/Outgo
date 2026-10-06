@@ -9,6 +9,7 @@ object Routes {
     const val BALANCE = "balance"
     const val CATEGORY = "category"
     const val ANALYSIS = "analysis"
+    const val HISTORY = "history"
     const val SETTING = "setting"
 
     /** [dayStartMillis] optionally narrows the list to one day (Analysis heatmap). */

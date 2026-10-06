@@ -70,16 +70,16 @@ class CategoryViewModel(
     suspend fun childCount(parentId: Long): Int = categoryRepository.childCount(parentId)
     suspend fun hasTrades(categoryId: Long): Boolean = categoryRepository.hasTrades(categoryId)
 
-    fun createParent(name: String, iconId: Long?, color: Int, budget: BudgetSetting?, monthKey: Int, defaultChildName: String) {
-        write { categoryRepository.createParent(type.value, name, iconId, color, budget, monthKey, defaultChildName) }
+    fun createParent(name: String, iconId: Long?, color: Int, budget: BudgetSetting?, monthKey: Int, defaultChildName: String, description: String?) {
+        write { categoryRepository.createParent(type.value, name, iconId, color, budget, monthKey, defaultChildName, description) }
     }
 
-    fun createChild(parentId: Long, name: String, iconId: Long?, color: Int, budget: BudgetSetting?, monthKey: Int) {
-        write { categoryRepository.createChild(parentId, name, iconId, color, budget, monthKey) }
+    fun createChild(parentId: Long, name: String, iconId: Long?, color: Int, budget: BudgetSetting?, monthKey: Int, description: String?) {
+        write { categoryRepository.createChild(parentId, name, iconId, color, budget, monthKey, description) }
     }
 
-    fun update(category: CategoryEntity, name: String, iconId: Long?, color: Int) {
-        write { categoryRepository.update(category, name, iconId, color) }
+    fun update(category: CategoryEntity, name: String, iconId: Long?, color: Int, description: String?) {
+        write { categoryRepository.update(category, name, iconId, color, description) }
     }
 
     suspend fun budgetAt(categoryId: Long, monthKey: Int): BudgetSetting? = 

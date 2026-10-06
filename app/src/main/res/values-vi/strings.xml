@@ -28,6 +28,7 @@
     <string name="nav_balance">Tài khoản</string>
     <string name="nav_category">Danh mục</string>
     <string name="nav_analysis">Phân tích</string>
+    <string name="nav_history">Lịch sử</string>
     <string name="nav_setting">Cài đặt</string>
 
     <string name="trade_expense">Chi</string>
@@ -84,6 +85,7 @@
     <string name="balance_edit_title">Sửa tài khoản</string>
     <string name="balance_create_title">Tài khoản mới</string>
     <string name="balance_name_hint">Tên tài khoản</string>
+    <string name="common_description_hint">Mô tả (không bắt buộc)</string>
     <string name="balance_current_balance_hint">Số dư hiện tại</string>
     <string name="balance_delete_confirm_title">Xoá tài khoản?</string>
     <string name="balance_delete_confirm_message">Tài khoản chưa có giao dịch nào và sẽ bị xoá vĩnh viễn.</string>

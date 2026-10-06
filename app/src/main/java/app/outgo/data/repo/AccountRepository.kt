@@ -58,6 +58,7 @@ class AccountRepository(
         accountType: Int = AccountType.NORMAL,
         savings: SavingsSetting? = null,
         monthKey: Int = MonthKey.current(),
+        description: String? = null,
     ): Long = withContext(Dispatchers.IO) {
         db.withTransaction {
             val now = System.currentTimeMillis()
@@ -65,6 +66,7 @@ class AccountRepository(
             val id = accountDao.insert(
                 AccountEntity(
                     name = name,
+                    description = description,
                     iconId = iconId,
                     balance = 0,
                     color = color,
@@ -87,12 +89,14 @@ class AccountRepository(
         color: Int,
         newBalance: Long,
         accountType: Int,
+        description: String?,
     ) = withContext(Dispatchers.IO) {
         db.withTransaction {
             val existing = accountDao.findById(accountId) ?: return@withTransaction
             accountDao.update(
                 existing.copy(
                     name = name,
+                    description = description,
                     iconId = iconId,
                     color = color,
                     accountType = accountType,

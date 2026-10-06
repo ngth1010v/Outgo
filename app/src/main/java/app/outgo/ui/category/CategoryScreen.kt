@@ -424,6 +424,9 @@ private fun CategoryRow(
     }
 }
 
+/** The General section's inputs, saved together. */
+private data class CategoryGeneral(val name: String, val description: String, val iconId: Long?, val color: Int)
+
 @Composable
 private fun EditCategoryScreen(
     target: EditTarget,
@@ -436,6 +439,7 @@ private fun EditCategoryScreen(
     val existing = (target as? EditTarget.Edit)?.category
     val effectiveType = existing?.type ?: currentType
     var name by remember { mutableStateOf(existing?.name.orEmpty()) }
+    var description by remember { mutableStateOf(existing?.description.orEmpty()) }
     var iconId by remember { mutableStateOf(existing?.iconId) }
     var color by remember {
         mutableStateOf(existing?.color ?: (target as? EditTarget.NewChild)?.parentColor ?: DefaultCategoryColor)
@@ -459,8 +463,8 @@ private fun EditCategoryScreen(
 
     // Editing saves as it goes: General as one, the Budget section as the shown month's settings.
     val generalSave = existing?.let {
-        rememberAutoSave(Triple(name, iconId, color)) { (n, i, c) ->
-            n.isNotBlank().also { ok -> if (ok) viewModel.update(it, n, i, c) }
+        rememberAutoSave(CategoryGeneral(name, description, iconId, color)) { g ->
+            g.name.isNotBlank().also { ok -> if (ok) viewModel.update(it, g.name, g.iconId, g.color, g.description.trim().ifEmpty { null }) }
         }
     }
     val budgetSave = existing?.takeIf { effectiveType == CategoryKind.EXPENSE }?.let {
@@ -490,7 +494,7 @@ private fun EditCategoryScreen(
     }
 
     // Creating: compared against the values the editor opened with, for the discard check.
-    val fields = listOf(name, iconId, color, month, form)
+    val fields = listOf(name, description, iconId, color, month, form)
     val initialFields = remember { fields }
     EditorScaffold(
         title = title,
@@ -502,9 +506,9 @@ private fun EditCategoryScreen(
             {
                 val setting = form.toSetting().takeIf { form.enabled && effectiveType == CategoryKind.EXPENSE }
                 if (target is EditTarget.NewChild) {
-                    viewModel.createChild(target.parentId, name, iconId, color, setting, month)
+                    viewModel.createChild(target.parentId, name, iconId, color, setting, month, description.trim().ifEmpty { null })
                 } else {
-                    viewModel.createParent(name, iconId, color, setting, month, defaultChildName)
+                    viewModel.createParent(name, iconId, color, setting, month, defaultChildName, description.trim().ifEmpty { null })
                 }
                 onDismiss()
             }
@@ -525,7 +529,16 @@ private fun EditCategoryScreen(
             singleLine = true,
             isError = existing != null && name.isBlank(),
             // Editing: a blank name goes back to the saved one when the field is left.
-            modifier = Modifier.fillMaxWidth().onBlur { if (name.isBlank()) generalSave?.let { name = it.saved.first } },
+            modifier = Modifier.fillMaxWidth().onBlur { if (name.isBlank()) generalSave?.let { name = it.saved.name } },
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = description,
+            onValueChange = { description = it },
+            label = { Text(stringResource(R.string.common_description_hint)) },
+            minLines = 1,
+            maxLines = 4,
+            modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(12.dp))
         Text(stringResource(R.string.category_color_label), style = MaterialTheme.typography.labelLarge)

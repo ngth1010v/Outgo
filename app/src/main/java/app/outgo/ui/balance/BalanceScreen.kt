@@ -192,7 +192,7 @@ fun AccountEditScreen(accountId: Long?, onClose: () -> Unit) {
 }
 
 /** The General section's inputs, saved together. */
-private data class AccountGeneral(val type: Int, val name: String, val balanceText: String, val iconId: Long?, val color: Int)
+private data class AccountGeneral(val type: Int, val name: String, val description: String, val balanceText: String, val iconId: Long?, val color: Int)
 
 /** The Savings section's inputs for one month, as typed (the target is still text). */
 private data class SavingsForm(val enabled: Boolean, val targetText: String) {
@@ -212,6 +212,7 @@ private fun EditAccountScreen(row: AccountWithProgress?, onDismiss: () -> Unit, 
     val scope = rememberCoroutineScope()
     var accountType by remember { mutableStateOf(account?.accountType ?: AccountType.NORMAL) }
     var name by remember { mutableStateOf(account?.name.orEmpty()) }
+    var description by remember { mutableStateOf(account?.description.orEmpty()) }
     var balanceText by remember { mutableStateOf(account?.balance?.takeIf { it != 0L }?.toString().orEmpty()) }
     // The Savings section shows (and saves) one month's target; it opens on this month's.
     var month by remember { mutableIntStateOf(MonthKey.current()) }
@@ -228,9 +229,9 @@ private fun EditAccountScreen(row: AccountWithProgress?, onDismiss: () -> Unit, 
 
     // Editing saves as it goes: General as one, the Savings section as the shown month's target.
     val generalSave = account?.let { edited ->
-        rememberAutoSave(AccountGeneral(accountType, name, balanceText, iconId, color)) {
+        rememberAutoSave(AccountGeneral(accountType, name, description, balanceText, iconId, color)) {
             name.isNotBlank().also { ok ->
-                if (ok) viewModel.update(edited.id, name, iconId, color, balanceText.toLongOrNull() ?: 0L, accountType)
+                if (ok) viewModel.update(edited.id, name, iconId, color, balanceText.toLongOrNull() ?: 0L, accountType, description.trim().ifEmpty { null })
             }
         }
     }
@@ -257,7 +258,7 @@ private fun EditAccountScreen(row: AccountWithProgress?, onDismiss: () -> Unit, 
     LaunchedEffect(Unit) { if (account != null) showMonth(month) }
 
     // Creating: compared against the values the editor opened with, for the discard check.
-    val fields = listOf(accountType, name, balanceText, month, form, iconId, color)
+    val fields = listOf(accountType, name, description, balanceText, month, form, iconId, color)
     val initialFields = remember { fields }
     val savingsShown = accountType == AccountType.SAVINGS && form.enabled
     EditorScaffold(
@@ -269,7 +270,7 @@ private fun EditAccountScreen(row: AccountWithProgress?, onDismiss: () -> Unit, 
         } else {
             {
                 val savings = form.toSetting().takeIf { savingsShown }
-                viewModel.create(name, iconId, color, balanceText.toLongOrNull() ?: 0L, accountType, savings, month)
+                viewModel.create(name, iconId, color, balanceText.toLongOrNull() ?: 0L, accountType, savings, month, description.trim().ifEmpty { null })
                 onDismiss()
             }
         },
@@ -306,6 +307,15 @@ private fun EditAccountScreen(row: AccountWithProgress?, onDismiss: () -> Unit, 
             isError = account != null && name.isBlank(),
             // Editing: a blank name goes back to the saved one when the field is left.
             modifier = Modifier.fillMaxWidth().onBlur { if (name.isBlank() && generalSave != null) name = generalSave.saved.name },
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = description,
+            onValueChange = { description = it },
+            label = { Text(stringResource(R.string.common_description_hint)) },
+            minLines = 1,
+            maxLines = 4,
+            modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(

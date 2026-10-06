@@ -1,12 +1,5 @@
 package app.outgo.ui.home
 
-import android.widget.Toast
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.launch
-import app.outgo.data.db.entity.TradeEntity
-import app.outgo.ui.history.PendingBadge
-import app.outgo.ui.history.PendingBanner
 import androidx.annotation.StringRes
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -16,11 +9,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.lerp
 import app.outgo.ui.component.rememberReorderState
-import app.outgo.ui.component.OutgoSegmentedButton
 import app.outgo.ui.component.reorderableItem
-import androidx.compose.animation.core.EaseInOut
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,12 +19,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
@@ -45,24 +33,18 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -82,27 +64,16 @@ import app.outgo.ui.component.BudgetProgressBlock
 import app.outgo.ui.component.IconView
 import app.outgo.ui.component.budgetRemainingColor
 import app.outgo.ui.component.budgetRemainingText
-import app.outgo.ui.component.rememberSwipeLevel
 import app.outgo.ui.component.savingsProgressColor
 import app.outgo.ui.component.savingsProgressText
-import app.outgo.ui.component.swipeShift
-import app.outgo.ui.component.swipeStep
-import app.outgo.ui.history.HistoryViewModel
-import app.outgo.ui.history.LoadMoreOnScrollEnd
-import app.outgo.ui.history.HistoryListItem
-import app.outgo.ui.history.historyItemKey
-import app.outgo.ui.history.historyItems
-import app.outgo.ui.nav.HistoryType
 import app.outgo.ui.theme.ExpenseRed
 import app.outgo.ui.theme.IncomeGreen
 import app.outgo.ui.theme.WarningDarkYellow
 import app.outgo.util.Money
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.isActive
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
+fun HomeScreen() {
     val container = LocalAppContainer.current
     val viewModel: HomeViewModel = viewModel(
         factory = viewModelFactory {
@@ -112,89 +83,7 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
         },
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
-
-    var historyType by rememberSaveable { mutableStateOf(HistoryType.EXPENSE) }
-    // One ViewModel per tab, keyed so switching tabs keeps each tab's already-loaded pages. All
-    // three exist and load, so a history swipe draws the neighbor tab's rows at once.
-    val historyViewModels = HistoryType.entries.associateWith { type ->
-        viewModel<HistoryViewModel>(
-            key = "home-history-${type.arg}",
-            factory = viewModelFactory {
-                initializer {
-                    HistoryViewModel(container.tradeRepository, container.accountRepository, container.categoryRepository, type)
-                }
-            },
-        )
-    }
-    val historyViewModel = historyViewModels.getValue(historyType)
-    // Collected only to recompose on change; the value is read from the flow itself because
-    // collectAsState's holder outlives a ViewModel swap and would show the previous tab's rows
-    // for a frame after a switch.
-    historyViewModel.state.collectAsStateWithLifecycle().value
-    val historyState = historyViewModel.state.value
-    // The list is a one-shot fetch, not a Flow: re-read it whenever Home is shown again (it
-    // stays composed while hidden), e.g. after adding or editing a trade.
-    historyViewModels.values.forEach { vm -> LaunchedEffect(vm, visible) { vm.refresh() } }
-    val historyRows = historyState.items
-    val pendingTransfers by remember { container.tradeRepository.pendingCount }.collectAsStateWithLifecycle(0)
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val onRetry: (TradeEntity) -> Unit = { trade ->
-        scope.launch {
-            if (container.tradeRepository.settle(trade.id)) {
-                historyViewModels.getValue(HistoryType.TRANSFER).refresh()
-            } else {
-                val from = historyState.accountsById[trade.accountId]?.name.orEmpty()
-                Toast.makeText(context, context.getString(R.string.history_retry_not_enough, from), Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
     val listState = rememberLazyListState()
-    LoadMoreOnScrollEnd(listState, historyState.canLoadMore, historyViewModel::loadMore)
-
-    // Switching history tabs swaps the rows instantly. A shorter new tab would shrink the list
-    // under the current scroll position and LazyColumn would snap up; a tall filler after the
-    // rows keeps the position, then the list eases up until the filler's top reaches the
-    // viewport bottom, and the filler is removed with nothing left to jump.
-    var holdScroll by remember { mutableStateOf(false) }
-    fun switchHistory(type: HistoryType) {
-        if (type == historyType) return
-        historyType = type
-        holdScroll = true
-    }
-    // Moves only the history rows: the header and its type tabs stay put, like tabs over a pager.
-    val historySwipe = rememberSwipeLevel { next, down ->
-        // Only in the history section (its header and below): Expense <-> Income <-> Transfer.
-        // Above it, or past either end, the tab level takes the swipe.
-        if (!listState.isInHistory(down)) return@rememberSwipeLevel null
-        val type = HistoryType.entries.getOrNull(historyType.ordinal + if (next) 1 else -1)
-        type?.let { { switchHistory(it) } }
-    }
-    // Restarts on every switch (new ViewModel) and once a first-time tab finishes loading, so it
-    // only measures the new tab's real rows. Measuring earlier would aim at the wrong place.
-    LaunchedEffect(historyViewModel, historyState.isLoading, holdScroll) {
-        if (!holdScroll || historyState.isLoading) return@LaunchedEffect
-        withFrameNanos { } // effects start once the composition is applied; this waits out its layout
-        val layout = listState.layoutInfo
-        layout.visibleItemsInfo.firstOrNull { it.key == HOLD_SCROLL_KEY }?.let { filler ->
-            try {
-                listState.animateScrollBy(
-                    (filler.offset - layout.viewportEndOffset).toFloat(),
-                    tween(HOLD_SCROLL_MS, easing = EaseInOut),
-                )
-            } catch (e: CancellationException) {
-                // A newer switch restarted this effect: it owns the filler now.
-                if (!isActive) throw e
-                // Otherwise a finger stopped the scroll; drop the filler all the same.
-            }
-        }
-        holdScroll = false
-    }
-
-    // Read here, not inside the LazyColumn lambda: that lambda runs lazily and would pick up a
-    // new tab's prefix before the rows it goes with.
-    val historyKeyPrefix = historyType.arg
 
     // The balance rows' order while a drag works on it; the saved order's next emission replaces it.
     var balanceOrder by remember(state.order) {
@@ -221,9 +110,9 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
         Box(Modifier.fillMaxSize().padding(padding)) {
             LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize().swipeStep(historySwipe).padding(horizontal = 16.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(top = HISTORY_TOP_PADDING, bottom = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(HISTORY_SPACING),
+                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(top = LIST_TOP_PADDING, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(LIST_SPACING),
             ) {
                 items(balanceOrder, key = { it }) { balance ->
                     BalanceRow(
@@ -236,7 +125,7 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
                         onInfo = { info = it },
                         onWarning = { shortfallOpen = true },
                         // The rows are spaced by their own padding, not the list's item spacing.
-                        modifier = Modifier.absorbSpacingBelow(HISTORY_SPACING)
+                        modifier = Modifier.absorbSpacingBelow(LIST_SPACING)
                             .then(reorderableItem(reorder, balance))
                             .fillMaxWidth()
                             // Opaque, so a lifted row hides the rows it passes over.
@@ -275,166 +164,15 @@ fun HomeScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
                         }
                     }
                 }
-
-                item(key = HISTORY_HEADER_KEY) {
-                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                        Text(stringResource(R.string.home_history_section), style = MaterialTheme.typography.titleMedium)
-                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                            HistoryType.entries.forEachIndexed { index, type ->
-                                OutgoSegmentedButton(
-                                    selected = type == historyType,
-                                    onClick = { switchHistory(type) },
-                                    shape = SegmentedButtonDefaults.itemShape(index, HistoryType.entries.size),
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            stringResource(
-                                                when (type) {
-                                                    HistoryType.EXPENSE -> R.string.trade_expense
-                                                    HistoryType.INCOME -> R.string.trade_income
-                                                    HistoryType.TRANSFER -> R.string.trade_transfer
-                                                },
-                                            ),
-                                        )
-                                        if (type == HistoryType.TRANSFER && pendingTransfers > 0) {
-                                            PendingBadge(pendingTransfers, Modifier.padding(start = 6.dp))
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if (historyType == HistoryType.TRANSFER && pendingTransfers > 0) {
-                    item(key = PENDING_BANNER_KEY) { PendingBanner(pendingTransfers, Modifier.swipeShift(historySwipe)) }
-                }
-                if (historyRows.isEmpty()) {
-                    if (!historyState.isLoading) {
-                        item {
-                            Text(
-                                stringResource(R.string.history_empty),
-                                modifier = Modifier.swipeShift(historySwipe),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                } else {
-                    historyItems(
-                        historyRows, historyState.categoriesById, historyState.accountsById, onOpenTrade,
-                        rowModifier = Modifier.swipeShift(historySwipe),
-                        keyPrefix = historyKeyPrefix,
-                        onRetry = onRetry,
-                    )
-                }
-                if (holdScroll) {
-                    item(key = HOLD_SCROLL_KEY) { Spacer(Modifier.height(HOLD_SCROLL_HEIGHT)) }
-                }
             }
             info?.let { BalanceInfoDialog(it, state, onDismiss = { info = null }) }
             if (shortfallOpen) BudgetShortfallDialog(state, onDismiss = { shortfallOpen = false })
-            // The neighbor tabs' rows, lined up with the current ones.
-            if (historySwipe.moving) {
-                listOf(-1, 1).forEach { page ->
-                    HistoryType.entries.getOrNull(historyType.ordinal + page)?.let { type ->
-                        key(type) {
-                            NeighborHistory(
-                                viewModel = historyViewModels.getValue(type),
-                                listState = listState,
-                                currentRows = historyRows,
-                                currentKeyPrefix = historyKeyPrefix,
-                                onOpenTrade = onOpenTrade,
-                                pendingTransfers = if (type == HistoryType.TRANSFER) pendingTransfers else 0,
-                                modifier = Modifier.swipeShift(historySwipe, page),
-                            )
-                        }
-                    }
-                }
-            }
         }
     }
 }
 
-private const val HOLD_SCROLL_KEY = "history_hold_scroll"
-private const val HISTORY_HEADER_KEY = "history_header"
-private const val PENDING_BANNER_KEY = "history_pending_banner"
-
-/**
- * Whether [down] (in list coordinates) lands in the history section. With the header scrolled
- * out of view, the section fills the list iff the top row is a history row: those rows have String
- * keys, the ones above the header have none or a [HomeBalance] key.
- */
-private fun LazyListState.isInHistory(down: Offset): Boolean {
-    val info = layoutInfo
-    val header = info.visibleItemsInfo.firstOrNull { it.key == HISTORY_HEADER_KEY }
-        ?: return info.visibleItemsInfo.firstOrNull()?.key is String
-    return down.y >= header.offset - info.viewportStartOffset
-}
-
-/**
- * Another history tab's rows over Home's list, where a switch to it would put them: under the
- * header while it shows, else at the current rows' scroll position (which the switch keeps).
- */
-@Composable
-private fun NeighborHistory(
-    viewModel: HistoryViewModel,
-    listState: LazyListState,
-    currentRows: List<HistoryListItem>,
-    currentKeyPrefix: String,
-    onOpenTrade: (Long) -> Unit,
-    /** Shows the unfinished-transfers banner atop the rows when above 0, as the list does. */
-    pendingTransfers: Int,
-    modifier: Modifier,
-) {
-    val state by viewModel.state.collectAsStateWithLifecycle()
-    val density = LocalDensity.current
-    // Read once: the list does not scroll during a horizontal swipe.
-    val (topPadding, rowsState) = remember {
-        val info = listState.layoutInfo
-        val header = info.visibleItemsInfo.firstOrNull { it.key == HISTORY_HEADER_KEY }
-        if (header != null) {
-            val top = with(density) { (header.offset + header.size - info.viewportStartOffset).toDp() } + HISTORY_SPACING
-            top to LazyListState()
-        } else {
-            val firstKey = info.visibleItemsInfo.firstOrNull()?.key
-            val index = currentRows.indexOfFirst { currentKeyPrefix + historyItemKey(it) == firstKey }.coerceAtLeast(0)
-            HISTORY_TOP_PADDING to LazyListState(index, listState.firstVisibleItemScrollOffset)
-        }
-    }
-    LazyColumn(
-        state = rowsState,
-        userScrollEnabled = false,
-        modifier = modifier.fillMaxSize().padding(horizontal = 16.dp),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(top = topPadding, bottom = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(HISTORY_SPACING),
-    ) {
-        if (pendingTransfers > 0) item { PendingBanner(pendingTransfers) }
-        if (state.items.isEmpty()) {
-            if (!state.isLoading) {
-                item {
-                    Text(
-                        stringResource(R.string.history_empty),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        } else {
-            historyItems(state.items, state.categoriesById, state.accountsById, onOpenTrade)
-        }
-    }
-}
-
-private val HISTORY_TOP_PADDING = 48.dp
-private val HISTORY_SPACING = 10.dp
-
-/** Duration of the ease back up over the hold-scroll filler after a history tab switch. */
-private const val HOLD_SCROLL_MS = 500
-
-// ponytail: fixed height, a switch scrolled deeper than this into the history still snaps
-// partway; size it from the scrolled distance if lists ever get that long.
-private val HOLD_SCROLL_HEIGHT = 30_000.dp
+private val LIST_TOP_PADDING = 48.dp
+private val LIST_SPACING = 10.dp
 
 /**
  * One of Home's balance rows: the label with its (i) over the amount, and the eye at the right

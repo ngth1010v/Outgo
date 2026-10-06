@@ -46,7 +46,7 @@ class CategoryRepository(
      * picks a child), so a budget set on it could never accrue spend. Every new
      * parent gets one default child up front so it's reachable right away.
      */
-    suspend fun createParent(type: Int, name: String, iconId: Long?, color: Int, budget: BudgetSetting?, monthKey: Int, defaultChildName: String): Long =
+    suspend fun createParent(type: Int, name: String, iconId: Long?, color: Int, budget: BudgetSetting?, monthKey: Int, defaultChildName: String, description: String?): Long =
         withContext(Dispatchers.IO) {
             db.withTransaction {
                 val order = categoryDao.maxSortOrder(null) + 1
@@ -55,6 +55,7 @@ class CategoryRepository(
                         parentId = null,
                         type = type,
                         name = name,
+                        description = description,
                         iconId = iconId,
                         color = color,
                         sortOrder = order,
@@ -77,7 +78,7 @@ class CategoryRepository(
             }
         }
 
-    suspend fun createChild(parentId: Long, name: String, iconId: Long?, color: Int, budget: BudgetSetting?, monthKey: Int): Long = withContext(Dispatchers.IO) {
+    suspend fun createChild(parentId: Long, name: String, iconId: Long?, color: Int, budget: BudgetSetting?, monthKey: Int, description: String?): Long = withContext(Dispatchers.IO) {
         db.withTransaction {
             val parent = categoryDao.findById(parentId) ?: error("parent category not found")
             val order = categoryDao.maxSortOrder(parentId) + 1
@@ -86,6 +87,7 @@ class CategoryRepository(
                     parentId = parentId,
                     type = parent.type,
                     name = name,
+                    description = description,
                     iconId = iconId,
                     color = color,
                     sortOrder = order,
@@ -97,8 +99,8 @@ class CategoryRepository(
         }
     }
 
-    suspend fun update(category: CategoryEntity, name: String, iconId: Long?, color: Int) = withContext(Dispatchers.IO) {
-        categoryDao.update(category.copy(name = name, iconId = iconId, color = color))
+    suspend fun update(category: CategoryEntity, name: String, iconId: Long?, color: Int, description: String?) = withContext(Dispatchers.IO) {
+        categoryDao.update(category.copy(name = name, iconId = iconId, color = color, description = description))
     }
 
     /**

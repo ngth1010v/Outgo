@@ -21,12 +21,12 @@ class BalanceViewModel(private val accountRepository: AccountRepository) : ViewM
 
     suspend fun hasTrades(accountId: Long): Boolean = accountRepository.hasTrades(accountId)
 
-    fun create(name: String, iconId: Long?, color: Int, balance: Long, accountType: Int, savings: SavingsSetting?, monthKey: Int) {
-        write { accountRepository.create(name, iconId, color, balance, accountType, savings, monthKey) }
+    fun create(name: String, iconId: Long?, color: Int, balance: Long, accountType: Int, savings: SavingsSetting?, monthKey: Int, description: String?) {
+        write { accountRepository.create(name, iconId, color, balance, accountType, savings, monthKey, description) }
     }
 
-    fun update(accountId: Long, name: String, iconId: Long?, color: Int, balance: Long, accountType: Int) {
-        write { accountRepository.update(accountId, name, iconId, color, balance, accountType) }
+    fun update(accountId: Long, name: String, iconId: Long?, color: Int, balance: Long, accountType: Int, description: String?) {
+        write { accountRepository.update(accountId, name, iconId, color, balance, accountType, description) }
     }
 
     suspend fun savingsAt(accountId: Long, monthKey: Int): SavingsSetting? = 

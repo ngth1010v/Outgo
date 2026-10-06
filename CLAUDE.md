@@ -111,12 +111,12 @@ synchronous DB/IO work to `OutgoApp.onCreate`, `MainActivity.onCreate`, or the f
 Plain string routes (`ui/nav/Routes.kt`) — no Safe Args/type-safe nav library, deliberately, since the
 route set is small and fixed. The initial tab is `Routes.TRADE` (opening the app goes straight to
 "add expense", not Home — this is a hard requirement, not a default that can be casually changed).
-Six bottom-nav tabs (Home, Trade, Balance, Category, Analysis, Setting) live *outside* the NavHost
+Seven bottom-nav tabs (Home, Balance, Category, Trade, Analysis, History, Setting) live *outside* the NavHost
 in `OutgoRoot`: each stays composed once visited (the rest are prewarmed ~1s after launch) and a tab
 switch only changes which one is placed, so no screen is rebuilt on tap. The NavHost holds only an
 empty `Routes.TABS` start destination plus the parameterized history/trade-edit/analysis-sub routes
 pushed on top. Tab screens therefore never leave composition: re-read one-shot data when a tab is
-shown again (see `HomeScreen(visible)`), not in a plain `LaunchedEffect(Unit)`.
+shown again (see `HistoryTabScreen(visible)`), not in a plain `LaunchedEffect(Unit)`.
 
 ### Icons
 

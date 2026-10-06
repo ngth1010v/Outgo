@@ -31,6 +31,7 @@
     <string name="nav_balance">Accounts</string>
     <string name="nav_category">Categories</string>
     <string name="nav_analysis">Analysis</string>
+    <string name="nav_history">History</string>
     <string name="nav_setting">Settings</string>
 
     <!-- Trade screen -->
@@ -90,6 +91,7 @@
     <string name="balance_edit_title">Edit account</string>
     <string name="balance_create_title">New account</string>
     <string name="balance_name_hint">Account name</string>
+    <string name="common_description_hint">Description (optional)</string>
     <string name="balance_current_balance_hint">Current balance</string>
     <string name="balance_delete_confirm_title">Delete account?</string>
     <string name="balance_delete_confirm_message">This account has no transactions and will be removed permanently.</string>

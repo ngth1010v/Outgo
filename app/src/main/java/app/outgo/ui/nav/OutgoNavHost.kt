@@ -38,6 +38,7 @@ import app.outgo.ui.component.rememberSwipeLevel
 import app.outgo.ui.component.swipeShift
 import app.outgo.ui.component.swipeStep
 import app.outgo.ui.history.HistoryScreen
+import app.outgo.ui.history.HistoryTabScreen
 import app.outgo.ui.home.HomeScreen
 import app.outgo.ui.setting.SettingScreen
 import app.outgo.ui.trade.TradeScreen
@@ -177,10 +178,7 @@ fun OutgoRoot(openSetting: Boolean = false) {
 private fun TabContent(route: String, shown: Boolean, navController: NavHostController) {
     when (route) {
         Routes.TRADE -> TradeScreen(editingTradeId = null, onClose = {})
-        Routes.HOME -> HomeScreen(
-            visible = shown,
-            onOpenTrade = { tradeId -> navController.navigate(Routes.tradeEdit(tradeId)) },
-        )
+        Routes.HOME -> HomeScreen()
         Routes.BALANCE -> BalanceScreen(onOpenEditor = { id -> navController.navigate(Routes.accountEdit(id)) })
         Routes.CATEGORY -> CategoryScreen(
             onOpenEditor = { id, parentId -> navController.navigate(Routes.categoryEdit(id, parentId)) },
@@ -188,6 +186,10 @@ private fun TabContent(route: String, shown: Boolean, navController: NavHostCont
         Routes.ANALYSIS -> AnalysisScreen(
             onOpenTrade = { tradeId -> navController.navigate(Routes.tradeEdit(tradeId)) },
             onOpenDay = { dayStart -> navController.navigate(Routes.history(HistoryType.EXPENSE, dayStart)) },
+        )
+        Routes.HISTORY -> HistoryTabScreen(
+            visible = shown,
+            onOpenTrade = { tradeId -> navController.navigate(Routes.tradeEdit(tradeId)) },
         )
         Routes.SETTING -> SettingScreen()
     }

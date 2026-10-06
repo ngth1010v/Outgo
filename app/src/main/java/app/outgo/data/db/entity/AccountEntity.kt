@@ -30,6 +30,9 @@ data class AccountEntity(
     val id: Long = 0,
     @ColumnInfo(name = "name")
     val name: String,
+    /** Optional free text, null when empty. */
+    @ColumnInfo(name = "description")
+    val description: String? = null,
     @ColumnInfo(name = "icon_id")
     val iconId: Long?,
     @ColumnInfo(name = "balance")
