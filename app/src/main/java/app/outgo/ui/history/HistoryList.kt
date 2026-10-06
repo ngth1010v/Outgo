@@ -141,16 +141,23 @@ internal fun HistoryItem(
                 },
             )
         }
-        is HistoryListItem.Row -> TradeRow(
-            trade = item.trade,
+        is HistoryListItem.Row -> {
             // An automatic transfer shows the budget it moves the unspent amount of.
-            category = categoriesById[item.trade.categoryId ?: item.trade.offsetCategoryId],
-            fromAccount = accountsById[item.trade.accountId],
+            val category = categoriesById[item.trade.categoryId ?: item.trade.offsetCategoryId]
+            val fromAccount = accountsById[item.trade.accountId]
+            TradeRow(
+            trade = item.trade,
+            category = category,
+            // "parent/sub", or just the name of a parent-level one.
+            fromPath = fromAccount?.let { a -> listOfNotNull(accountsById[a.parentId]?.name, a.name).joinToString("/") }.orEmpty(),
+            budgetPath = category?.let { c -> listOfNotNull(categoriesById[c.parentId]?.name, c.name).joinToString("/") },
+            fromAccount = fromAccount,
             toAccount = accountsById[item.trade.toAccountId],
             onClick = { onOpenTrade(item.trade.id) },
             modifier = modifier,
             onRetry = onRetry,
-        )
+            )
+        }
     }
 }
 
@@ -158,6 +165,8 @@ internal fun HistoryItem(
 private fun TradeRow(
     trade: TradeEntity,
     category: CategoryEntity?,
+    fromPath: String,
+    budgetPath: String?,
     fromAccount: AccountEntity?,
     toAccount: AccountEntity?,
     onClick: () -> Unit,
@@ -215,9 +224,12 @@ private fun TradeRow(
                     )
                 }
             }
+            // A transfer taken from a budget names it on a line of its own, above the account.
+            if (isTransfer && budgetPath != null) {
+                Text(budgetPath, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             Text(
-                (fromAccount?.name ?: "") + (if (isTransfer && category != null) "/" + category.name else "") +
-                    " · " + formatTime(trade.occurredAt),
+                "$fromPath · " + formatTime(trade.occurredAt),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
