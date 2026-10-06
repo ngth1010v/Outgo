@@ -30,13 +30,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.outgo.R
 import app.outgo.util.MonthKey
-import java.time.Month
-import java.time.format.TextStyle
 import java.util.Locale
 
 /**
@@ -79,7 +78,8 @@ fun MonthPicker(monthKey: Int, onSelect: (Int) -> Unit, modifier: Modifier = Mod
 private fun MonthGridDialog(selected: Int, onDismiss: () -> Unit, onSelect: (Int) -> Unit) {
     var year by remember { mutableIntStateOf(selected / 100) }
     val current = MonthKey.current()
-    val locale = Locale.getDefault()
+    // App strings, not java.time: the device locale can differ from the language chosen in Settings.
+    val monthNames = stringArrayResource(R.array.month_abbrev)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -111,7 +111,7 @@ private fun MonthGridDialog(selected: Int, onDismiss: () -> Unit, onSelect: (Int
                                 },
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
-                                    Text(Month.of(m).getDisplayName(TextStyle.SHORT, locale), style = MaterialTheme.typography.labelLarge)
+                                    Text(monthNames[m - 1], style = MaterialTheme.typography.labelLarge)
                                 }
                             }
                         }

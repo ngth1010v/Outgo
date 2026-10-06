@@ -305,9 +305,15 @@ private fun TradeForm(
         }
 
         if (state.isEditing) {
-            TextButton(onClick = onClose, modifier = Modifier.fillMaxWidth()) {
+            TextButton(
+                onClick = onClose,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(20.dp)),
+            ) {
                 Text(stringResource(R.string.common_cancel))
             }
+            Spacer(Modifier.height(8.dp))
             TextButton(
                 onClick = onDelete,
                 modifier = Modifier
