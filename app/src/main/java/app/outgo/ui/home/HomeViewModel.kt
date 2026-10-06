@@ -88,7 +88,11 @@ class HomeViewModel(
             savingsBalance = savings.sumOf { it.account.balance },
             // Paused budgets and ones whose apply-from is still ahead have no bar this month.
             budgets = budgets.filter { it.enabled },
-            savingsAccounts = savings,
+            // A savings parent stands for its subaccounts, unless one has a target of its own.
+            savingsAccounts = savings.filter { row ->
+                row.account.isParent || row.monthlyTarget != null ||
+                    savings.none { it.account.id == row.account.parentId }
+            },
             hidden = hidden,
             order = parseOrder(order),
         )

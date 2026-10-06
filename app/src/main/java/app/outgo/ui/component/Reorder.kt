@@ -275,9 +275,10 @@ fun rememberReorderState(listState: LazyListState): ReorderState {
  * A row of a reorderable list: a long press lifts it, then it follows the finger while the other
  * rows slide aside. Put it on the item's root, keyed as in [ReorderState.update]; spacing padding
  * goes before it so the lifted shadow hugs the row. Rows that never lift use [slideItem].
+ * [slide] off: see [slideItem].
  */
 @Composable
-fun LazyItemScope.reorderableItem(state: ReorderState, key: Any): Modifier {
+fun LazyItemScope.reorderableItem(state: ReorderState, key: Any, slide: Boolean = true): Modifier {
     val lifted = state.isLifted(key)
     val dragging = key == state.draggingKey
     val lift by animateFloatAsState(if (dragging) 1f else 0f, label = "lift")
@@ -291,7 +292,7 @@ fun LazyItemScope.reorderableItem(state: ReorderState, key: Any): Modifier {
     // The row's own coordinates move with its layer, so the finger is tracked in root space.
     val coords = remember { arrayOfNulls<LayoutCoordinates>(1) }
     fun rootX(local: Offset) = coords[0]?.takeIf { it.isAttached }?.localToRoot(local)?.x ?: local.x
-    return slideItem(lifted)
+    return slideItem(lifted, slide)
         .zIndex(if (lifted) 1f else 0f)
         .graphicsLayer {
             translationY = state.offsetOf(key)
@@ -319,9 +320,11 @@ fun LazyItemScope.reorderableItem(state: ReorderState, key: Any): Modifier {
  * A row of a reorderable list that slides when rows move around it. Rows appear and leave without
  * fading: a fade would replay the old rows over new ones when the whole list is swapped (a type
  * swipe), after the swipe has already shown the new ones. [lifted] rows are placed by the finger.
+ * With [slide] off a moved row jumps straight to its new place, for a move that is itself animated
+ * frame by frame (rows following a folding panel's edge).
  */
-fun LazyItemScope.slideItem(lifted: Boolean = false): Modifier = Modifier.animateItem(
+fun LazyItemScope.slideItem(lifted: Boolean = false, slide: Boolean = true): Modifier = Modifier.animateItem(
     fadeInSpec = null,
-    placementSpec = if (lifted) null else spring(stiffness = Spring.StiffnessMediumLow, visibilityThreshold = IntOffset.VisibilityThreshold),
+    placementSpec = if (lifted || !slide) null else spring(stiffness = Spring.StiffnessMediumLow, visibilityThreshold = IntOffset.VisibilityThreshold),
     fadeOutSpec = null,
 )

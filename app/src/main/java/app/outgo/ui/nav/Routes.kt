@@ -23,9 +23,9 @@ object Routes {
     const val TRADE_EDIT_PATTERN = "trade/edit/{tradeId}"
     fun tradeEdit(tradeId: Long) = "trade/edit/$tradeId"
 
-    /** Account editor: [id] edits that account, 0 creates one. */
-    const val ACCOUNT_EDIT_PATTERN = "account/edit?id={id}"
-    fun accountEdit(id: Long? = null) = "account/edit?id=${id ?: 0L}"
+    /** Account editor: [id] edits that account, else [parentId] creates a subaccount, else a parent. 0 = unset. */
+    const val ACCOUNT_EDIT_PATTERN = "account/edit?id={id}&parent={parent}"
+    fun accountEdit(id: Long? = null, parentId: Long? = null) = "account/edit?id=${id ?: 0L}&parent=${parentId ?: 0L}"
 
     /** Category editor: [id] edits that category, else [parentId] creates a child, else a new parent. 0 = unset. */
     const val CATEGORY_EDIT_PATTERN = "category/edit?id={id}&parent={parent}"

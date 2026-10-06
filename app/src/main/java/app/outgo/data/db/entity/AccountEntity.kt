@@ -11,6 +11,10 @@ import androidx.room.PrimaryKey
  * [balance] is never written directly by the UI — it is only ever changed by
  * the SQL triggers on [TradeEntity] (see OutgoDatabase), so it always equals
  * the sum of that account's trades.
+ *
+ * A parent ([parentId] == null) or a subaccount. Like categories, trades only ever target a
+ * subaccount: a parent groups them, its [balance] stays 0 and its shown balance is the sum of its
+ * subaccounts'. Both levels have their own type and monthly savings targets.
  */
 @Entity(
     tableName = "account",
@@ -21,13 +25,21 @@ import androidx.room.PrimaryKey
             childColumns = ["icon_id"],
             onDelete = ForeignKey.SET_NULL,
         ),
+        ForeignKey(
+            entity = AccountEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["parent_id"],
+            onDelete = ForeignKey.RESTRICT,
+        ),
     ],
-    indices = [Index("icon_id")],
+    indices = [Index("icon_id"), Index("parent_id")],
 )
 data class AccountEntity(
     @PrimaryKey(autoGenerate = true)
     @ColumnInfo(name = "id")
     val id: Long = 0,
+    @ColumnInfo(name = "parent_id")
+    val parentId: Long? = null,
     @ColumnInfo(name = "name")
     val name: String,
     /** Optional free text, null when empty. */
@@ -56,4 +68,6 @@ data class AccountEntity(
     val createdAt: Long,
     @ColumnInfo(name = "updated_at")
     val updatedAt: Long,
-)
+) {
+    val isParent: Boolean get() = parentId == null
+}

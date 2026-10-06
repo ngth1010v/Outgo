@@ -148,10 +148,14 @@ fun OutgoRoot(openSetting: Boolean = false) {
 
                 composable(
                     route = Routes.ACCOUNT_EDIT_PATTERN,
-                    arguments = listOf(navArgument("id") { type = NavType.LongType; defaultValue = 0L }),
+                    arguments = listOf(
+                        navArgument("id") { type = NavType.LongType; defaultValue = 0L },
+                        navArgument("parent") { type = NavType.LongType; defaultValue = 0L },
+                    ),
                 ) { entry ->
                     AccountEditScreen(
                         accountId = entry.arguments?.getLong("id")?.takeIf { it > 0L },
+                        parentId = entry.arguments?.getLong("parent")?.takeIf { it > 0L },
                         onClose = { navController.popBackStack() },
                     )
                 }
@@ -179,7 +183,7 @@ private fun TabContent(route: String, shown: Boolean, navController: NavHostCont
     when (route) {
         Routes.TRADE -> TradeScreen(editingTradeId = null, onClose = {})
         Routes.HOME -> HomeScreen()
-        Routes.BALANCE -> BalanceScreen(onOpenEditor = { id -> navController.navigate(Routes.accountEdit(id)) })
+        Routes.BALANCE -> BalanceScreen(onOpenEditor = { id, parentId -> navController.navigate(Routes.accountEdit(id, parentId)) })
         Routes.CATEGORY -> CategoryScreen(
             onOpenEditor = { id, parentId -> navController.navigate(Routes.categoryEdit(id, parentId)) },
         )

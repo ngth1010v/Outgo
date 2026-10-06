@@ -159,7 +159,7 @@ internal fun HistoryFilterSheet(
 ) {
     val any = stringResource(R.string.history_filter_any)
     fun <T> options(items: List<T>, pick: (T) -> PickOption<Long?>) = listOf(PickOption<Long?>(null, any)) + items.map(pick)
-    val accounts = options(accountsById.values.filter { !it.archived }.sortedBy { it.sortOrder }) {
+    val accounts = options(accountsById.values.filter { !it.archived && !it.isParent }.sortedBy { it.sortOrder }) {
         PickOption(it.id, it.name, it.iconId, it.color)
     }
     fun categories(parentId: Long?) = options(

@@ -124,9 +124,9 @@ class AnalysisViewModel(
         viewModelScope.launch {
             accountRepository.observeAll().collect { list ->
                 accounts = list.associate { it.id to Triple(it.name, it.iconId, it.color) }
-                val savings = list.filter { !it.archived && it.accountType == AccountType.SAVINGS }.map { Triple(it.id, it.name, it.color) }
+                val savings = list.filter { !it.archived && !it.isParent && it.accountType == AccountType.SAVINGS }.map { Triple(it.id, it.name, it.color) }
                 _state.update { state ->
-                    state.copy(accounts = list.filter { !it.archived }.map { it.id to it.name }, savings = savings.map { it.first to it.second })
+                    state.copy(accounts = list.filter { !it.archived && !it.isParent }.map { it.id to it.name }, savings = savings.map { it.first to it.second })
                 }
                 if (savings != savingInfo) {
                     savingInfo = savings

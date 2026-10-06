@@ -20,12 +20,13 @@ class BalanceViewModel(private val accountRepository: AccountRepository) : ViewM
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     suspend fun hasTrades(accountId: Long): Boolean = accountRepository.hasTrades(accountId)
+    suspend fun childCount(parentId: Long): Int = accountRepository.childCount(parentId)
 
-    fun create(name: String, iconId: Long?, color: Int, balance: Long, accountType: Int, savings: SavingsSetting?, monthKey: Int, description: String?) {
-        write { accountRepository.create(name, iconId, color, balance, accountType, savings, monthKey, description) }
+    fun create(name: String, iconId: Long?, color: Int, balance: Long, accountType: Int, savings: SavingsSetting?, monthKey: Int, description: String?, parentId: Long?) {
+        write { accountRepository.create(name, iconId, color, balance, accountType, savings, monthKey, description, parentId) }
     }
 
-    fun update(accountId: Long, name: String, iconId: Long?, color: Int, balance: Long, accountType: Int, description: String?) {
+    fun update(accountId: Long, name: String, iconId: Long?, color: Int, balance: Long?, accountType: Int, description: String?) {
         write { accountRepository.update(accountId, name, iconId, color, balance, accountType, description) }
     }
 
@@ -43,8 +44,8 @@ class BalanceViewModel(private val accountRepository: AccountRepository) : ViewM
         viewModelScope.launch { writes.withLock { block() } }
     }
 
-    fun reorder(ids: List<Long>) {
-        viewModelScope.launch { accountRepository.reorder(ids) }
+    fun reorder(lists: Map<Long?, List<Long>>) {
+        viewModelScope.launch { accountRepository.reorder(lists) }
     }
 
     fun deleteOrArchive(account: AccountEntity) {

@@ -33,6 +33,7 @@ data class TradeUiState(
     val note: String = "",
     /** Per [CategoryKind], both loaded so a swipe can draw the other type's picker too. */
     val pickers: Map<Int, CategoryPicker> = emptyMap(),
+    /** Active parents and subaccounts; a trade picks a subaccount. */
     val accounts: List<AccountEntity> = emptyList(),
     /** Every LIMIT budget with a category; [budgetOptions] narrows it to what the transfer form offers. */
     val budgets: List<BudgetWithProgress> = emptyList(),
@@ -90,7 +91,7 @@ class TradeViewModel(
                 _state.update { s ->
                     // While loading, the default (last used) account is still on its way: the first
                     // account would beat it. After that, this covers an account created from none.
-                    val fallbackAccount = if (s.isLoading) null else accounts.firstOrNull()?.id
+                    val fallbackAccount = if (s.isLoading) null else accounts.firstOrNull { !it.isParent }?.id
                     s.copy(accounts = accounts, selectedAccountId = s.selectedAccountId ?: fallbackAccount)
                 }
             }

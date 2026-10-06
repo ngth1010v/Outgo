@@ -65,6 +65,10 @@
     <string name="trade_undo">UNDO</string>
     <string name="trade_select_category_title">Select a category</string>
     <string name="trade_search_category_hint">Search categories</string>
+    <string name="trade_select_account_title">Select an account</string>
+    <string name="trade_search_account_hint">Search accounts</string>
+    <string name="trade_select_budget_title">Select a budget</string>
+    <string name="trade_search_budget_hint">Search budgets</string>
     <string name="trade_no_categories">No categories yet. Create one from the Categories tab.</string>
 
     <!-- Home screen -->
@@ -103,6 +107,13 @@
     <!-- Balance screen -->
     <string name="balance_edit_title">Edit account</string>
     <string name="balance_create_title">New account</string>
+    <string name="balance_create_sub_title">New subaccount</string>
+    <string name="balance_convert_subs_title">Make subaccounts savings?</string>
+    <string name="balance_convert_subs_message">Every subaccount of a savings account is a savings account too. Its normal subaccounts (%1$d) will become savings accounts.</string>
+    <string name="balance_move_to_savings_message">Every subaccount of a savings account is a savings account too, so %1$s will become a savings account.</string>
+    <string name="balance_type_locked_note">Its parent is a savings account, so it is one too.</string>
+    <string name="balance_delete_parent_confirm_message">This will also delete its %1$d subaccounts. Those with transactions are archived instead, and their history is kept.</string>
+    <string name="balance_parent_balance_note">A parent account\'s balance is its subaccounts\' together: change it on each subaccount.</string>
     <string name="balance_name_hint">Account name</string>
     <string name="common_description_hint">Description (optional)</string>
     <string name="balance_current_balance_hint">Current balance</string>

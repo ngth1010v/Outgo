@@ -5,16 +5,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -30,6 +28,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -50,6 +49,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.outgo.R
 import app.outgo.data.db.dao.AccountWithProgress
+import app.outgo.data.db.entity.AccountEntity
 import app.outgo.data.repo.DefaultCategoryColor
 import app.outgo.data.repo.SavingsSetting
 import app.outgo.domain.AccountType
@@ -66,10 +66,7 @@ import app.outgo.ui.component.IconView
 import app.outgo.ui.component.MonthPicker
 import app.outgo.ui.component.onBlur
 import app.outgo.ui.component.rememberAutoSave
-import app.outgo.ui.component.PlusRow
-import app.outgo.ui.component.rememberReorderState
-import app.outgo.ui.component.reorderableItem
-import app.outgo.ui.component.slideItem
+import app.outgo.ui.component.TreeList
 import app.outgo.ui.component.savingsProgressColor
 import app.outgo.ui.component.savingsProgressText
 import app.outgo.util.Money
@@ -77,93 +74,105 @@ import app.outgo.util.MonthKey
 import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.launch
 
-/** The "add account" row's key; account rows are keyed by id. */
-private const val AddKey = "add"
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BalanceScreen(onOpenEditor: (accountId: Long?) -> Unit) {
-    val container = LocalAppContainer.current
+fun BalanceScreen(onOpenEditor: (id: Long?, parentId: Long?) -> Unit) {
     val viewModel = balanceViewModel()
     val accounts by viewModel.accounts.collectAsStateWithLifecycle()
-    // The order a drag is working on; the database's next emission replaces it.
-    var order by remember(accounts) { mutableStateOf(accounts) }
+    val parents = remember(accounts) { accounts.filter { it.account.isParent } }
+    val childrenByParent = remember(accounts) { accounts.filter { !it.account.isParent }.groupBy { it.account.parentId!! } }
+    var expanded by remember { mutableStateOf(setOf<Long>()) }
     val listState = rememberLazyListState()
-    val reorder = rememberReorderState(listState)
-    reorder.update(
-        keys = order.map { it.account.id } + AddKey,
-        canDrag = { it != AddKey },
-        isSlot = { _, after -> after != null },
-        onMove = { key, to ->
-            val others = order.filter { it.account.id != key }
-            order = others.toMutableList().apply { add(to, order.first { it.account.id == key }) }
-        },
-        onDrop = { viewModel.reorder(order.map { it.account.id }) },
-    )
+    // A drop waiting for the convert dialog, with the normal subaccounts it would make savings.
+    var pendingMove by remember { mutableStateOf<Pair<Map<Long?, List<Long>>, List<AccountEntity>>?>(null) }
+    // Bumped when such a drop is cancelled: rebuilds the list, putting the lifted row back.
+    var listVersion by remember { mutableIntStateOf(0) }
+    fun onReorder(lists: Map<Long?, List<Long>>) {
+        val byId = accounts.associateBy { it.account.id }
+        val converted = lists.filterKeys { byId[it]?.account?.accountType == AccountType.SAVINGS }
+            .flatMap { (parentId, ids) -> ids.mapNotNull { byId[it]?.account }.filter { it.parentId != parentId && it.accountType != AccountType.SAVINGS } }
+        if (converted.isEmpty()) viewModel.reorder(lists) else pendingMove = lists to converted
+    }
 
     Scaffold(topBar = { CenterAlignedTopAppBar(title = { Text(stringResource(R.string.nav_balance)) }) }) { padding ->
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+        key(listVersion) { TreeList(
+            parents = parents,
+            childrenByParent = childrenByParent,
+            id = { it.account.id },
+            listState = listState,
+            expanded = expanded,
+            onToggle = { id -> expanded = if (id in expanded) expanded - id else expanded + id },
+            onOpen = { onOpenEditor(it.account.id, null) },
+            onAddChild = { onOpenEditor(null, it.account.id) },
+            onAddParent = { onOpenEditor(null, null) },
+            onReorder = ::onReorder,
+            row = { row, onClick, modifier, trailing -> AccountRow(row, onClick, modifier, trailing) },
+            modifier = Modifier.fillMaxSize().padding(padding),
+        ) }
+    }
+
+    pendingMove?.let { (lists, converted) ->
+        ConfirmDialog(
+            title = stringResource(R.string.balance_convert_subs_title),
+            message = stringResource(R.string.balance_move_to_savings_message, converted.joinToString { it.name }),
+            onConfirm = {
+                viewModel.reorder(lists)
+                pendingMove = null
+            },
+            onDismiss = {
+                pendingMove = null
+                listVersion++
+            },
+        )
+    }
+}
+
+@Composable
+private fun AccountRow(row: AccountWithProgress, onClick: () -> Unit, modifier: Modifier, trailing: (@Composable () -> Unit)?) {
+    val trades = LocalAppContainer.current.tradeRepository
+    val account = row.account
+    val target = row.monthlyTarget
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp).clickable(onClick = onClick),
         ) {
-            items(order, key = { it.account.id }) { row ->
-                val account = row.account
-                val target = row.monthlyTarget
-                Column(
-                    modifier = reorderableItem(reorder, account.id)
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
-                        // A lifted row's release also ends a tap on it: that tap must not open the editor.
-                        .clickable { if (reorder.draggingKey == null) onOpenEditor(account.id) }
-                        .padding(horizontal = 12.dp, vertical = 14.dp),
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconView(iconId = account.iconId, size = 32.dp, color = account.color)
-                            Spacer(Modifier.width(12.dp))
-                            Column {
-                                Text(account.name, style = MaterialTheme.typography.bodyLarge)
-                                if (account.accountType == AccountType.SAVINGS) {
-                                    Text(
-                                        stringResource(R.string.balance_savings_label),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
-                        }
-                        Text(Money.format(account.balance), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
-                    }
-                    if (target != null) {
-                        BudgetProgressBlock(
-                            remainingText = savingsProgressText(row.monthlyIncome, target),
-                            spentOfTotalText = stringResource(
-                                R.string.balance_savings_of_target,
-                                Money.groupThousands(row.monthlyIncome),
-                                Money.groupThousands(target),
-                            ),
-                            progress = row.monthlyIncome.toFloat() / target.toFloat(),
-                            color = savingsProgressColor(row.monthlyIncome, target, Color(account.color)),
-                            current = row.monthlyIncome,
-                            total = target,
-                            lineName = stringResource(R.string.progress_line_saved),
-                            loadDays = { container.tradeRepository.savingDaysThisMonth(account.id) },
-                            greenWhenLower = false,
-                        )
-                    }
+            IconView(iconId = account.iconId, size = 28.dp, color = account.color)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(account.name, style = MaterialTheme.typography.bodyLarge)
+                if (account.accountType == AccountType.SAVINGS) {
+                    Text(
+                        stringResource(R.string.balance_savings_label),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
-            item(key = AddKey) {
-                PlusRow(
-                    onClick = { onOpenEditor(null) },
-                    modifier = slideItem().background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
-                )
-            }
+            Text(Money.format(row.totalBalance), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
+            trailing?.invoke()
+        }
+        if (target != null) {
+            BudgetProgressBlock(
+                remainingText = savingsProgressText(row.monthlyIncome, target),
+                spentOfTotalText = stringResource(
+                    R.string.balance_savings_of_target,
+                    Money.groupThousands(row.monthlyIncome),
+                    Money.groupThousands(target),
+                ),
+                progress = row.monthlyIncome.toFloat() / target.toFloat(),
+                color = savingsProgressColor(row.monthlyIncome, target, Color(account.color)),
+                current = row.monthlyIncome,
+                total = target,
+                lineName = stringResource(R.string.progress_line_saved),
+                loadDays = { trades.savingDaysThisMonth(account.id) },
+                greenWhenLower = false,
+            )
         }
     }
 }
@@ -181,14 +190,20 @@ private fun balanceViewModel(): BalanceViewModel {
     )
 }
 
-/** The account editor as its own screen: [accountId] edits that account, null creates one. */
+/** The account editor as its own screen: [accountId] edits that account, else [parentId] creates a subaccount, else a parent. */
 @Composable
-fun AccountEditScreen(accountId: Long?, onClose: () -> Unit) {
+fun AccountEditScreen(accountId: Long?, parentId: Long?, onClose: () -> Unit) {
     val viewModel = balanceViewModel()
     val accounts by viewModel.accounts.collectAsStateWithLifecycle()
     // Nothing to draw for the moment a deleted account is still on screen before the pop.
     val row = if (accountId == null) null else accounts.firstOrNull { it.account.id == accountId } ?: return
-    EditAccountScreen(row, onClose, viewModel)
+    val parentKey = parentId ?: row?.account?.parentId
+    val parent = if (parentKey == null) null else accounts.firstOrNull { it.account.id == parentKey }?.account ?: return
+    // A parent's normal subaccounts, which making it a savings account converts.
+    val normalChildren = if (row?.account?.isParent != true) 0 else {
+        accounts.count { it.account.parentId == accountId && it.account.accountType != AccountType.SAVINGS }
+    }
+    EditAccountScreen(row, parent, normalChildren, onClose, viewModel)
 }
 
 /** The General section's inputs, saved together. */
@@ -207,31 +222,46 @@ private data class SavingsForm(val enabled: Boolean, val targetText: String) {
 }
 
 @Composable
-private fun EditAccountScreen(row: AccountWithProgress?, onDismiss: () -> Unit, viewModel: BalanceViewModel) {
+private fun EditAccountScreen(
+    row: AccountWithProgress?,
+    parent: AccountEntity?,
+    normalChildren: Int,
+    onDismiss: () -> Unit,
+    viewModel: BalanceViewModel,
+) {
     val account = row?.account
+    // A parent's balance is its subaccounts': shown, not edited.
+    val editingParent = account?.isParent == true
+    // A savings parent's subaccounts are savings accounts too.
+    val typeLocked = parent?.accountType == AccountType.SAVINGS
     val scope = rememberCoroutineScope()
-    var accountType by remember { mutableStateOf(account?.accountType ?: AccountType.NORMAL) }
+    var accountType by remember {
+        mutableStateOf(if (typeLocked) AccountType.SAVINGS else account?.accountType ?: parent?.accountType ?: AccountType.NORMAL)
+    }
+    var showConvertConfirm by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf(account?.name.orEmpty()) }
     var description by remember { mutableStateOf(account?.description.orEmpty()) }
-    var balanceText by remember { mutableStateOf(account?.balance?.takeIf { it != 0L }?.toString().orEmpty()) }
+    var balanceText by remember { mutableStateOf(row?.totalBalance?.takeIf { it != 0L }?.toString().orEmpty()) }
     // The Savings section shows (and saves) one month's target; it opens on this month's.
     var month by remember { mutableIntStateOf(MonthKey.current()) }
     var form by remember { mutableStateOf(SavingsForm.of(row?.monthlyTarget?.let { SavingsSetting(true, it) })) }
     var iconId by remember { mutableStateOf(account?.iconId) }
-    var color by remember { mutableStateOf(account?.color ?: DefaultCategoryColor) }
+    var color by remember { mutableStateOf(account?.color ?: parent?.color ?: DefaultCategoryColor) }
     var showIconPicker by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var hasTrades by remember { mutableStateOf(false) }
+    var childCount by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(account) {
         hasTrades = account?.let { viewModel.hasTrades(it.id) } ?: false
+        if (account != null && editingParent) childCount = viewModel.childCount(account.id)
     }
 
     // Editing saves as it goes: General as one, the Savings section as the shown month's target.
     val generalSave = account?.let { edited ->
         rememberAutoSave(AccountGeneral(accountType, name, description, balanceText, iconId, color)) {
             name.isNotBlank().also { ok ->
-                if (ok) viewModel.update(edited.id, name, iconId, color, balanceText.toLongOrNull() ?: 0L, accountType, description.trim().ifEmpty { null })
+                if (ok) viewModel.update(edited.id, name, iconId, color, (balanceText.toLongOrNull() ?: 0L).takeIf { !editingParent }, accountType, description.trim().ifEmpty { null })
             }
         }
     }
@@ -262,7 +292,11 @@ private fun EditAccountScreen(row: AccountWithProgress?, onDismiss: () -> Unit, 
     val initialFields = remember { fields }
     val savingsShown = accountType == AccountType.SAVINGS && form.enabled
     EditorScaffold(
-        title = if (account == null) stringResource(R.string.balance_create_title) else stringResource(R.string.balance_edit_title),
+        title = when {
+            account != null -> stringResource(R.string.balance_edit_title)
+            parent != null -> stringResource(R.string.balance_create_sub_title)
+            else -> stringResource(R.string.balance_create_title)
+        },
         onCancel = onDismiss,
         dirty = account == null && fields != initialFields,
         onSave = if (account != null) {
@@ -270,7 +304,7 @@ private fun EditAccountScreen(row: AccountWithProgress?, onDismiss: () -> Unit, 
         } else {
             {
                 val savings = form.toSetting().takeIf { savingsShown }
-                viewModel.create(name, iconId, color, balanceText.toLongOrNull() ?: 0L, accountType, savings, month, description.trim().ifEmpty { null })
+                viewModel.create(name, iconId, color, balanceText.toLongOrNull() ?: 0L, accountType, savings, month, description.trim().ifEmpty { null }, parent?.id)
                 onDismiss()
             }
         },
@@ -289,13 +323,24 @@ private fun EditAccountScreen(row: AccountWithProgress?, onDismiss: () -> Unit, 
             OutgoSegmentedButton(
                 selected = accountType == AccountType.NORMAL,
                 onClick = { accountType = AccountType.NORMAL },
+                enabled = !typeLocked,
                 shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
             ) { Text(stringResource(R.string.balance_type_normal)) }
             OutgoSegmentedButton(
                 selected = accountType == AccountType.SAVINGS,
-                onClick = { accountType = AccountType.SAVINGS },
+                // Normal subaccounts become savings ones with it: asked first.
+                onClick = { if (normalChildren > 0 && accountType != AccountType.SAVINGS) showConvertConfirm = true else accountType = AccountType.SAVINGS },
+                enabled = !typeLocked,
                 shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
             ) { Text(stringResource(R.string.balance_type_savings)) }
+        }
+        if (typeLocked) {
+            Text(
+                stringResource(R.string.balance_type_locked_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 16.dp, top = 4.dp),
+            )
         }
         Spacer(Modifier.height(12.dp))
 
@@ -322,6 +367,8 @@ private fun EditAccountScreen(row: AccountWithProgress?, onDismiss: () -> Unit, 
             value = balanceText,
             onValueChange = { balanceText = it.filter { c -> c.isDigit() } },
             label = { Text(stringResource(R.string.balance_current_balance_hint)) },
+            enabled = !editingParent,
+            supportingText = if (editingParent) { { Text(stringResource(R.string.balance_parent_balance_note)) } } else null,
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth(),
@@ -362,6 +409,18 @@ private fun EditAccountScreen(row: AccountWithProgress?, onDismiss: () -> Unit, 
         }
     }
 
+    if (showConvertConfirm) {
+        ConfirmDialog(
+            title = stringResource(R.string.balance_convert_subs_title),
+            message = stringResource(R.string.balance_convert_subs_message, normalChildren),
+            onConfirm = {
+                accountType = AccountType.SAVINGS
+                showConvertConfirm = false
+            },
+            onDismiss = { showConvertConfirm = false },
+        )
+    }
+
     if (showIconPicker) {
         IconPickerSheet(onIconSelected = { iconId = it; showIconPicker = false }, onDismiss = { showIconPicker = false })
     }
@@ -369,7 +428,11 @@ private fun EditAccountScreen(row: AccountWithProgress?, onDismiss: () -> Unit, 
     if (showDeleteConfirm && account != null) {
         ConfirmDialog(
             title = if (hasTrades) stringResource(R.string.balance_archive_confirm_title) else stringResource(R.string.balance_delete_confirm_title),
-            message = if (hasTrades) stringResource(R.string.balance_archive_confirm_message) else stringResource(R.string.balance_delete_confirm_message),
+            message = when {
+                editingParent && childCount > 0 -> stringResource(R.string.balance_delete_parent_confirm_message, childCount)
+                hasTrades -> stringResource(R.string.balance_archive_confirm_message)
+                else -> stringResource(R.string.balance_delete_confirm_message)
+            },
             onConfirm = {
                 generalSave?.stop()
                 savingsSave?.stop()

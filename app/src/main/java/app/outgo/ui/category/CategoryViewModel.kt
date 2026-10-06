@@ -26,7 +26,7 @@ data class CategoryUiState(
     val parents: List<CategoryEntity> = emptyList(),
     val childrenByParent: Map<Long, List<CategoryEntity>> = emptyMap(),
     val budgetsByCategory: Map<Long, BudgetWithProgress> = emptyMap(),
-    /** The active accounts, for a budget's account offset. */
+    /** The active accounts (parents too, to group the subaccounts), for a budget's account offset. */
     val accounts: List<AccountEntity> = emptyList(),
     /** The other type's lists, for the swipe preview; null inside it. */
     val other: CategoryUiState? = null,

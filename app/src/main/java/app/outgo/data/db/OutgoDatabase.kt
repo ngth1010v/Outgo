@@ -48,7 +48,7 @@ import app.outgo.domain.IconKind
         BudgetMonthEntity::class,
         SavingsMonthEntity::class,
     ],
-    version = 13,
+    version = 14,
     exportSchema = true,
 )
 abstract class OutgoDatabase : RoomDatabase() {
@@ -62,7 +62,7 @@ abstract class OutgoDatabase : RoomDatabase() {
 
     companion object {
         const val FILE_NAME = "outgo.sqlite"
-        const val SCHEMA_VERSION = 13
+        const val SCHEMA_VERSION = 14
 
         // "OUTO" packed into 4 bytes, stamped once via PRAGMA application_id so a
         // restore can reject a file that isn't an Outgo backup before touching real data.
@@ -198,11 +198,33 @@ abstract class OutgoDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Must match what Room derives from AccountEntity's foreign key and @Index.
+                db.execSQL("ALTER TABLE account ADD COLUMN parent_id INTEGER REFERENCES account(id) ON UPDATE NO ACTION ON DELETE RESTRICT")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_account_parent_id` ON `account` (`parent_id`)")
+                // Each account becomes the only subaccount of a new parent copied from it. It keeps its
+                // id, so trades, budget offsets and settings that point at it need no rewrite. Its
+                // savings targets move up to the parent, which shows them on Home as before.
+                val ids = db.query("SELECT id FROM account").use { c -> List(c.count) { c.moveToNext(); c.getLong(0) } }
+                for (id in ids) {
+                    db.execSQL(
+                        "INSERT INTO account (name, description, icon_id, balance, color, account_type, sort_order, archived, created_at, updated_at) " +
+                            "SELECT name, description, icon_id, 0, color, account_type, sort_order, archived, created_at, updated_at FROM account WHERE id = ?",
+                        arrayOf(id),
+                    )
+                    val parentId = db.query("SELECT last_insert_rowid()").use { c -> c.moveToFirst(); c.getLong(0) }
+                    db.execSQL("UPDATE account SET parent_id = ?, sort_order = 0 WHERE id = ?", arrayOf(parentId, id))
+                    db.execSQL("UPDATE savings_month SET account_id = ? WHERE account_id = ?", arrayOf(parentId, id))
+                }
+            }
+        }
+
         fun build(context: Context): OutgoDatabase =
             Room.databaseBuilder(context.applicationContext, OutgoDatabase::class.java, FILE_NAME)
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
                 .addCallback(OutgoCallback)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
                 .build()
     }
 }
@@ -246,18 +268,19 @@ private object OutgoCallback : RoomDatabase.Callback() {
         var colorIndex = 0
         fun nextColor(): Int = SeedPalette[colorIndex++ % SeedPalette.size]
 
-        fun account(name: String, iconId: Long) {
+        fun account(name: String, iconId: Long, color: Int, parentId: Long? = null): Long {
             val cv = ContentValues().apply {
+                put("parent_id", parentId)
                 put("name", name)
                 put("icon_id", iconId)
                 put("balance", 0)
-                put("color", nextColor())
+                put("color", color)
                 put("sort_order", 0)
                 put("archived", 0)
                 put("created_at", now)
                 put("updated_at", now)
             }
-            db.insert("account", android.database.sqlite.SQLiteDatabase.CONFLICT_ABORT, cv)
+            return db.insert("account", android.database.sqlite.SQLiteDatabase.CONFLICT_ABORT, cv)
         }
 
         // Children share their parent's color — it's the same category for
@@ -297,7 +320,9 @@ private object OutgoCallback : RoomDatabase.Callback() {
             db.insert("category", android.database.sqlite.SQLiteDatabase.CONFLICT_ABORT, cv)
         }
 
-        account("Tiền mặt", icon("wallet"))
+        // Trades go to a subaccount, so the parent gets its default one (same name and color).
+        val cashColor = nextColor()
+        account("Tiền mặt", icon("wallet"), cashColor, account("Tiền mặt", icon("wallet"), cashColor))
 
         // Categories typical of a Vietnamese household budget (Money Lover/MISA-style taxonomy).
         val exp = CategoryKind.EXPENSE

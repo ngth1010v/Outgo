@@ -33,10 +33,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -59,8 +57,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -81,7 +77,9 @@ import app.outgo.data.repo.DefaultCategoryColor
 import app.outgo.domain.BudgetOffset
 import app.outgo.domain.CategoryKind
 import app.outgo.ui.LocalAppContainer
+import app.outgo.ui.component.AccountSheet
 import app.outgo.ui.component.BudgetProgressBlock
+import app.outgo.ui.component.BudgetSheet
 import app.outgo.ui.component.OutgoSegmentedButton
 import app.outgo.ui.component.ColorPickerGrid
 import app.outgo.ui.component.ConfirmDialog
@@ -91,19 +89,14 @@ import app.outgo.ui.component.IconView
 import app.outgo.ui.component.MonthPicker
 import app.outgo.ui.component.onBlur
 import app.outgo.ui.component.rememberAutoSave
-import app.outgo.ui.component.PlusRow
+import app.outgo.ui.component.TreeList
 import app.outgo.ui.component.budgetRemainingColor
 import app.outgo.ui.component.budgetRemainingText
-import app.outgo.ui.component.rememberReorderState
 import app.outgo.ui.component.rememberSwipeLevel
-import app.outgo.ui.component.reorderableItem
-import app.outgo.ui.component.slideItem
 import app.outgo.ui.component.swipeShift
 import app.outgo.ui.component.swipeStep
 import app.outgo.util.Money
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.collectLatest
 
 private sealed interface EditTarget {
     data object NewParent : EditTarget
@@ -202,43 +195,7 @@ fun CategoryEditScreen(categoryId: Long?, parentId: Long?, onClose: () -> Unit) 
     EditCategoryScreen(target, state.type, state.budgetsByCategory, state.accounts, viewModel, onClose)
 }
 
-/** One row of the flattened category list; parents, children and plus rows are each a lazy item. */
-private sealed interface CategoryEntry {
-    val key: Any
-}
-
-private data class ParentEntry(val category: CategoryEntity) : CategoryEntry {
-    override val key: Any get() = category.id
-}
-
-private data class ChildEntry(val category: CategoryEntity) : CategoryEntry {
-    override val key: Any get() = category.id
-}
-
-private data class AddChildEntry(val parent: CategoryEntity) : CategoryEntry {
-    override val key: Any get() = "add-${parent.id}"
-}
-
-/** Keyed per type, so a type switch replaces it instead of sliding it to the other list's end. */
-private data class AddParentEntry(val type: Int) : CategoryEntry {
-    override val key: Any get() = "add-$type"
-}
-
-/** The parent a child row or a slot next to it belongs to. */
-private fun ownerOf(entry: CategoryEntry?): Long? = when (entry) {
-    is ChildEntry -> entry.category.parentId
-    is AddChildEntry -> entry.parent.id
-    else -> null
-}
-
-/** How long a lifted child hovers over a folded parent before it unfolds to take it. */
-private const val HOVER_EXPAND_MS = 500L
-
-/**
- * One type's categories; drawn for both types while a type swipe moves. A long press lifts a row
- * to reorder it: a parent among parents (every parent folds for the drag), a child among the
- * children of any unfolded parent. A parent's only child can't leave it.
- */
+/** One type's categories; drawn for both types while a type swipe moves. */
 @Composable
 private fun CategoryList(
     state: CategoryUiState,
@@ -249,133 +206,23 @@ private fun CategoryList(
     onReorder: (Map<Long?, List<Long>>) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // The order a drag is working on; the database's next emission replaces it.
-    var parents by remember(state.parents) { mutableStateOf(state.parents) }
-    var children by remember(state.childrenByParent) { mutableStateOf(state.childrenByParent) }
-    val reorder = rememberReorderState(listState)
-    val dragged = reorder.draggingKey
-    val draggingParent = dragged != null && parents.any { it.id == dragged }
-    val shownExpanded = if (draggingParent) emptySet() else expanded
-    val entries = remember(state.type, parents, children, shownExpanded) {
-        buildList {
-            parents.forEach { parent ->
-                add(ParentEntry(parent))
-                if (parent.id in shownExpanded) {
-                    children[parent.id].orEmpty().forEach { add(ChildEntry(it)) }
-                    add(AddChildEntry(parent))
-                }
-            }
-            add(AddParentEntry(state.type))
-        }
-    }
-    val byKey = remember(entries) { entries.associateBy { it.key } }
-    // The saved parent of the lifted child; a parent's only child stays inside it.
-    val home = dragged?.let { key -> state.childrenByParent.entries.firstOrNull { e -> e.value.any { it.id == key } }?.key }
-    val lone = home != null && state.childrenByParent[home]?.size == 1
-
-    reorder.update(
-        keys = entries.map { it.key },
-        canDrag = { byKey[it] is ParentEntry || byKey[it] is ChildEntry },
-        isSlot = { before, after ->
-            val b = byKey[before]
-            val a = byKey[after]
-            if (draggingParent) {
-                a is ParentEntry || a is AddParentEntry
-            } else {
-                (b is ChildEntry || b is ParentEntry) && (a is ChildEntry || a is AddChildEntry) && (!lone || ownerOf(a) == home)
-            }
+    TreeList(
+        parents = state.parents,
+        childrenByParent = state.childrenByParent,
+        id = { it.id },
+        listState = listState,
+        expanded = expanded,
+        onToggle = onToggle,
+        onOpen = { onEdit(EditTarget.Edit(it)) },
+        onAddChild = { onEdit(EditTarget.NewChild(it.id, it.color)) },
+        onAddParent = { onEdit(EditTarget.NewParent) },
+        onReorder = onReorder,
+        row = { category, onClick, rowModifier, trailing ->
+            CategoryRow(category, state.budgetsByCategory[category.id]?.takeIf { it.enabled }, onClick, rowModifier, trailing)
         },
-        onMove = { key, to ->
-            val after = entries.filter { it.key != key }.getOrNull(to)
-            if (draggingParent) {
-                val others = parents.filter { it.id != key }
-                val at = (after as? ParentEntry)?.let { a -> others.indexOfFirst { it.id == a.category.id } } ?: others.size
-                parents = others.toMutableList().apply { add(at, parents.first { it.id == key }) }
-            } else {
-                val target = ownerOf(after) ?: return@update
-                val moved = children.values.flatten().first { it.id == key }.copy(parentId = target)
-                val without = children.mapValues { (_, list) -> list.filter { it.id != key } }
-                val list = without[target].orEmpty()
-                val at = (after as? ChildEntry)?.let { a -> list.indexOfFirst { it.id == a.category.id } } ?: list.size
-                children = without + (target to list.toMutableList().apply { add(at, moved) })
-            }
-        },
-        onDrop = { key ->
-            if (parents.any { it.id == key }) {
-                onReorder(mapOf(null to parents.map { it.id }))
-            } else {
-                val from = state.childrenByParent.entries.firstOrNull { e -> e.value.any { it.id == key } }?.key
-                val to = children.entries.firstOrNull { e -> e.value.any { it.id == key } }?.key
-                onReorder(listOfNotNull(from, to).distinct().associate { id -> id to children[id].orEmpty().map { it.id } })
-            }
-        },
+        modifier = modifier,
+        addParentKey = "add-${state.type}",
     )
-
-    // A lifted child hovering over a folded parent unfolds it, so it can drop inside.
-    val currentByKey by rememberUpdatedState(byKey)
-    val currentExpanded by rememberUpdatedState(expanded)
-    val currentOnToggle by rememberUpdatedState(onToggle)
-    LaunchedEffect(dragged, draggingParent) {
-        if (dragged == null || draggingParent) return@LaunchedEffect
-        snapshotFlow { reorder.hoveredKey() }.collectLatest { key ->
-            if (currentByKey[key] is ParentEntry && key !in currentExpanded) {
-                delay(HOVER_EXPAND_MS)
-                currentOnToggle(key as Long)
-            }
-        }
-    }
-
-    // A lifted row's release also ends a tap on it: that tap must not open the editor.
-    val edit = { target: EditTarget -> if (reorder.draggingKey == null) onEdit(target) }
-    LazyColumn(
-        state = listState,
-        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        items(entries, key = { it.key }, contentType = { it::class }) { entry ->
-            when (entry) {
-                is ParentEntry -> {
-                    val parent = entry.category
-                    CategoryRow(
-                        category = parent,
-                        budget = state.budgetsByCategory[parent.id]?.takeIf { it.enabled },
-                        onRowClick = { edit(EditTarget.Edit(parent)) },
-                        modifier = reorderableItem(reorder, entry.key),
-                        trailing = {
-                            Icon(
-                                painter = painterResource(
-                                    if (parent.id in shownExpanded) R.drawable.ph_caret_down else R.drawable.ph_caret_right,
-                                ),
-                                contentDescription = null,
-                                modifier = Modifier
-                                    .clickable { onToggle(parent.id) }
-                                    .padding(8.dp),
-                            )
-                        },
-                    )
-                }
-                is ChildEntry -> CategoryRow(
-                    category = entry.category,
-                    budget = state.budgetsByCategory[entry.category.id]?.takeIf { it.enabled },
-                    onRowClick = { edit(EditTarget.Edit(entry.category)) },
-                    modifier = Modifier.padding(start = 20.dp).then(reorderableItem(reorder, entry.key)),
-                )
-                is AddChildEntry -> PlusRow(
-                    onClick = { edit(EditTarget.NewChild(entry.parent.id, entry.parent.color)) },
-                    modifier = Modifier
-                        .then(slideItem())
-                        .padding(start = 20.dp)
-                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
-                )
-                is AddParentEntry -> PlusRow(
-                    onClick = { edit(EditTarget.NewParent) },
-                    modifier = Modifier
-                        .then(slideItem())
-                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
-                )
-            }
-        }
-    }
 }
 
 @Composable
@@ -418,7 +265,6 @@ private fun CategoryRow(
                 lineName = stringResource(R.string.progress_line_spent),
                 loadDays = { trades.budgetDays(category.id) },
                 greenWhenLower = true,
-                modifier = Modifier.padding(start = 40.dp),
             )
         }
     }
@@ -555,10 +401,18 @@ private fun EditCategoryScreen(
             if (form.enabled) {
                 val none = stringResource(R.string.budget_offset_none)
                 val budgetLabel = stringResource(R.string.budget_offset_budget)
-                val budgetTargets = listOf(PickOption(BudgetOffset.SELF, stringResource(R.string.budget_offset_self), iconId, color)) +
-                    budgets.values.filter { it.categoryId != null && it.categoryId != existing?.id }
-                        .map { PickOption(it.categoryId!!, it.displayName, it.displayIconId, it.categoryColor) }
-                val accountOptions = accounts.map { PickOption<Long?>(it.id, it.name, it.iconId, it.color) }
+                val selfLabel = stringResource(R.string.budget_offset_self)
+                val otherBudgets = budgets.values.filter { it.categoryId != null && it.categoryId != existing?.id }
+                val budgetTargets = listOf(PickOption(BudgetOffset.SELF, selfLabel, iconId, color)) +
+                    otherBudgets.map { PickOption(it.categoryId!!, it.displayName, it.displayIconId, it.categoryColor) }
+                val accountOptions = accounts.filter { !it.isParent }.map { PickOption<Long?>(it.id, it.name, it.iconId, it.color) }
+                // The budget and account choices open the same sheets as the trade form's; "This budget" sits above the budgets.
+                fun budgetSheet(value: Long, set: (Long) -> Unit): @Composable (() -> Unit) -> Unit = { dismiss ->
+                    BudgetSheet(otherBudgets, value, { set(it ?: BudgetOffset.SELF); dismiss() }, dismiss, noneLabel = selfLabel)
+                }
+                fun accountSheet(value: Long?, shown: List<AccountEntity>, set: (Long) -> Unit): @Composable (() -> Unit) -> Unit = { dismiss ->
+                    AccountSheet(shown, value, { set(it.id); dismiss() }, dismiss)
+                }
                 val to = stringResource(R.string.budget_offset_add_to)
 
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -583,7 +437,7 @@ private fun EditCategoryScreen(
                         listOf(PickOption(false, none), PickOption(true, budgetLabel)),
                     ) { form = form.copy(overOn = it) }
                     if (form.overOn) {
-                        OffsetPicker(budgetLabel, form.overTarget, budgetTargets, indent = true) { form = form.copy(overTarget = it) }
+                        OffsetPicker(budgetLabel, form.overTarget, budgetTargets, indent = true, sheet = budgetSheet(form.overTarget) { form = form.copy(overTarget = it) }) {}
                     }
 
                     OffsetPicker(
@@ -598,14 +452,16 @@ private fun EditCategoryScreen(
                     when (form.underMode) {
                         UnderMode.NONE -> Unit
                         UnderMode.BUDGET ->
-                            OffsetPicker(to, form.underTarget, budgetTargets, indent = true) { form = form.copy(underTarget = it) }
+                            OffsetPicker(to, form.underTarget, budgetTargets, indent = true, sheet = budgetSheet(form.underTarget) { form = form.copy(underTarget = it) }) {}
                         UnderMode.ACCOUNT -> {
-                            OffsetPicker(stringResource(R.string.budget_offset_from_account), form.fromAccount, accountOptions, indent = true) {
-                                form = form.copy(fromAccount = it, toAccount = form.toAccount.takeIf { a -> a != it })
-                            }
-                            OffsetPicker(to, form.toAccount, accountOptions.filter { it.value != form.fromAccount }, indent = true) {
-                                form = form.copy(toAccount = it)
-                            }
+                            OffsetPicker(
+                                stringResource(R.string.budget_offset_from_account), form.fromAccount, accountOptions, indent = true,
+                                sheet = accountSheet(form.fromAccount, accounts) { form = form.copy(fromAccount = it, toAccount = form.toAccount.takeIf { a -> a != it }) },
+                            ) {}
+                            OffsetPicker(
+                                to, form.toAccount, accountOptions, indent = true,
+                                sheet = accountSheet(form.toAccount, accounts.filter { it.id != form.fromAccount }) { form = form.copy(toAccount = it) },
+                            ) {}
                         }
                     }
                 }
@@ -745,13 +601,17 @@ internal data class PickOption<T>(val value: T, val label: String, val iconId: L
     val hasIcon: Boolean get() = iconId != null || color != null
 }
 
-/** "Label ........ [icon] Choice ▾" in a bordered row. A value missing from [options] (not picked yet, or gone) shows "—". */
+/**
+ * "Label ........ [icon] Choice ▾" in a bordered row. A value missing from [options] (not picked yet,
+ * or gone) shows "—". Tapping it opens [sheet] when given (it calls dismiss once done), else a menu of [options].
+ */
 @Composable
 internal fun <T> OffsetPicker(
     label: String,
     value: T,
     options: List<PickOption<T>>,
     indent: Boolean = false,
+    sheet: (@Composable (dismiss: () -> Unit) -> Unit)? = null,
     onSelect: (T) -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
@@ -788,7 +648,9 @@ internal fun <T> OffsetPicker(
                     modifier = Modifier.padding(start = 4.dp).size(12.dp),
                 )
             }
-            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            if (sheet != null) {
+                if (open) sheet { open = false }
+            } else DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                 options.forEach { option ->
                     DropdownMenuItem(
                         text = { Text(option.label) },

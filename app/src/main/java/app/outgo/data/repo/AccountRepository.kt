@@ -50,6 +50,12 @@ class AccountRepository(
         (accountDao.lastUsedAccount() ?: accountDao.firstActiveOrNull())?.id
     }
 
+    /**
+     * Creates a subaccount of [parentId], or with null a parent plus its default subaccount (same
+     * name, icon, color, description and type): trades only ever target a subaccount. The
+     * [initialBalance] goes to the subaccount, [savings] to the account created at that level.
+     * A savings parent's subaccounts are always savings accounts too.
+     */
     suspend fun create(
         name: String,
         iconId: Long?,
@@ -59,35 +65,41 @@ class AccountRepository(
         savings: SavingsSetting? = null,
         monthKey: Int = MonthKey.current(),
         description: String? = null,
+        parentId: Long? = null,
     ): Long = withContext(Dispatchers.IO) {
         db.withTransaction {
             val now = System.currentTimeMillis()
-            val order = accountDao.maxSortOrder() + 1
-            val id = accountDao.insert(
-                AccountEntity(
-                    name = name,
-                    description = description,
-                    iconId = iconId,
-                    balance = 0,
-                    color = color,
-                    accountType = accountType,
-                    sortOrder = order,
-                    createdAt = now,
-                    updatedAt = now,
-                ),
+            val type = if (parentId != null && accountDao.findById(parentId)?.accountType == AccountType.SAVINGS) AccountType.SAVINGS else accountType
+            fun row(parent: Long?, order: Int) = AccountEntity(
+                parentId = parent,
+                name = name,
+                description = description,
+                iconId = iconId,
+                balance = 0,
+                color = color,
+                accountType = type,
+                sortOrder = order,
+                createdAt = now,
+                updatedAt = now,
             )
-            if (initialBalance != 0L) tradeRepository.recordAdjustment(id, initialBalance)
-            if (savings != null && accountType == AccountType.SAVINGS) setSavingsMonth(id, monthKey, savings)
+            val id = accountDao.insert(row(parentId, accountDao.maxSortOrder(parentId) + 1))
+            val subId = if (parentId == null) accountDao.insert(row(id, 0)) else id
+            if (initialBalance != 0L) tradeRepository.recordAdjustment(subId, initialBalance)
+            if (savings != null && type == AccountType.SAVINGS) setSavingsMonth(id, monthKey, savings)
             id
         }
     }
 
+    /**
+     * [newBalance] is null for a parent: its balance is its subaccounts', not set by hand. A parent
+     * made a savings account makes its subaccounts savings ones too (the editor asks first).
+     */
     suspend fun update(
         accountId: Long,
         name: String,
         iconId: Long?,
         color: Int,
-        newBalance: Long,
+        newBalance: Long?,
         accountType: Int,
         description: String?,
     ) = withContext(Dispatchers.IO) {
@@ -103,7 +115,8 @@ class AccountRepository(
                     updatedAt = System.currentTimeMillis(),
                 ),
             )
-            val delta = newBalance - existing.balance
+            if (existing.isParent && accountType == AccountType.SAVINGS) accountDao.setTypeWithChildren(listOf(accountId), AccountType.SAVINGS)
+            val delta = (newBalance ?: existing.balance) - existing.balance
             if (delta != 0L) tradeRepository.recordAdjustment(accountId, delta)
         }
     }
@@ -134,18 +147,36 @@ class AccountRepository(
     }
 
     suspend fun hasTrades(accountId: Long): Boolean = withContext(Dispatchers.IO) { accountDao.countTrades(accountId) > 0 }
+    suspend fun childCount(parentId: Long): Int = withContext(Dispatchers.IO) { accountDao.childIds(parentId).size }
 
-    /** Hard-deletes if the account has no history, otherwise archives it (hidden, history kept). */
-    /** Saves [ids]' order as their sort_order. */
-    suspend fun reorder(ids: List<Long>) = withContext(Dispatchers.IO) {
-        db.withTransaction { ids.forEachIndexed { index, id -> accountDao.setSortOrder(id, index) } }
+    /**
+     * Saves each list's order as its rows' sort_order, under that list's parent (null: the top
+     * level). A subaccount listed under a new parent moves there, its history with it; one moved
+     * into a savings parent becomes a savings account (the list asks first).
+     */
+    suspend fun reorder(lists: Map<Long?, List<Long>>) = withContext(Dispatchers.IO) {
+        db.withTransaction {
+            lists.forEach { (parentId, ids) -> ids.forEachIndexed { index, id -> accountDao.setPosition(id, parentId, index) } }
+            val savingsParents = lists.keys.filterNotNull().filter { accountDao.findById(it)?.accountType == AccountType.SAVINGS }
+            if (savingsParents.isNotEmpty()) accountDao.setTypeWithChildren(savingsParents, AccountType.SAVINGS)
+        }
     }
 
+    /**
+     * Hard-deletes an account with no history, otherwise archives it (hidden, history kept). A
+     * parent first applies that to each subaccount, and is archived while an archived one remains.
+     */
     suspend fun deleteOrArchive(account: AccountEntity) = withContext(Dispatchers.IO) {
-        if (accountDao.countTrades(account.id) > 0) {
-            accountDao.update(account.copy(archived = true))
-        } else {
-            accountDao.delete(account)
+        db.withTransaction {
+            val ids = (if (account.isParent) accountDao.childIds(account.id) else emptyList()) + account.id
+            for (id in ids) {
+                val row = accountDao.findById(id) ?: continue
+                if (accountDao.countTrades(id) > 0 || accountDao.childIds(id).isNotEmpty()) {
+                    accountDao.update(row.copy(archived = true))
+                } else {
+                    accountDao.delete(row)
+                }
+            }
         }
     }
 }

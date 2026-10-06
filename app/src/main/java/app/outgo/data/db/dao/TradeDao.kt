@@ -213,7 +213,9 @@ interface TradeDao {
         SELECT id, type, amount, occurred_at AS occurredAt, category_id AS categoryId, note, account_id AS accountId
         FROM trade
         WHERE month_key = :monthKey
-          AND ((account_id = :accountId AND type = 1) OR (to_account_id = :accountId AND type = 4))
+          AND ((type = 1 AND account_id IN (SELECT id FROM account WHERE id = :accountId OR parent_id = :accountId))
+            OR (type = 4 AND to_account_id IN (SELECT id FROM account WHERE id = :accountId OR parent_id = :accountId)
+                AND account_id NOT IN (SELECT id FROM account WHERE id = :accountId OR parent_id = :accountId)))
         """,
     )
     suspend fun savingTradesForMonth(accountId: Long, monthKey: Int): List<TradeSlim>

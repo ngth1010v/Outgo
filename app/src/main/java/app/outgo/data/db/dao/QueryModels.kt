@@ -10,6 +10,8 @@ data class AccountWithProgress(
     val prevMonthlyIncome: Long,
     /** This month's savings target: a savings account whose target in effect is on, else null. */
     val monthlyTarget: Long?,
+    /** The balance to show: a parent's is its active subaccounts' together, a subaccount's its own. */
+    val totalBalance: Long,
 )
 
 /** One (month, parent category) bar segment for the Home stacked chart. */

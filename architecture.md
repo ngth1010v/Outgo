@@ -360,6 +360,7 @@ CREATE TABLE icon (
 
 CREATE TABLE account (
   id          INTEGER PRIMARY KEY,
+  parent_id   INTEGER REFERENCES account(id) ON DELETE RESTRICT,  -- NULL = tài khoản cha (schema 14)
   name        TEXT    NOT NULL,
   icon_id     INTEGER REFERENCES icon(id) ON DELETE SET NULL,
   balance     INTEGER NOT NULL DEFAULT 0,
@@ -835,6 +836,8 @@ flowchart TD
     M -- "Có" --> O["archived = 1<br/>ẩn khỏi Balance và tổng tài sản,<br/>lịch sử giữ nguyên"]
     N & O --> Z
 ```
+
+> **Tài khoản con (schema 14).** Tài khoản có 2 cấp như danh mục: giao dịch (và bù trừ budget, filter Lịch sử, Analysis) chỉ trỏ tới tài khoản **con**; tài khoản cha chỉ để nhóm, `balance` của cha luôn = 0 và số dư hiển thị = tổng các con chưa lưu trữ (`AccountWithProgress.totalBalance`), nên trigger và mọi phép `SUM(balance)` giữ nguyên. Cả cha lẫn con đều có loại Thường/Tiết kiệm và mục tiêu tiết kiệm theo tháng riêng (`savings_month`); số đã để dành của cha = thu nhập + chuyển khoản vào các con từ ngoài nhóm. Cha Thường thì con Thường hoặc Tiết kiệm tuỳ ý; cha Tiết kiệm thì mọi con bắt buộc Tiết kiệm (`AccountRepository` ép khi tạo con, đổi loại cha, kéo con sang cha; UI hỏi trước khi chuyển con Thường, và khoá ô loại ở con). Tạo tài khoản cha thì tạo luôn 1 con cùng tên/icon/màu nhận số dư ban đầu. Màn Balance dùng chung `TreeList` với màn Danh mục (mở/đóng, kéo thả, con đổi được cha). Migration 13→14: mỗi tài khoản cũ giữ nguyên id thành con của 1 cha mới chép từ nó; mục tiêu tiết kiệm chuyển lên cha.
 
 > Giao dịch điều chỉnh (`ADJ_*`) **không tính vào chart hay budget** và chỉ hiện trong lịch sử của tài khoản với nhãn "Điều chỉnh số dư". Nhờ đó số dư luôn bằng tổng các giao dịch và có thể kiểm tra lại được.
 

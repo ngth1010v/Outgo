@@ -61,6 +61,10 @@
     <string name="trade_undo">HOÀN TÁC</string>
     <string name="trade_select_category_title">Chọn danh mục</string>
     <string name="trade_search_category_hint">Tìm danh mục</string>
+    <string name="trade_select_account_title">Chọn tài khoản</string>
+    <string name="trade_search_account_hint">Tìm tài khoản</string>
+    <string name="trade_select_budget_title">Chọn ngân sách</string>
+    <string name="trade_search_budget_hint">Tìm ngân sách</string>
     <string name="trade_no_categories">Chưa có danh mục nào. Tạo mới ở tab Danh mục.</string>
 
     <string name="home_total_balance">Tổng tài sản</string>
@@ -97,6 +101,13 @@
 
     <string name="balance_edit_title">Sửa tài khoản</string>
     <string name="balance_create_title">Tài khoản mới</string>
+    <string name="balance_create_sub_title">Tài khoản con mới</string>
+    <string name="balance_convert_subs_title">Chuyển tài khoản con sang tiết kiệm?</string>
+    <string name="balance_convert_subs_message">Mọi tài khoản con của tài khoản tiết kiệm đều phải là tài khoản tiết kiệm. %1$d tài khoản con đang là loại thường sẽ được chuyển sang tiết kiệm.</string>
+    <string name="balance_move_to_savings_message">Mọi tài khoản con của tài khoản tiết kiệm đều phải là tài khoản tiết kiệm, nên %1$s sẽ được chuyển sang tiết kiệm.</string>
+    <string name="balance_type_locked_note">Tài khoản cha là tài khoản tiết kiệm nên tài khoản này cũng vậy.</string>
+    <string name="balance_delete_parent_confirm_message">Thao tác này sẽ xoá luôn %1$d tài khoản con. Tài khoản con đã có giao dịch sẽ được lưu trữ thay vì xoá, lịch sử vẫn giữ.</string>
+    <string name="balance_parent_balance_note">Số dư của tài khoản cha là tổng số dư các tài khoản con: hãy sửa ở từng tài khoản con.</string>
     <string name="balance_name_hint">Tên tài khoản</string>
     <string name="common_description_hint">Mô tả (không bắt buộc)</string>
     <string name="balance_current_balance_hint">Số dư hiện tại</string>
