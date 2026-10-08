@@ -47,12 +47,19 @@ data class AnalysisUiState(
     val selected: AnalysisPage,
     val monthStats: Map<Int, Stage<StatsData>> = emptyMap(),
     val monthTrades: Map<Int, Stage<TradesData>> = emptyMap(),
+    /**
+     * The month's account balances, from the same load as [monthTrades] but on their own: a month
+     * without a single trade still has balances to chart.
+     */
+    val monthBalances: Map<Int, Stage<AccountsUi>> = emptyMap(),
     val yearStats: Map<Int, Stage<YearStatsData>> = emptyMap(),
     val yearTrades: Map<Int, Stage<YearTradesData>> = emptyMap(),
     /** Empty until the saved layouts are read, which draws a page with no charts for that moment. */
     val layouts: Map<LayoutSlot, List<ChartCard>> = emptyMap(),
     /** (id, name) in the user's order, for the per-account chart's picker. */
     val accounts: List<Pair<Long, String>> = emptyList(),
+    /** Active parent accounts with their active subaccounts, in the user's order. */
+    val accountTree: List<AccountNode> = emptyList(),
     /** (category id, name) of each budget, and (id, name) of each savings account, for the picks chip. */
     val budgets: List<Pair<Long, String>> = emptyList(),
     val savings: List<Pair<Long, String>> = emptyList(),
@@ -87,6 +94,7 @@ class AnalysisViewModel(
 
     private val monthStatsCache = lru<Stage<StatsData>>()
     private val monthTradesCache = lru<Stage<TradesData>>()
+    private val monthBalancesCache = lru<Stage<AccountsUi>>()
     private val yearStatsCache = lru<Stage<YearStatsData>>()
     private val yearTradesCache = lru<Stage<YearTradesData>>()
     private val tradeJobs = HashMap<AnalysisPage, Job>()
@@ -125,8 +133,20 @@ class AnalysisViewModel(
             accountRepository.observeAll().collect { list ->
                 accounts = list.associate { it.id to Triple(it.name, it.iconId, it.color) }
                 val savings = list.filter { !it.archived && !it.isParent && it.accountType == AccountType.SAVINGS }.map { Triple(it.id, it.name, it.color) }
+                val active = list.filter { !it.archived }
+                val children = active.filter { !it.isParent }.groupBy { it.parentId }
+                val tree = active.filter { it.isParent }.map { parent ->
+                    AccountNode(
+                        parent.id, parent.name, parent.iconId, parent.color,
+                        children[parent.id].orEmpty().map { AccountNode(it.id, it.name, it.iconId, it.color) },
+                    )
+                }
                 _state.update { state ->
-                    state.copy(accounts = list.filter { !it.archived && !it.isParent }.map { it.id to it.name }, savings = savings.map { it.first to it.second })
+                    state.copy(
+                        accounts = active.filter { !it.isParent }.map { it.id to it.name },
+                        accountTree = tree,
+                        savings = savings.map { it.first to it.second },
+                    )
                 }
                 if (savings != savingInfo) {
                     savingInfo = savings
@@ -145,9 +165,16 @@ class AnalysisViewModel(
                 }
         }
         viewModelScope.launch {
-            val layouts = LayoutSlot.entries.associateWith { slot ->
-                decodeSlot(slot) { settingRepository.get(it) }.withIds(nextCardId).also { nextCardId += it.size }
+            val decoded = LayoutSlot.entries.associateWith { slot -> decodeSlot(slot) { settingRepository.get(it) } }.toMutableMap()
+            // Once: the Accounts group's charts go on top of the month list saved before they existed.
+            if (settingRepository.get(MONTH_BALANCE_ADDED_KEY) == null) {
+                val month = MonthBalanceCharts.map { ChartCard(0, it) } +
+                    decoded.getValue(LayoutSlot.MONTH).filter { it.type !in MonthBalanceCharts }
+                decoded[LayoutSlot.MONTH] = month
+                settingRepository.set(LayoutSlot.MONTH.settingKey, encodeLayout(month))
+                settingRepository.set(MONTH_BALANCE_ADDED_KEY, "1")
             }
+            val layouts = decoded.mapValues { (_, cards) -> cards.withIds(nextCardId).also { nextCardId += it.size } }
             _state.update { it.copy(layouts = layouts) }
         }
         viewModelScope.launch { observeStats() }
@@ -261,15 +288,18 @@ class AnalysisViewModel(
                     val flows = flowsAsync.await()
                     val opening = openingAsync.await()
                     val moves = movesAsync.await()
-                    val stage = withContext(Dispatchers.Default) {
+                    val (stage, balances) = withContext(Dispatchers.Default) {
                         val current = rows.filter { monthKeyOf(it.occurredAt, zone) == page.monthKey }
                         val previous = listOf(MonthKey.minus(page.monthKey, 1))
                         val accountsUi = buildAccounts(
                             flows, opening, listOf(page.monthKey), previous, trend, current, accounts, categories, otherName,
                         ).copy(daily = buildDailyBalance(opening, flows, moves, page.monthKey, accounts, zone))
-                        buildTrades(rows, rows, transfers, page.monthKey, categories, accounts, zone, accountsUi = accountsUi)
+                        // Lines that sit at 0 all along are dropped, so none left means no money anywhere.
+                        val balances = if (accountsUi.balance.lines.isEmpty() && accountsUi.daily.lines.isEmpty()) Stage.Empty else Stage.Ready(accountsUi)
+                        buildTrades(rows, rows, transfers, page.monthKey, categories, accounts, zone, accountsUi = accountsUi) to balances
                     }
                     monthTradesCache[page.monthKey] = stage
+                    monthBalancesCache[page.monthKey] = balances
                 }
                 is AnalysisPage.Year -> {
                     val months = monthsOfYear(page.year)
@@ -307,14 +337,19 @@ class AnalysisViewModel(
 
     private fun putTrades(page: AnalysisPage, stage: Stage<Nothing>) {
         when (page) {
-            is AnalysisPage.Month -> monthTradesCache[page.monthKey] = stage
+            is AnalysisPage.Month -> {
+                monthTradesCache[page.monthKey] = stage
+                monthBalancesCache[page.monthKey] = stage
+            }
             is AnalysisPage.Year -> yearTradesCache[page.year] = stage
         }
         publishTrades()
     }
 
     private fun publishTrades() {
-        _state.update { it.copy(monthTrades = monthTradesCache.toMap(), yearTrades = yearTradesCache.toMap()) }
+        _state.update {
+            it.copy(monthTrades = monthTradesCache.toMap(), monthBalances = monthBalancesCache.toMap(), yearTrades = yearTradesCache.toMap())
+        }
     }
 
     // ------------------------------------------------------------------- GOALS
@@ -364,7 +399,10 @@ class AnalysisViewModel(
             // Drop the half-done entry too, or the page would stay stuck on its skeleton.
             if (cachedTrades(stale) is Stage.Loading) {
                 when (stale) {
-                    is AnalysisPage.Month -> monthTradesCache.remove(stale.monthKey)
+                    is AnalysisPage.Month -> {
+                        monthTradesCache.remove(stale.monthKey)
+                        monthBalancesCache.remove(stale.monthKey)
+                    }
                     is AnalysisPage.Year -> yearTradesCache.remove(stale.year)
                 }
             }

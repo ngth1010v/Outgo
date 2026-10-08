@@ -28,6 +28,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.layout.fillMaxHeight
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -122,8 +126,10 @@ fun chartContentHeight(type: ChartType, mode: AnalysisMode): Dp {
         ChartType.LARGEST, ChartType.ACCOUNT_LARGEST -> RowHeight * LARGEST_COUNT
         ChartType.TRANSFERS -> small + SectionGap + RowHeight * TRANSFER_PAIR_COUNT
         ChartType.NET_FLOW -> MoverRowHeight * LIST_VISIBLE_ROWS
-        ChartType.BALANCE_TREND, ChartType.DAILY_BALANCE, ChartType.BUDGET_DAILY, ChartType.SAVING_DAILY ->
+        ChartType.BALANCE_TREND, ChartType.DAILY_BALANCE, ChartType.BUDGET_DAILY, ChartType.SAVING_DAILY,
+        ChartType.ACCOUNT_DAILY, ChartType.SUBACCOUNT_DAILY, ChartType.ACCOUNT_MONTHS, ChartType.SUBACCOUNT_MONTHS ->
             BalanceHeight + SectionGap + small
+        ChartType.ACCOUNT_SHARE, ChartType.SUBACCOUNT_SHARE -> ShareHeight
     }
 }
 
@@ -1104,3 +1110,111 @@ internal fun AccountLegend(lines: List<BalanceLine>) {
         }
     }
 }
+
+// ------------------------------------------------------------ account balances
+
+/** The account balance charts' lines, one per account; all of them may be switched off. */
+@Composable
+fun BalanceDaysSection(title: String, lines: List<BalanceLine>, daysInMonth: Int, zero: Boolean, animate: Boolean, modifier: Modifier = Modifier) {
+    val description = stringResource(R.string.analysis_cd_daily_lines, title, lines.size)
+    DailyLines(title, description, lines, daysInMonth, zero, animate, modifier)
+}
+
+/** Month-end balances of the last months, stacked per month in the accounts' own order. */
+@Composable
+fun BalanceMonthsSection(title: String, lines: List<BalanceLine>, months: List<Int>, animate: Boolean, modifier: Modifier = Modifier) {
+    val names = stringArrayResource(R.array.month_abbrev)
+    val labels = remember(months, names) { months.map { names[(it % 100) - 1] } }
+    val description = stringResource(R.string.analysis_cd_daily_lines, title, lines.size)
+    Section(title, modifier.semantics { contentDescription = description }) {
+        if (lines.isEmpty()) {
+            EmptyBox(BalanceHeight)
+        } else {
+            StackedBalanceBars(lines, labels, introProgress(animate), Modifier.fillMaxWidth().height(BalanceHeight))
+            AccountLegend(lines)
+        }
+    }
+}
+
+/**
+ * The balance pie on the left and its rows on the right, in a fixed box that scrolls inside. A
+ * slice and its row share one selection: tapping either picks both out, and a slice tapped on the
+ * pie scrolls its row into view.
+ */
+@Composable
+fun BalanceShareSection(title: String, rows: List<ShareRow>, selection: AnalysisSelection, animate: Boolean, modifier: Modifier = Modifier) {
+    val description = stringResource(R.string.analysis_cd_daily_lines, title, rows.size)
+    val scroll = rememberScrollState()
+    val scope = rememberCoroutineScope()
+    val rowPx = with(LocalDensity.current) { ShareRowHeight.toPx() }
+    Section(title, modifier.semantics { contentDescription = description }) {
+        if (rows.isEmpty()) {
+            EmptyBox(ShareHeight)
+        } else {
+            Row(modifier = Modifier.fillMaxWidth().height(ShareHeight), verticalAlignment = Alignment.CenterVertically) {
+                PieChart(
+                    rows = rows,
+                    selectedId = { selection.rootId },
+                    onSelect = { id ->
+                        selection.toggle(id)
+                        val index = rows.indexOfFirst { it.id == id }
+                        if (index >= 0 && selection.rootId == id) scope.launch { scroll.animateScrollTo((index * rowPx).toInt()) }
+                    },
+                    progress = introProgress(animate),
+                    // 40% of the row; the pie fits the smaller side and centres in it.
+                    modifier = Modifier.fillMaxWidth(0.4f).fillMaxHeight(),
+                )
+                Spacer(Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f).fillMaxHeight().verticalScroll(scroll)) {
+                    rows.forEach { ShareRowItem(it, selection) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ShareRowItem(row: ShareRow, selection: AnalysisSelection) {
+    // Only the row whose selected-ness actually flips recomposes on a tap.
+    val selected by remember(row.id) { derivedStateOf { selection.rootId == row.id } }
+    val background by animateColorAsState(
+        if (selected) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0f),
+        label = "shareRow",
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(ShareRowHeight)
+            .clip(RoundedCornerShape(10.dp))
+            .background(background)
+            .clickable { selection.toggle(row.id) }
+            .padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconView(iconId = row.iconId, size = 24.dp, color = row.color)
+        Spacer(Modifier.width(6.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(row.name, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                // No share at or below 0: such a balance has no slice.
+                row.share?.let { String.format(Locale.US, "%.2f%%", it * 100f) } ?: "—",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.width(4.dp))
+        Column(horizontalAlignment = Alignment.End) {
+            Text(Money.format(row.amount), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, maxLines = 1)
+            Text(
+                "${Money.formatSignedNoCurrency(row.delta)} (${signedPercent(row.deltaPercent)})",
+                style = MaterialTheme.typography.labelSmall,
+                color = deltaColor(row.delta, CategoryKind.INCOME),
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+val ShareRowHeight = 44.dp
+/** The pie card shows four rows at once; more scroll inside. */
+val ShareHeight = ShareRowHeight * 4

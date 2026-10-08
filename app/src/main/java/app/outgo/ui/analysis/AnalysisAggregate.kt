@@ -810,3 +810,67 @@ internal fun buildBuckets(amounts: List<Long>): BucketsUi {
         median = median,
     )
 }
+
+// ------------------------------------------------------------ account balances
+
+/** Months the last-months balance bars show, the page's own month last. */
+const val BALANCE_MONTH_COUNT = 5
+
+/**
+ * What an account balance chart draws: each parent account adding up itself and its subaccounts,
+ * or with [subaccounts] the subaccounts of [parentId] (the first parent when it is null or gone).
+ * Leaves that are archived are not in [tree], so like the Accounts tab they don't count.
+ */
+fun balanceGroups(tree: List<AccountNode>, parentId: Long?, subaccounts: Boolean): List<Pair<AccountNode, List<Long>>> =
+    if (!subaccounts) {
+        tree.map { parent -> parent to (parent.children.map { it.id } + parent.id) }
+    } else {
+        (tree.firstOrNull { it.id == parentId } ?: tree.firstOrNull())?.children.orEmpty().map { it to listOf(it.id) }
+    }
+
+/**
+ * One line per group of [groups], [length] points long: the sum of its leaves' lines in [lines].
+ * A leaf without a line sat at 0 all along (its line was dropped for that), and a line that stops
+ * short (the live month stops at today) counts nothing after its end.
+ */
+fun sumLines(lines: List<BalanceLine>, groups: List<Pair<AccountNode, List<Long>>>, length: Int): List<BalanceLine> {
+    val byId = lines.associateBy { it.accountId }
+    return groups.map { (node, leaves) ->
+        val values = LongArray(length)
+        leaves.forEach { id -> byId[id]?.values?.forEachIndexed { i, v -> if (i < length) values[i] += v } }
+        BalanceLine(node.id, node.name, node.color, values.asList())
+    }
+}
+
+/**
+ * The pie's rows from month-end [lines] (as [sumLines] makes them, over [months]): each account's
+ * balance at the end of the last month and its change since the end of the month before, largest
+ * first. Slices share the positive balances; an account at or below 0 is a row without a slice.
+ */
+fun buildShare(lines: List<BalanceLine>, nodes: Map<Long, AccountNode>): List<ShareRow> {
+    val rows = lines.map { line ->
+        val amount = line.values.lastOrNull() ?: 0L
+        val previous = line.values.getOrNull(line.values.size - 2) ?: 0L
+        line to (amount to previous)
+    }.sortedByDescending { it.second.first }
+    val total = rows.sumOf { it.second.first.coerceAtLeast(0L) }
+    var angle = -90f
+    return rows.map { (line, values) ->
+        val (amount, previous) = values
+        val share = if (amount > 0 && total > 0) amount.toFloat() / total else 0f
+        val row = ShareRow(
+            id = line.accountId,
+            name = line.name,
+            iconId = nodes[line.accountId]?.iconId,
+            color = line.color,
+            amount = amount,
+            delta = amount - previous,
+            deltaPercent = percentChange(amount, previous),
+            share = if (amount > 0) share else null,
+            startAngle = angle,
+            sweepAngle = share * 360f,
+        )
+        angle += row.sweepAngle
+        row
+    }
+}

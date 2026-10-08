@@ -57,6 +57,8 @@ import java.util.Locale
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlin.math.hypot
 import kotlin.math.min
 
@@ -999,6 +1001,131 @@ fun DailyBalanceChart(
         }
         drawBalanceLines(lines, ::x, ::y, scrub, progress(), look, plotWidth, plotHeight) {
             String.format(Locale.US, "%02d", it + 1)
+        }
+    }
+}
+
+/**
+ * A whole pie of [rows]' slices, the selected one sliding out from the centre while the rest fade,
+ * the same emphasis as [DonutChart]. Slices are thin-edged in the surface colour, so two of a
+ * similar colour stay apart. The intro sweeps the whole pie round from 12 o'clock.
+ */
+@Composable
+fun PieChart(
+    rows: List<ShareRow>,
+    /** Read inside the draw lambda, so selecting a slice redraws without recomposing. */
+    selectedId: () -> Long?,
+    onSelect: (Long?) -> Unit,
+    progress: () -> Float,
+    modifier: Modifier = Modifier,
+) {
+    val edge = MaterialTheme.colorScheme.surface
+    val empty = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.15f)
+    val slices = remember(rows) { rows.filter { it.sweepAngle > 0f } }
+    val emphasis = rememberSliceEmphasis(selectedId)
+
+    Canvas(
+        modifier = modifier.pointerInput(slices) {
+            detectTapGestures { tap -> onSelect(pieSliceAt(slices, tap, size.width.toFloat(), size.height.toFloat())) }
+        },
+    ) {
+        val dim = emphasis.dim.value
+        // Room around the pie for a slice to slide out into.
+        val radius = size.minDimension / 2f / (1f + PieLift)
+        if (slices.isEmpty()) {
+            drawCircle(empty, radius)
+            return@Canvas
+        }
+        val p = progress()
+        slices.forEach { slice ->
+            val lift = emphasis.of(slice.id)
+            val start = -90f + (slice.startAngle + 90f) * p
+            val sweep = slice.sweepAngle * p
+            val mid = Math.toRadians((start + sweep / 2f).toDouble())
+            val shift = radius * PieLift * lift
+            val topLeft = center + Offset((cos(mid) * shift).toFloat(), (sin(mid) * shift).toFloat()) - Offset(radius, radius)
+            val arcSize = Size(radius * 2f, radius * 2f)
+            drawArc(Color(slice.color), start, sweep, useCenter = true, topLeft = topLeft, size = arcSize, alpha = 1f - 0.65f * dim * (1f - lift))
+            if (slices.size > 1) drawArc(edge, start, sweep, useCenter = true, topLeft = topLeft, size = arcSize, style = Stroke(1.5.dp.toPx()))
+        }
+    }
+}
+
+/** How far a selected slice slides out, as a share of the radius. */
+private const val PieLift = 0.08f
+
+/** Which slice a tap landed on, or null outside the pie. */
+private fun pieSliceAt(slices: List<ShareRow>, tap: Offset, width: Float, height: Float): Long? {
+    val radius = min(width, height) / 2f
+    if (hypot(tap.x - width / 2f, tap.y - height / 2f) > radius) return null
+    var angle = Math.toDegrees(atan2((tap.y - height / 2f).toDouble(), (tap.x - width / 2f).toDouble())).toFloat()
+    if (angle < -90f) angle += 360f
+    return slices.firstOrNull { angle >= it.startAngle && angle < it.startAngle + it.sweepAngle }?.id
+}
+
+/**
+ * One bar per month, stacked from [lines] in their order (each line one value per month):
+ * positive balances stack up from 0, negative ones down from it. The axis always takes in 0.
+ * Scrubbing across picks out a month and names the stack's total.
+ */
+@Composable
+fun StackedBalanceBars(lines: List<BalanceLine>, labels: List<String>, progress: () -> Float, modifier: Modifier = Modifier) {
+    val gridColor = MaterialTheme.colorScheme.outlineVariant
+    val axisColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val edge = MaterialTheme.colorScheme.surface
+    val style = MaterialTheme.typography.labelSmall
+    val measurer = rememberTextMeasurer()
+    val xLabels = remember(labels, style) { labels.map { measurer.measure(it, style) } }
+    var height by remember { mutableIntStateOf(0) }
+    // Each month's top and bottom: the axis has to hold the stacks, not the single values.
+    val values = remember(lines, labels) {
+        labels.indices.flatMap { m ->
+            listOf(lines.sumOf { it.values.getOrElse(m) { 0L }.coerceAtLeast(0L) }, lines.sumOf { it.values.getOrElse(m) { 0L }.coerceAtMost(0L) })
+        }
+    }
+    val axis = rememberValueAxis(values, zero = true, height, xLabels.firstOrNull()?.size?.height ?: 0)
+    val yTicks = rememberAxisLabels(axis.ticks)
+    val scrub = remember { Scrub() }
+    val look = rememberHoverLook()
+
+    Canvas(modifier = modifier.onSizeChanged { height = it.height }.scrub(scrub)) {
+        val plotWidth = size.width - gutterOf(yTicks)
+        val plotHeight = size.height - (xLabels.firstOrNull()?.size?.height ?: 0) - AxisGap.toPx()
+        val slot = plotWidth / labels.size.coerceAtLeast(1)
+        val barWidth = slot * 0.55f
+        fun y(value: Long) = axis.y(value, plotHeight)
+        val baseline = y(0)
+        val hovered = scrub.finger?.let { (it.x / slot).toInt().coerceIn(0, labels.size - 1) }
+
+        yTicks.forEach { (value, label) ->
+            val lineY = y(value)
+            drawLine(gridColor, Offset(0f, lineY), Offset(plotWidth, lineY), strokeWidth = if (value == 0L) 2f else 1f)
+            drawText(label, color = axisColor, topLeft = Offset(plotWidth + AxisGap.toPx(), lineY - label.size.height / 2f))
+        }
+        labels.indices.forEach { m ->
+            val x = m * slot + (slot - barWidth) / 2f
+            val alpha = if (hovered == null || hovered == m) 1f else 0.4f
+            var up = 0L
+            var down = 0L
+            lines.forEach { line ->
+                val value = line.values.getOrElse(m) { 0L }
+                if (value == 0L) return@forEach
+                val from = if (value > 0) up else down
+                val to = from + value
+                if (value > 0) up = to else down = to
+                // The stack grows out of the baseline with the intro.
+                val top = baseline + (y(maxOf(from, to)) - baseline) * progress()
+                val bottom = baseline + (y(minOf(from, to)) - baseline) * progress()
+                drawRect(Color(line.color), Offset(x, top), Size(barWidth, bottom - top), alpha = alpha)
+                drawLine(edge, Offset(x, top), Offset(x + barWidth, top), strokeWidth = 1.dp.toPx())
+            }
+            xLabels.getOrNull(m)?.let { label ->
+                drawText(label, color = axisColor, topLeft = Offset(m * slot + (slot - label.size.width) / 2f, plotHeight + AxisGap.toPx()))
+            }
+        }
+        hovered?.let { m ->
+            val total = lines.sumOf { it.values.getOrElse(m) { 0L } }
+            drawHover(look, Offset(m * slot + slot / 2f, y(total)), axisColor, labels[m], total, plotWidth, plotHeight)
         }
     }
 }

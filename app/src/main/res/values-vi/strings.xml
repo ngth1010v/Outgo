@@ -345,6 +345,15 @@
     <string name="analysis_cd_daily_lines">%1$s, %2$d đường</string>
     <string name="analysis_group_overview">Tổng quan</string>
     <string name="analysis_group_over_time">Theo thời gian</string>
+    <string name="analysis_group_accounts">Tài khoản</string>
+    <string name="analysis_group_other">Khác</string>
+    <string name="analysis_account_daily_title">Số dư tài khoản theo ngày</string>
+    <string name="analysis_subaccount_daily_title">Số dư tài khoản con theo ngày</string>
+    <string name="analysis_account_share_title">Cơ cấu số dư tài khoản</string>
+    <string name="analysis_subaccount_share_title">Cơ cấu số dư tài khoản con</string>
+    <string name="analysis_account_months_title">Số dư tài khoản 5 tháng gần nhất</string>
+    <string name="analysis_subaccount_months_title">Số dư tài khoản con 5 tháng gần nhất</string>
+    <string name="analysis_shown_count">%1$d/%2$d</string>
     <string name="analysis_group_details">Chi tiết</string>
     <string name="progress_per_day">%1$s/ngày</string>
     <string name="progress_today_spend">%1$s có thể chi hôm nay</string>

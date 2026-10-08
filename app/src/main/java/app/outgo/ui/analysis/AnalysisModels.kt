@@ -275,6 +275,28 @@ data class YoyUi(val expense: YoySeries, val income: YoySeries) {
 
 // ------------------------------------------------------------------- accounts
 
+/** An account for the account charts' pickers; a parent carries its subaccounts. */
+@Immutable
+data class AccountNode(val id: Long, val name: String, val iconId: Long?, val color: Int, val children: List<AccountNode> = emptyList())
+
+/**
+ * One account of the balance pie and its row: the month-end [amount], its change since the month
+ * before, and its [share] of the positive balances (null at or below 0, which has no slice).
+ */
+@Immutable
+data class ShareRow(
+    val id: Long,
+    val name: String,
+    val iconId: Long?,
+    val color: Int,
+    val amount: Long,
+    val delta: Long,
+    val deltaPercent: Int,
+    val share: Float?,
+    val startAngle: Float,
+    val sweepAngle: Float,
+)
+
 /** One account's balance at the end of each month of [BalanceTrendUi.months]. */
 @Immutable
 data class BalanceLine(val accountId: Long, val name: String, val color: Int, val values: List<Long>, val dashed: Boolean = false)

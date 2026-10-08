@@ -359,6 +359,15 @@
     <string name="analysis_cd_daily_lines">%1$s, %2$d lines</string>
     <string name="analysis_group_overview">Overview</string>
     <string name="analysis_group_over_time">Over time</string>
+    <string name="analysis_group_accounts">Accounts</string>
+    <string name="analysis_group_other">Other</string>
+    <string name="analysis_account_daily_title">Account balance by day</string>
+    <string name="analysis_subaccount_daily_title">Subaccount balance by day</string>
+    <string name="analysis_account_share_title">Account balance breakdown</string>
+    <string name="analysis_subaccount_share_title">Subaccount balance breakdown</string>
+    <string name="analysis_account_months_title">Account balance, last 5 months</string>
+    <string name="analysis_subaccount_months_title">Subaccount balance, last 5 months</string>
+    <string name="analysis_shown_count">%1$d of %2$d</string>
     <string name="analysis_group_details">Details</string>
     <string name="progress_per_day">%1$s/day</string>
     <string name="progress_today_spend">%1$s can spend today</string>

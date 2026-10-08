@@ -403,7 +403,7 @@ private fun ChartList(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             items(cards, key = { it.id }, contentType = { it.type }) { card ->
-                val action: (@Composable () -> Unit)? = if (card.type.hasMode || card.type.hasAccount || card.type.hasZero || card.type.hasPicks) {
+                val action: (@Composable () -> Unit)? = if (card.type.hasMode || card.type.hasAccount || card.type.hasZero || card.type.hasPicks || card.type.hasParent || card.type.hasToggles) {
                     { CardChips(card, state, pageMonth) { viewModel.updateCard(slot, it) } }
                 } else {
                     null
@@ -472,6 +472,19 @@ private fun CardChips(card: ChartCard, state: AnalysisUiState, pageMonth: Int?, 
             val months: List<Pair<Int?, String>> = listOf(null to stringResource(R.string.analysis_month_follow)) +
                 state.pages.filterIsInstance<AnalysisPage.Month>().reversed().map { it.monthKey to monthNumber(it.monthKey) }
             ChoiceChip((card.month ?: pageMonth)?.let(::monthNumber) ?: "—", months) { onChange(card.copy(month = it)) }
+        }
+        if (card.type.hasParent) {
+            val parents = state.accountTree.map { it.id to it.name }
+            val id = card.accountId?.takeIf { picked -> parents.any { it.first == picked } } ?: parents.firstOrNull()?.first
+            ChoiceChip(parents.firstOrNull { it.first == id }?.second ?: "—", parents) { onChange(card.copy(accountId = it)) }
+        }
+        if (card.type.hasToggles) {
+            val options = balanceGroups(state.accountTree, card.accountId, card.type.hasParent).map { it.first.id to it.first.name }
+            val shown = options.count { it.first !in card.hidden }
+            val label = if (shown == options.size) stringResource(R.string.analysis_accounts_all) else stringResource(R.string.analysis_shown_count, shown, options.size)
+            ChoiceChip(label, options, checked = { it !in card.hidden }) { id ->
+                onChange(card.copy(hidden = if (id in card.hidden) card.hidden - id else card.hidden + id))
+            }
         }
         if (card.type.allAccounts) {
             val options = listOf(null to stringResource(R.string.analysis_accounts_all)) + accounts
@@ -594,6 +607,12 @@ private fun chartName(type: ChartType): String = stringResource(
         ChartType.ACCOUNT_LARGEST -> R.string.analysis_chart_account_largest
         ChartType.BUDGET_DAILY -> R.string.analysis_budget_daily_title
         ChartType.SAVING_DAILY -> R.string.analysis_saving_daily_title
+        ChartType.ACCOUNT_DAILY -> R.string.analysis_account_daily_title
+        ChartType.SUBACCOUNT_DAILY -> R.string.analysis_subaccount_daily_title
+        ChartType.ACCOUNT_SHARE -> R.string.analysis_account_share_title
+        ChartType.SUBACCOUNT_SHARE -> R.string.analysis_subaccount_share_title
+        ChartType.ACCOUNT_MONTHS -> R.string.analysis_account_months_title
+        ChartType.SUBACCOUNT_MONTHS -> R.string.analysis_subaccount_months_title
     },
 )
 
@@ -664,7 +683,48 @@ private fun MonthPage(
                     GoalDaysSection(title, if (budgets) it.budgets else it.savings, card.ids, animate)
                 }
             }
+            ChartType.ACCOUNT_DAILY, ChartType.SUBACCOUNT_DAILY, ChartType.ACCOUNT_SHARE, ChartType.SUBACCOUNT_SHARE,
+            ChartType.ACCOUNT_MONTHS, ChartType.SUBACCOUNT_MONTHS ->
+                BalanceCard(card, height, state.monthBalances[month] ?: Stage.Loading, state.accountTree, month, animate)
             else -> AccountChart(card, height, accounts, transfers, state.accounts, accountSelection, animate, onOpenTrade)
+        }
+    }
+}
+
+/**
+ * An Accounts-group chart: each parent account (its subaccounts added up), or one parent's
+ * subaccounts, without the ones the card switched off.
+ */
+@Composable
+private fun BalanceCard(card: ChartCard, height: Dp, accounts: Stage<AccountsUi>, tree: List<AccountNode>, month: Int, animate: Boolean) {
+    val sub = card.type.hasParent
+    val title = chartName(card.type)
+    val groups = remember(tree, card.accountId, sub, card.hidden) {
+        balanceGroups(tree, card.accountId, sub).filter { it.first.id !in card.hidden }
+    }
+    StageSection(accounts, title, height) { data ->
+        when (card.type) {
+            ChartType.ACCOUNT_DAILY, ChartType.SUBACCOUNT_DAILY -> {
+                val lines = remember(data.daily, groups) {
+                    val length = data.daily.lines.maxOfOrNull { it.values.size } ?: 0
+                    if (length == 0) emptyList() else sumLines(data.daily.lines, groups, length)
+                }
+                BalanceDaysSection(title, lines, data.daily.daysInMonth, card.zero, animate)
+            }
+            ChartType.ACCOUNT_SHARE, ChartType.SUBACCOUNT_SHARE -> {
+                val selection = remember(month, card.id) { AnalysisSelection() }
+                val rows = remember(data.balance, groups) {
+                    buildShare(sumLines(data.balance.lines, groups, data.balance.months.size), groups.associate { it.first.id to it.first })
+                }
+                BalanceShareSection(title, rows, selection, animate)
+            }
+            else -> {
+                val months = data.balance.months.takeLast(BALANCE_MONTH_COUNT)
+                val lines = remember(data.balance, groups) {
+                    sumLines(data.balance.lines, groups, data.balance.months.size).map { it.copy(values = it.values.takeLast(BALANCE_MONTH_COUNT)) }
+                }
+                BalanceMonthsSection(title, lines, months, animate)
+            }
         }
     }
 }
