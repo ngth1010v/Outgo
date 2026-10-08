@@ -459,7 +459,8 @@ private fun SavingsAccountRow(row: AccountWithProgress, modifier: Modifier = Mod
                     Money.groupThousands(row.monthlyIncome),
                     Money.groupThousands(target),
                 ),
-                progress = row.monthlyIncome.toFloat() / target.toFloat(),
+                // A summed target can be 0 (no subaccount has one): nothing to save is done.
+                progress = if (target > 0) row.monthlyIncome.toFloat() / target.toFloat() else 1f,
                 color = savingsProgressColor(row.monthlyIncome, target, Color(account.color)),
                 current = row.monthlyIncome,
                 total = target,

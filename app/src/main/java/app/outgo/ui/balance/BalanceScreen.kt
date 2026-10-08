@@ -30,6 +30,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -64,6 +65,7 @@ import app.outgo.ui.component.EditorScaffold
 import app.outgo.ui.component.IconPickerSheet
 import app.outgo.ui.component.IconView
 import app.outgo.ui.component.MonthPicker
+import app.outgo.ui.component.SwitchField
 import app.outgo.ui.component.onBlur
 import app.outgo.ui.component.rememberAutoSave
 import app.outgo.ui.component.TreeList
@@ -165,7 +167,8 @@ private fun AccountRow(row: AccountWithProgress, onClick: () -> Unit, modifier: 
                     Money.groupThousands(row.monthlyIncome),
                     Money.groupThousands(target),
                 ),
-                progress = row.monthlyIncome.toFloat() / target.toFloat(),
+                // A summed target can be 0 (no subaccount has one): nothing to save is done.
+                progress = if (target > 0) row.monthlyIncome.toFloat() / target.toFloat() else 1f,
                 color = savingsProgressColor(row.monthlyIncome, target, Color(account.color)),
                 current = row.monthlyIncome,
                 total = target,
@@ -209,15 +212,19 @@ fun AccountEditScreen(accountId: Long?, parentId: Long?, onClose: () -> Unit) {
 /** The General section's inputs, saved together. */
 private data class AccountGeneral(val type: Int, val name: String, val description: String, val balanceText: String, val iconId: Long?, val color: Int)
 
-/** The Savings section's inputs for one month, as typed (the target is still text). */
-private data class SavingsForm(val enabled: Boolean, val targetText: String) {
-    /** On needs a target. */
-    val complete: Boolean get() = !enabled || (targetText.toLongOrNull() ?: 0L) > 0
+/**
+ * The Savings section's inputs for one month, as typed (the target is still text). [sumChildren]:
+ * the target is the subaccounts' summed, [targetText] is kept but not used.
+ */
+private data class SavingsForm(val enabled: Boolean, val targetText: String, val sumChildren: Boolean = false) {
+    /** On needs a target, unless summed. */
+    val complete: Boolean get() = !enabled || sumChildren || (targetText.toLongOrNull() ?: 0L) > 0
 
-    fun toSetting() = SavingsSetting(enabled, targetText.toLongOrNull() ?: 0L)
+    fun toSetting() = SavingsSetting(enabled, targetText.toLongOrNull() ?: 0L, sumChildren)
 
     companion object {
-        fun of(s: SavingsSetting?) = SavingsForm(s?.enabled ?: false, s?.target?.takeIf { it > 0 }?.toString().orEmpty())
+        fun of(s: SavingsSetting?) =
+            SavingsForm(s?.enabled ?: false, s?.target?.takeIf { it > 0 }?.toString().orEmpty(), s?.sumChildren ?: false)
     }
 }
 
@@ -245,6 +252,10 @@ private fun EditAccountScreen(
     // The Savings section shows (and saves) one month's target; it opens on this month's.
     var month by remember { mutableIntStateOf(MonthKey.current()) }
     var form by remember { mutableStateOf(SavingsForm.of(row?.monthlyTarget?.let { SavingsSetting(true, it) })) }
+    // Only a parent account's target can sum its subaccounts'; creating, a parent is one with no parent.
+    val canSumChildren = account?.isParent ?: (parent == null)
+    // The shown month's sum of subaccount targets, read while the target sums them.
+    var childSum by remember { mutableLongStateOf(0L) }
     var iconId by remember { mutableStateOf(account?.iconId) }
     var color by remember { mutableStateOf(account?.color ?: parent?.color ?: DefaultCategoryColor) }
     var showIconPicker by remember { mutableStateOf(false) }
@@ -286,6 +297,9 @@ private fun EditAccountScreen(
     }
     // The row only knows a target that is on: read this month's in full (an off one keeps its amount).
     LaunchedEffect(Unit) { if (account != null) showMonth(month) }
+    LaunchedEffect(month, form.sumChildren) {
+        if (account != null && form.sumChildren) childSum = viewModel.childTargetSum(account.id, month)
+    }
 
     // Creating: compared against the values the editor opened with, for the discard check.
     val fields = listOf(accountType, name, description, balanceText, month, form, iconId, color)
@@ -392,10 +406,20 @@ private fun EditAccountScreen(
             )
         }
         if (savingsShown) {
+            if (canSumChildren) {
+                SwitchField(
+                    stringResource(R.string.balance_savings_sum_children),
+                    checked = form.sumChildren,
+                    onCheckedChange = { form = form.copy(sumChildren = it) },
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+            // Summing: the target shows the sum and can't be typed.
             OutlinedTextField(
-                value = form.targetText,
+                value = if (form.sumChildren) childSum.toString() else form.targetText,
                 onValueChange = { form = form.copy(targetText = it.filter { c -> c.isDigit() }) },
                 label = { Text(stringResource(R.string.balance_target_hint)) },
+                enabled = !form.sumChildren,
                 singleLine = true,
                 isError = account != null && !form.complete,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),

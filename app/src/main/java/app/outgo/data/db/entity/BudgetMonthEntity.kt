@@ -41,4 +41,10 @@ data class BudgetMonthEntity(
     val underFromAccount: Long? = null,
     @ColumnInfo(name = "under_to_account")
     val underToAccount: Long? = null,
+    /**
+     * On (a parent category's budget only): the month's limit is the sum of its subcategories'
+     * limits that month, [limitAmount] and the offsets above are kept but not used.
+     */
+    @ColumnInfo(name = "sum_children", defaultValue = "0")
+    val sumChildren: Boolean = false,
 )

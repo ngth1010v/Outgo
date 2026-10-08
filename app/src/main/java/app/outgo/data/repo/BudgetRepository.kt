@@ -27,6 +27,8 @@ import java.util.Locale
  * [overTarget]/[underTarget]: null = no offset, [BudgetOffset.SELF] = this budget, otherwise the
  * target budget's category id. [underFromAccount] and [underToAccount] replace [underTarget] when
  * the unspent amount moves as real money. Not [enabled]: no budget that month, the rest is kept.
+ * [sumChildren] (a parent category only): the limit is its subcategories' limits summed, and
+ * [limit] and the offsets are kept but not used.
  */
 data class BudgetSetting(
     val enabled: Boolean,
@@ -35,6 +37,7 @@ data class BudgetSetting(
     val underTarget: Long? = null,
     val underFromAccount: Long? = null,
     val underToAccount: Long? = null,
+    val sumChildren: Boolean = false,
 )
 
 class BudgetRepository(
@@ -75,9 +78,13 @@ class BudgetRepository(
     suspend fun settingAt(categoryId: Long, monthKey: Int): BudgetSetting? = withContext(Dispatchers.IO) {
         val budget = budgetDao.findByCategory(categoryId) ?: return@withContext null
         budgetDao.monthAt(budget.id, monthKey)?.let {
-            BudgetSetting(it.enabled, it.limitAmount, it.overTarget, it.underTarget, it.underFromAccount, it.underToAccount)
+            BudgetSetting(it.enabled, it.limitAmount, it.overTarget, it.underTarget, it.underFromAccount, it.underToAccount, it.sumChildren)
         }
     }
+
+    /** What [categoryId]'s budget sums in [monthKey] when it sums its subcategories. */
+    suspend fun childLimitSum(categoryId: Long, monthKey: Int): Long =
+        withContext(Dispatchers.IO) { budgetDao.childLimitSum(categoryId, monthKey) }
 
     /**
      * Saves [setting] as [categoryId]'s budget from [monthKey] on, creating the budget on first use.
@@ -116,6 +123,7 @@ class BudgetRepository(
                     underTarget = setting.underTarget,
                     underFromAccount = setting.underFromAccount,
                     underToAccount = setting.underToAccount,
+                    sumChildren = setting.sumChildren,
                 ),
             )
             if (monthKey <= (budget.settledMonth ?: Int.MIN_VALUE)) resyncAccountOffsets(monthKey)
@@ -218,6 +226,7 @@ private fun firstOfNext(month: Int): Long = YearMonth.of(month / 100, month % 10
  * month absorbs is not counted twice. A budget that is off in a month takes no part then, and a
  * target that is off (or has no budget yet) in the month the offset lands in drops it.
  * A month with an account offset hands its unspent amount to [onAccountOffset] instead of a budget.
+ * A month that sums its subcategories has no offsets of its own (its children's still move).
  */
 internal fun budgetCarry(
     budgets: List<BudgetWithProgress>,
@@ -226,8 +235,7 @@ internal fun budgetCarry(
     monthKey: Int,
     onAccountOffset: (budget: BudgetWithProgress, setting: BudgetMonthEntity, month: Int, left: Long) -> Unit = { _, _, _, _ -> },
 ): Map<Long, Long> {
-    fun BudgetMonthEntity.hasOffset() =
-        overTarget != null || underTarget != null || (underFromAccount != null && underToAccount != null)
+    fun BudgetMonthEntity.hasOffset() = !sumChildren && (overTarget != null || underTarget != null || (underFromAccount != null && underToAccount != null))
     val start = months.filter { it.hasOffset() }.minOfOrNull { it.monthKey } ?: return emptyMap()
     val byBudget = months.groupBy { it.budgetId }
     val byCategory = budgets.filter { it.categoryId != null }.associateBy { it.categoryId!! }

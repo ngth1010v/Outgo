@@ -10,9 +10,24 @@ import app.outgo.data.db.entity.BudgetEntity
 import app.outgo.data.db.entity.BudgetMonthEntity
 import kotlinx.coroutines.flow.Flow
 
+/**
+ * The summed limit of a parent category's subcategories in :monthKey: each active subcategory's
+ * budget whose settings in effect then are on. Their own sums are never used (a subcategory can't sum).
+ */
+private const val CHILD_LIMIT_SUM = """COALESCE((
+                   SELECT SUM(cm.limit_amount) FROM budget cb
+                   JOIN category cc ON cc.id = cb.category_id
+                   JOIN budget_month cm ON cm.budget_id = cb.id AND cm.month_key =
+                       (SELECT MAX(month_key) FROM budget_month WHERE budget_id = cb.id AND month_key <= :monthKey)
+                   WHERE cb.kind = 0 AND cc.parent_id = b.category_id AND cc.archived = 0 AND cm.enabled = 1
+               ), 0)"""
+
 private const val BUDGETS_WITH_PROGRESS = """
         SELECT b.id, b.kind, b.name, b.icon_id AS iconId, b.category_id AS categoryId,
-               m.limit_amount AS limitAmount, b.sort_order AS sortOrder,
+               cat.parent_id AS parentCategoryId,
+               CASE WHEN m.sum_children = 1 THEN """ + CHILD_LIMIT_SUM + """ ELSE m.limit_amount END AS limitAmount,
+               COALESCE(m.sum_children, 0) AS sumChildren,
+               b.sort_order AS sortOrder,
                COALESCE((
                    SELECT SUM(s.total) FROM category_month_stat s JOIN category c ON c.id = s.category_id
                    WHERE s.month_key = :monthKey AND (c.id = b.category_id OR c.parent_id = b.category_id)
@@ -111,6 +126,16 @@ interface BudgetDao {
 
     @Query("UPDATE budget SET settled_month = :monthKey")
     suspend fun markAccountOffsetsSettled(monthKey: Int)
+
+    /** What [parentCategoryId]'s budget sums in [monthKey] when it sums its subcategories. */
+    @Query("""
+        SELECT COALESCE(SUM(cm.limit_amount), 0) FROM budget cb
+        JOIN category cc ON cc.id = cb.category_id
+        JOIN budget_month cm ON cm.budget_id = cb.id AND cm.month_key =
+            (SELECT MAX(month_key) FROM budget_month WHERE budget_id = cb.id AND month_key <= :monthKey)
+        WHERE cb.kind = 0 AND cc.parent_id = :parentCategoryId AND cc.archived = 0 AND cm.enabled = 1
+        """)
+    suspend fun childLimitSum(parentCategoryId: Long, monthKey: Int): Long
 
     @Query("SELECT COALESCE(MAX(sort_order), -1) FROM budget WHERE kind = :kind")
     suspend fun maxSortOrder(kind: Int): Int

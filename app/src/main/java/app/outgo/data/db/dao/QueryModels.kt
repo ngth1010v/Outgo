@@ -8,7 +8,10 @@ data class AccountWithProgress(
     @Embedded val account: AccountEntity,
     val monthlyIncome: Long,
     val prevMonthlyIncome: Long,
-    /** This month's savings target: a savings account whose target in effect is on, else null. */
+    /**
+     * This month's savings target: a savings account whose target in effect is on, else null. A
+     * parent summing its subaccounts' targets has their sum, which can be 0.
+     */
     val monthlyTarget: Long?,
     /** The balance to show: a parent's is its active subaccounts' together, a subaccount's its own. */
     val totalBalance: Long,
@@ -39,7 +42,12 @@ data class BudgetWithProgress(
     val name: String?,
     val iconId: Long?,
     val categoryId: Long?,
+    /** The budget's category's parent, null for a parent category's budget. */
+    val parentCategoryId: Long?,
+    /** That month's limit; with [sumChildren], the sum of its subcategories' limits. */
     val limitAmount: Long?,
+    /** That month the limit is its subcategories' limits summed, and its own offsets don't apply. */
+    val sumChildren: Boolean,
     val sortOrder: Int,
     val spent: Long,
     val prevSpent: Long,

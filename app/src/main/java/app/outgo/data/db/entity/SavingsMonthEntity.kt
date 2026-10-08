@@ -31,4 +31,7 @@ data class SavingsMonthEntity(
     val enabled: Boolean,
     @ColumnInfo(name = "target")
     val target: Long,
+    /** On (a parent account only): the month's target is the sum of its subaccounts'; [target] is kept. */
+    @ColumnInfo(name = "sum_children", defaultValue = "0")
+    val sumChildren: Boolean = false,
 )

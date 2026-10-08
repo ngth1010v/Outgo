@@ -54,6 +54,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
@@ -87,6 +88,7 @@ import app.outgo.ui.component.EditorScaffold
 import app.outgo.ui.component.IconPickerSheet
 import app.outgo.ui.component.IconView
 import app.outgo.ui.component.MonthPicker
+import app.outgo.ui.component.SwitchField
 import app.outgo.ui.component.onBlur
 import app.outgo.ui.component.rememberAutoSave
 import app.outgo.ui.component.TreeList
@@ -293,6 +295,10 @@ private fun EditCategoryScreen(
     // The Budget section shows (and saves) one month's settings; it opens on this month's.
     var month by remember { mutableIntStateOf(MonthKey.current()) }
     var form by remember { mutableStateOf(BudgetForm.of(existing?.let { budgets[it.id] })) }
+    // Only a parent category's budget can sum its subcategories' limits.
+    val canSumChildren = existing?.isParent ?: (target is EditTarget.NewParent)
+    // The shown month's sum of subcategory limits, read while the budget sums them.
+    var childSum by remember { mutableLongStateOf(0L) }
     var showIconPicker by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var hasTrades by remember { mutableStateOf(false) }
@@ -331,6 +337,12 @@ private fun EditCategoryScreen(
             budgetSave.reset(loaded)
             form = loaded
         }
+    }
+
+    // The row only knows the month's limit in effect (a sum while summing): read this month's in full.
+    LaunchedEffect(Unit) { if (budgetSave != null) showMonth(month) }
+    LaunchedEffect(month, form.sumChildren) {
+        if (existing != null && form.sumChildren) childSum = viewModel.childLimitSum(existing.id, month)
     }
 
     val title = when {
@@ -416,12 +428,21 @@ private fun EditCategoryScreen(
                 val to = stringResource(R.string.budget_offset_add_to)
 
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (canSumChildren) {
+                        SwitchField(
+                            stringResource(R.string.category_budget_sum_children),
+                            checked = form.sumChildren,
+                            onCheckedChange = { form = form.copy(sumChildren = it) },
+                        )
+                    }
+                    // Summing: the limit shows the sum, and nothing else in the section can be set.
                     OutlinedTextField(
-                        value = form.limitText,
+                        value = if (form.sumChildren) childSum.toString() else form.limitText,
                         onValueChange = { form = form.copy(limitText = it.filter { c -> c.isDigit() }) },
                         label = { Text(stringResource(R.string.category_budget_limit)) },
+                        enabled = !form.sumChildren,
                         singleLine = true,
-                        isError = existing != null && (form.limitText.toLongOrNull() ?: 0L) <= 0,
+                        isError = existing != null && !form.sumChildren && (form.limitText.toLongOrNull() ?: 0L) <= 0,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         // Editing: an invalid limit goes back to the saved one when the field is left,
                         // and the whole section too if that month had none (it was off).
@@ -431,37 +452,39 @@ private fun EditCategoryScreen(
                         },
                     )
 
-                    OffsetPicker(
-                        stringResource(R.string.budget_over_action),
-                        form.overOn,
-                        listOf(PickOption(false, none), PickOption(true, budgetLabel)),
-                    ) { form = form.copy(overOn = it) }
-                    if (form.overOn) {
-                        OffsetPicker(budgetLabel, form.overTarget, budgetTargets, indent = true, sheet = budgetSheet(form.overTarget) { form = form.copy(overTarget = it) }) {}
-                    }
+                    if (!form.sumChildren) {
+                        OffsetPicker(
+                            stringResource(R.string.budget_over_action),
+                            form.overOn,
+                            listOf(PickOption(false, none), PickOption(true, budgetLabel)),
+                        ) { form = form.copy(overOn = it) }
+                        if (form.overOn) {
+                            OffsetPicker(budgetLabel, form.overTarget, budgetTargets, indent = true, sheet = budgetSheet(form.overTarget) { form = form.copy(overTarget = it) }) {}
+                        }
 
-                    OffsetPicker(
-                        stringResource(R.string.budget_under_action),
-                        form.underMode,
-                        listOf(
-                            PickOption(UnderMode.NONE, none),
-                            PickOption(UnderMode.BUDGET, budgetLabel),
-                            PickOption(UnderMode.ACCOUNT, stringResource(R.string.budget_offset_account)),
-                        ),
-                    ) { form = form.copy(underMode = it) }
-                    when (form.underMode) {
-                        UnderMode.NONE -> Unit
-                        UnderMode.BUDGET ->
-                            OffsetPicker(to, form.underTarget, budgetTargets, indent = true, sheet = budgetSheet(form.underTarget) { form = form.copy(underTarget = it) }) {}
-                        UnderMode.ACCOUNT -> {
-                            OffsetPicker(
-                                stringResource(R.string.budget_offset_from_account), form.fromAccount, accountOptions, indent = true,
-                                sheet = accountSheet(form.fromAccount, accounts) { form = form.copy(fromAccount = it, toAccount = form.toAccount.takeIf { a -> a != it }) },
-                            ) {}
-                            OffsetPicker(
-                                to, form.toAccount, accountOptions, indent = true,
-                                sheet = accountSheet(form.toAccount, accounts.filter { it.id != form.fromAccount }) { form = form.copy(toAccount = it) },
-                            ) {}
+                        OffsetPicker(
+                            stringResource(R.string.budget_under_action),
+                            form.underMode,
+                            listOf(
+                                PickOption(UnderMode.NONE, none),
+                                PickOption(UnderMode.BUDGET, budgetLabel),
+                                PickOption(UnderMode.ACCOUNT, stringResource(R.string.budget_offset_account)),
+                            ),
+                        ) { form = form.copy(underMode = it) }
+                        when (form.underMode) {
+                            UnderMode.NONE -> Unit
+                            UnderMode.BUDGET ->
+                                OffsetPicker(to, form.underTarget, budgetTargets, indent = true, sheet = budgetSheet(form.underTarget) { form = form.copy(underTarget = it) }) {}
+                            UnderMode.ACCOUNT -> {
+                                OffsetPicker(
+                                    stringResource(R.string.budget_offset_from_account), form.fromAccount, accountOptions, indent = true,
+                                    sheet = accountSheet(form.fromAccount, accounts) { form = form.copy(fromAccount = it, toAccount = form.toAccount.takeIf { a -> a != it }) },
+                                ) {}
+                                OffsetPicker(
+                                    to, form.toAccount, accountOptions, indent = true,
+                                    sheet = accountSheet(form.toAccount, accounts.filter { it.id != form.fromAccount }) { form = form.copy(toAccount = it) },
+                                ) {}
+                            }
                         }
                     }
                 }
@@ -558,10 +581,12 @@ private data class BudgetForm(
     val underTarget: Long,
     val fromAccount: Long?,
     val toAccount: Long?,
+    /** The limit is the subcategories' summed; the inputs above are kept but not used. */
+    val sumChildren: Boolean,
 ) {
-    /** On needs a limit, and an account offset two different accounts. */
+    /** On needs a limit (unless summed), and an account offset two different accounts. */
     val complete: Boolean
-        get() = !enabled || ((limitText.toLongOrNull() ?: 0L) > 0 &&
+        get() = !enabled || sumChildren || ((limitText.toLongOrNull() ?: 0L) > 0 &&
             (underMode != UnderMode.ACCOUNT || (fromAccount != null && toAccount != null && fromAccount != toAccount)))
 
     fun toSetting() = BudgetSetting(
@@ -571,6 +596,7 @@ private data class BudgetForm(
         underTarget = underTarget.takeIf { underMode == UnderMode.BUDGET },
         underFromAccount = fromAccount.takeIf { underMode == UnderMode.ACCOUNT },
         underToAccount = toAccount.takeIf { underMode == UnderMode.ACCOUNT },
+        sumChildren = sumChildren,
     )
 
     companion object {
@@ -587,11 +613,16 @@ private data class BudgetForm(
             underTarget = s?.underTarget ?: BudgetOffset.SELF,
             fromAccount = s?.underFromAccount,
             toAccount = s?.underToAccount,
+            sumChildren = s?.sumChildren ?: false,
         )
 
         /** A budget row's settings in the month it was read for. */
         fun of(b: BudgetWithProgress?) = of(
-            b?.let { BudgetSetting(it.enabled, it.limitAmount ?: 0L, it.overTarget, it.underTarget, it.underFromAccount, it.underToAccount) },
+            b?.let {
+                // While summing, limitAmount is the sum, not the budget's own limit (read in full later).
+                val limit = if (it.sumChildren) 0L else it.limitAmount ?: 0L
+                BudgetSetting(it.enabled, limit, it.overTarget, it.underTarget, it.underFromAccount, it.underToAccount, it.sumChildren)
+            },
         )
     }
 }

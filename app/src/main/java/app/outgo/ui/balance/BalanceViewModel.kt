@@ -34,6 +34,10 @@ class BalanceViewModel(private val accountRepository: AccountRepository) : ViewM
         // After any queued save, so a month just left reads back what was saved.
         writes.withLock { accountRepository.savingsAt(accountId, monthKey) }
 
+    /** What [accountId]'s target sums in [monthKey] from its subaccounts', after any queued save. */
+    suspend fun childTargetSum(accountId: Long, monthKey: Int): Long =
+        writes.withLock { accountRepository.childTargetSum(accountId, monthKey) }
+
     fun setSavingsMonth(accountId: Long, monthKey: Int, setting: SavingsSetting) {
         write { accountRepository.setSavingsMonth(accountId, monthKey, setting) }
     }

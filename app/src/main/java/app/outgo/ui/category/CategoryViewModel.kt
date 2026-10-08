@@ -86,6 +86,10 @@ class CategoryViewModel(
         // After any queued save, so a month just left reads back what was saved.
         writes.withLock { budgetRepository.settingAt(categoryId, monthKey) }
 
+    /** What [categoryId]'s budget sums in [monthKey] from its subcategories', after any queued save. */
+    suspend fun childLimitSum(categoryId: Long, monthKey: Int): Long =
+        writes.withLock { budgetRepository.childLimitSum(categoryId, monthKey) }
+
     fun setBudgetMonth(categoryId: Long, monthKey: Int, setting: BudgetSetting) {
         write { budgetRepository.setMonth(categoryId, monthKey, setting) }
     }

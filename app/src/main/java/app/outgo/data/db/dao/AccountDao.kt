@@ -10,6 +10,17 @@ import app.outgo.data.db.entity.AccountEntity
 import app.outgo.data.db.entity.SavingsMonthEntity
 import kotlinx.coroutines.flow.Flow
 
+/**
+ * The summed monthly target of the outer row a's active savings subaccounts in :monthKey: each one's
+ * target in effect then, when that one is on. A subaccount can't sum, so its own sum is never used.
+ */
+private const val CHILD_TARGET_SUM = """COALESCE((
+                SELECT SUM(cm.target) FROM account c
+                JOIN savings_month cm ON cm.account_id = c.id AND cm.month_key =
+                    (SELECT MAX(month_key) FROM savings_month WHERE account_id = c.id AND month_key <= :monthKey)
+                WHERE c.parent_id = a.id AND c.archived = 0 AND c.account_type = 1 AND cm.enabled = 1
+            ), 0)"""
+
 @Dao
 interface AccountDao {
     /**
@@ -35,7 +46,10 @@ interface AccountDao {
                      AND t.account_id NOT IN (SELECT g.id FROM account g WHERE g.id = a.id OR g.parent_id = a.id)))
         ), 0) AS prevMonthlyIncome,
         CASE WHEN a.account_type = 1 THEN (
-            SELECT CASE WHEN m.enabled = 1 AND m.target > 0 THEN m.target END FROM savings_month m
+            SELECT CASE
+                WHEN m.enabled = 1 AND m.sum_children = 1 THEN """ + CHILD_TARGET_SUM + """
+                WHEN m.enabled = 1 AND m.target > 0 THEN m.target
+            END FROM savings_month m
              WHERE m.account_id = a.id AND m.month_key <= :monthKey
              ORDER BY m.month_key DESC LIMIT 1
         ) END AS monthlyTarget,
@@ -48,6 +62,17 @@ interface AccountDao {
     /** The savings snapshot in effect in [monthKey]: the newest at or before it. */
     @Query("SELECT * FROM savings_month WHERE account_id = :accountId AND month_key <= :monthKey ORDER BY month_key DESC LIMIT 1")
     suspend fun savingsAt(accountId: Long, monthKey: Int): SavingsMonthEntity?
+
+    /** What [accountId]'s target sums in [monthKey] when it sums its subaccounts'. */
+    @Query(
+        """
+        SELECT COALESCE(SUM(cm.target), 0) FROM account c
+        JOIN savings_month cm ON cm.account_id = c.id AND cm.month_key =
+            (SELECT MAX(month_key) FROM savings_month WHERE account_id = c.id AND month_key <= :monthKey)
+        WHERE c.parent_id = :accountId AND c.archived = 0 AND c.account_type = 1 AND cm.enabled = 1
+        """,
+    )
+    suspend fun childTargetSum(accountId: Long, monthKey: Int): Long
 
     @Query("SELECT EXISTS(SELECT 1 FROM savings_month WHERE account_id = :accountId AND month_key = :monthKey)")
     suspend fun hasSavingsMonth(accountId: Long, monthKey: Int): Boolean

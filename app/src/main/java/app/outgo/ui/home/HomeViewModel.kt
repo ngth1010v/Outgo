@@ -40,8 +40,12 @@ data class HomeUiState(
     val totalBalance: Long get() = availableBalance + savingsBalance
 
     /** What the active budgets still have left this month. An overspent budget counts 0, not
-     *  negative, so it does not eat into what the other budgets still need. */
-    val budgetRemaining: Long get() = budgets.sumOf { (it.effectiveLimit - it.spent).coerceAtLeast(0) }
+     *  negative, so it does not eat into what the other budgets still need. A parent summing its
+     *  subcategories' limits already stands for them, so they don't count again. */
+    val budgetRemaining: Long get() {
+        val summing = budgets.filter { it.sumChildren }.mapNotNullTo(HashSet()) { it.categoryId }
+        return budgets.filter { it.parentCategoryId !in summing }.sumOf { (it.effectiveLimit - it.spent).coerceAtLeast(0) }
+    }
 
     /** The part of the available money set aside for the remaining budgets. */
     val budgetsBalance: Long get() = minOf(budgetRemaining, availableBalance).coerceAtLeast(0)

@@ -16,8 +16,11 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.withContext
 
-/** A savings account's target for one month, as the account editor shows and saves it. */
-data class SavingsSetting(val enabled: Boolean, val target: Long)
+/**
+ * A savings account's target for one month, as the account editor shows and saves it.
+ * [sumChildren] (a parent account only): the target is its subaccounts' targets summed; [target] is kept.
+ */
+data class SavingsSetting(val enabled: Boolean, val target: Long, val sumChildren: Boolean = false)
 
 /**
  * `account.balance` is never assigned directly here — editing "current
@@ -123,8 +126,12 @@ class AccountRepository(
 
     /** [accountId]'s savings target in effect in [monthKey], or null when it has none by then. */
     suspend fun savingsAt(accountId: Long, monthKey: Int): SavingsSetting? = withContext(Dispatchers.IO) {
-        accountDao.savingsAt(accountId, monthKey)?.let { SavingsSetting(it.enabled, it.target) }
+        accountDao.savingsAt(accountId, monthKey)?.let { SavingsSetting(it.enabled, it.target, it.sumChildren) }
     }
+
+    /** What [accountId]'s target sums in [monthKey] when it sums its subaccounts'. */
+    suspend fun childTargetSum(accountId: Long, monthKey: Int): Long =
+        withContext(Dispatchers.IO) { accountDao.childTargetSum(accountId, monthKey) }
 
     /**
      * Saves [setting] as [accountId]'s savings target from [monthKey] on. Like
@@ -142,7 +149,7 @@ class AccountRepository(
                     )
                 }
             }
-            accountDao.putSavingsMonth(SavingsMonthEntity(accountId, monthKey, setting.enabled, setting.target))
+            accountDao.putSavingsMonth(SavingsMonthEntity(accountId, monthKey, setting.enabled, setting.target, setting.sumChildren))
         }
     }
 
