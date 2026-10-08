@@ -21,6 +21,16 @@ interface StatDao {
     )
     fun observeMonthlyTotals(fromMonth: Int, toMonth: Int): Flow<List<MonthCategoryTotal>>
 
+    /** Analysis category charts: one row per (month, category as stored, never rolled up) in range. */
+    @Query(
+        """
+        SELECT category_id AS categoryId, month_key AS monthKey, total
+        FROM category_month_stat
+        WHERE month_key BETWEEN :fromMonth AND :toMonth
+        """,
+    )
+    suspend fun categoryMonthTotals(fromMonth: Int, toMonth: Int): List<CategoryMonthTotal>
+
     /** Oldest month that has any data, i.e. the lower bound of the Analysis month picker. */
     @Query("SELECT MIN(month_key) FROM category_month_stat")
     suspend fun earliestMonth(): Int?

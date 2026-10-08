@@ -275,7 +275,10 @@ data class YoyUi(val expense: YoySeries, val income: YoySeries) {
 
 // ------------------------------------------------------------------- accounts
 
-/** An account for the account charts' pickers; a parent carries its subaccounts. */
+/**
+ * An account (or category) for the account and category charts' pickers; a parent carries its
+ * subaccounts (subcategories).
+ */
 @Immutable
 data class AccountNode(val id: Long, val name: String, val iconId: Long?, val color: Int, val children: List<AccountNode> = emptyList())
 
@@ -296,6 +299,15 @@ data class ShareRow(
     val startAngle: Float,
     val sweepAngle: Float,
 )
+
+/**
+ * One month of the Categories group, both kinds, one line per category as stored (a subcategory,
+ * or a parent that holds trades itself); a card adds them up per [AccountNode] with [sumLines].
+ * [daily] runs up each one's month-to-date total, the live month stopping at today; [monthly]
+ * holds each one's total in every month of [months], the page's own month last.
+ */
+@Immutable
+data class CategoryChartsUi(val daysInMonth: Int, val daily: List<BalanceLine>, val months: List<Int>, val monthly: List<BalanceLine>)
 
 /** One account's balance at the end of each month of [BalanceTrendUi.months]. */
 @Immutable

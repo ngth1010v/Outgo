@@ -127,9 +127,13 @@ fun chartContentHeight(type: ChartType, mode: AnalysisMode): Dp {
         ChartType.TRANSFERS -> small + SectionGap + RowHeight * TRANSFER_PAIR_COUNT
         ChartType.NET_FLOW -> MoverRowHeight * LIST_VISIBLE_ROWS
         ChartType.BALANCE_TREND, ChartType.DAILY_BALANCE, ChartType.BUDGET_DAILY, ChartType.SAVING_DAILY,
-        ChartType.ACCOUNT_DAILY, ChartType.SUBACCOUNT_DAILY, ChartType.ACCOUNT_MONTHS, ChartType.SUBACCOUNT_MONTHS ->
+        ChartType.ACCOUNT_DAILY, ChartType.SUBACCOUNT_DAILY, ChartType.ACCOUNT_MONTHS, ChartType.SUBACCOUNT_MONTHS,
+        ChartType.EXPENSE_CATEGORY_DAILY, ChartType.EXPENSE_SUBCATEGORY_DAILY, ChartType.EXPENSE_CATEGORY_MONTHS,
+        ChartType.EXPENSE_SUBCATEGORY_MONTHS, ChartType.INCOME_CATEGORY_DAILY, ChartType.INCOME_SUBCATEGORY_DAILY,
+        ChartType.INCOME_CATEGORY_MONTHS, ChartType.INCOME_SUBCATEGORY_MONTHS ->
             BalanceHeight + SectionGap + small
-        ChartType.ACCOUNT_SHARE, ChartType.SUBACCOUNT_SHARE -> ShareHeight
+        ChartType.ACCOUNT_SHARE, ChartType.SUBACCOUNT_SHARE, ChartType.EXPENSE_CATEGORY_SHARE, ChartType.EXPENSE_SUBCATEGORY_SHARE,
+        ChartType.INCOME_CATEGORY_SHARE, ChartType.INCOME_SUBCATEGORY_SHARE -> ShareHeight
     }
 }
 
@@ -1142,7 +1146,15 @@ fun BalanceMonthsSection(title: String, lines: List<BalanceLine>, months: List<I
  * pie scrolls its row into view.
  */
 @Composable
-fun BalanceShareSection(title: String, rows: List<ShareRow>, selection: AnalysisSelection, animate: Boolean, modifier: Modifier = Modifier) {
+fun BalanceShareSection(
+    title: String,
+    rows: List<ShareRow>,
+    selection: AnalysisSelection,
+    animate: Boolean,
+    /** Which way a change counts as good: a balance or income going up is, an expense going up isn't. */
+    kind: Int = CategoryKind.INCOME,
+    modifier: Modifier = Modifier,
+) {
     val description = stringResource(R.string.analysis_cd_daily_lines, title, rows.size)
     val scroll = rememberScrollState()
     val scope = rememberCoroutineScope()
@@ -1166,7 +1178,7 @@ fun BalanceShareSection(title: String, rows: List<ShareRow>, selection: Analysis
                 )
                 Spacer(Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f).fillMaxHeight().verticalScroll(scroll)) {
-                    rows.forEach { ShareRowItem(it, selection) }
+                    rows.forEach { ShareRowItem(it, selection, kind) }
                 }
             }
         }
@@ -1174,7 +1186,7 @@ fun BalanceShareSection(title: String, rows: List<ShareRow>, selection: Analysis
 }
 
 @Composable
-private fun ShareRowItem(row: ShareRow, selection: AnalysisSelection) {
+private fun ShareRowItem(row: ShareRow, selection: AnalysisSelection, kind: Int) {
     // Only the row whose selected-ness actually flips recomposes on a tap.
     val selected by remember(row.id) { derivedStateOf { selection.rootId == row.id } }
     val background by animateColorAsState(
@@ -1208,7 +1220,7 @@ private fun ShareRowItem(row: ShareRow, selection: AnalysisSelection) {
             Text(
                 "${Money.formatSignedNoCurrency(row.delta)} (${signedPercent(row.deltaPercent)})",
                 style = MaterialTheme.typography.labelSmall,
-                color = deltaColor(row.delta, CategoryKind.INCOME),
+                color = deltaColor(row.delta, kind),
                 maxLines = 1,
             )
         }

@@ -3,6 +3,7 @@ package app.outgo.ui.analysis
 import app.outgo.data.db.dao.AccountBalance
 import app.outgo.data.db.dao.AccountFlow
 import app.outgo.data.db.dao.AccountMove
+import app.outgo.data.db.dao.CategoryMonthTotal
 import app.outgo.data.db.dao.FLOW_TRANSFER_IN
 import app.outgo.data.db.dao.MonthCategoryTotal
 import app.outgo.data.db.dao.TradeSlim
@@ -873,4 +874,42 @@ fun buildShare(lines: List<BalanceLine>, nodes: Map<Long, AccountNode>): List<Sh
         angle += row.sweepAngle
         row
     }
+}
+
+// ------------------------------------------------------------------ categories
+
+/**
+ * The Categories group's data for [month]: [rows] are the trades (expense and income, a transfer
+ * from a budget counted as its category's expense) of at least that month, [totals] the stored
+ * category totals of the last [BALANCE_MONTH_COUNT] months. Only categories with money show up.
+ */
+fun buildCategoryCharts(
+    rows: List<TradeSlim>,
+    totals: List<CategoryMonthTotal>,
+    month: Int,
+    zone: ZoneId,
+    nowMillis: Long = System.currentTimeMillis(),
+): CategoryChartsUi {
+    val daysInMonth = yearMonthOf(month).lengthOfMonth()
+    val lastDay = daysCounted(month, zone, nowMillis).coerceAtMost(daysInMonth)
+    val perDay = HashMap<Long, LongArray>()
+    rows.forEach { row ->
+        val id = row.categoryId ?: return@forEach
+        val at = Instant.ofEpochMilli(row.occurredAt).atZone(zone)
+        if (at.year * 100 + at.monthValue != month) return@forEach
+        perDay.getOrPut(id) { LongArray(daysInMonth) }[at.dayOfMonth - 1] += row.amount
+    }
+    val daily = perDay.map { (id, days) ->
+        var running = 0L
+        BalanceLine(id, "", OTHER_COLOR, (0 until lastDay).map { day -> running += days[day]; running })
+    }
+    val months = MonthKey.lastN(month, BALANCE_MONTH_COUNT)
+    val index = months.withIndex().associate { (i, m) -> m to i }
+    val perMonth = HashMap<Long, LongArray>()
+    totals.forEach { total ->
+        val i = index[total.monthKey] ?: return@forEach
+        perMonth.getOrPut(total.categoryId) { LongArray(months.size) }[i] += total.total
+    }
+    val monthly = perMonth.map { (id, values) -> BalanceLine(id, "", OTHER_COLOR, values.asList()) }
+    return CategoryChartsUi(daysInMonth, daily, months, monthly)
 }

@@ -52,6 +52,8 @@ data class AnalysisUiState(
      * without a single trade still has balances to chart.
      */
     val monthBalances: Map<Int, Stage<AccountsUi>> = emptyMap(),
+    /** The month's Categories-group data, from the same load as [monthTrades]. */
+    val monthCategories: Map<Int, Stage<CategoryChartsUi>> = emptyMap(),
     val yearStats: Map<Int, Stage<YearStatsData>> = emptyMap(),
     val yearTrades: Map<Int, Stage<YearTradesData>> = emptyMap(),
     /** Empty until the saved layouts are read, which draws a page with no charts for that moment. */
@@ -60,6 +62,9 @@ data class AnalysisUiState(
     val accounts: List<Pair<Long, String>> = emptyList(),
     /** Active parent accounts with their active subaccounts, in the user's order. */
     val accountTree: List<AccountNode> = emptyList(),
+    /** Active parent categories of each kind with their active subcategories, in the user's order. */
+    val expenseTree: List<AccountNode> = emptyList(),
+    val incomeTree: List<AccountNode> = emptyList(),
     /** (category id, name) of each budget, and (id, name) of each savings account, for the picks chip. */
     val budgets: List<Pair<Long, String>> = emptyList(),
     val savings: List<Pair<Long, String>> = emptyList(),
@@ -95,6 +100,7 @@ class AnalysisViewModel(
     private val monthStatsCache = lru<Stage<StatsData>>()
     private val monthTradesCache = lru<Stage<TradesData>>()
     private val monthBalancesCache = lru<Stage<AccountsUi>>()
+    private val monthCategoriesCache = lru<Stage<CategoryChartsUi>>()
     private val yearStatsCache = lru<Stage<YearStatsData>>()
     private val yearTradesCache = lru<Stage<YearTradesData>>()
     private val tradeJobs = HashMap<AnalysisPage, Job>()
@@ -122,11 +128,27 @@ class AnalysisViewModel(
         viewModelScope.launch {
             categoryRepository.observeAllOfType(CategoryKind.EXPENSE).collect { list ->
                 categories = categories + list.associate { it.id to Triple(it.name, it.iconId, it.color) }
+                val children = list.filter { !it.isParent }.groupBy { it.parentId }
+                val tree = list.filter { it.isParent }.map { parent ->
+                    AccountNode(
+                        parent.id, parent.name, parent.iconId, parent.color,
+                        children[parent.id].orEmpty().map { AccountNode(it.id, it.name, it.iconId, it.color) },
+                    )
+                }
+                _state.update { it.copy(expenseTree = tree) }
             }
         }
         viewModelScope.launch {
             categoryRepository.observeAllOfType(CategoryKind.INCOME).collect { list ->
                 categories = categories + list.associate { it.id to Triple(it.name, it.iconId, it.color) }
+                val children = list.filter { !it.isParent }.groupBy { it.parentId }
+                val tree = list.filter { it.isParent }.map { parent ->
+                    AccountNode(
+                        parent.id, parent.name, parent.iconId, parent.color,
+                        children[parent.id].orEmpty().map { AccountNode(it.id, it.name, it.iconId, it.color) },
+                    )
+                }
+                _state.update { it.copy(incomeTree = tree) }
             }
         }
         viewModelScope.launch {
@@ -167,12 +189,22 @@ class AnalysisViewModel(
         viewModelScope.launch {
             val decoded = LayoutSlot.entries.associateWith { slot -> decodeSlot(slot) { settingRepository.get(it) } }.toMutableMap()
             // Once: the Accounts group's charts go on top of the month list saved before they existed.
+            // A fresh install takes this path too, so its list starts Accounts, then Categories.
             if (settingRepository.get(MONTH_BALANCE_ADDED_KEY) == null) {
                 val month = MonthBalanceCharts.map { ChartCard(0, it) } +
                     decoded.getValue(LayoutSlot.MONTH).filter { it.type !in MonthBalanceCharts }
                 decoded[LayoutSlot.MONTH] = month
                 settingRepository.set(LayoutSlot.MONTH.settingKey, encodeLayout(month))
                 settingRepository.set(MONTH_BALANCE_ADDED_KEY, "1")
+            }
+            // Once, likewise: the Categories group's charts go right after the Accounts group's.
+            if (settingRepository.get(MONTH_CATEGORY_ADDED_KEY) == null) {
+                val rest = decoded.getValue(LayoutSlot.MONTH).filter { it.type !in MonthCategoryGroupCharts }
+                val at = rest.indexOfLast { it.type in MonthBalanceCharts } + 1
+                val month = rest.take(at) + MonthCategoryGroupCharts.map { ChartCard(0, it) } + rest.drop(at)
+                decoded[LayoutSlot.MONTH] = month
+                settingRepository.set(LayoutSlot.MONTH.settingKey, encodeLayout(month))
+                settingRepository.set(MONTH_CATEGORY_ADDED_KEY, "1")
             }
             val layouts = decoded.mapValues { (_, cards) -> cards.withIds(nextCardId).also { nextCardId += it.size } }
             _state.update { it.copy(layouts = layouts) }
@@ -283,11 +315,15 @@ class AnalysisViewModel(
                     val flowsAsync = async { tradeRepository.accountFlows(trend.first(), page.monthKey) }
                     val openingAsync = async { tradeRepository.balancesBefore(trend.first()) }
                     val movesAsync = async { tradeRepository.accountMovesForMonth(page.monthKey) }
+                    val categoryTotalsAsync = async {
+                        statDao.categoryMonthTotals(MonthKey.minus(page.monthKey, BALANCE_MONTH_COUNT - 1L), page.monthKey)
+                    }
                     val rows = rowsAsync.await()
                     val transfers = transfersAsync.await()
                     val flows = flowsAsync.await()
                     val opening = openingAsync.await()
                     val moves = movesAsync.await()
+                    val categoryTotals = categoryTotalsAsync.await()
                     val (stage, balances) = withContext(Dispatchers.Default) {
                         val current = rows.filter { monthKeyOf(it.occurredAt, zone) == page.monthKey }
                         val previous = listOf(MonthKey.minus(page.monthKey, 1))
@@ -300,6 +336,10 @@ class AnalysisViewModel(
                     }
                     monthTradesCache[page.monthKey] = stage
                     monthBalancesCache[page.monthKey] = balances
+                    monthCategoriesCache[page.monthKey] = withContext(Dispatchers.Default) {
+                        val charts = buildCategoryCharts(rows, categoryTotals, page.monthKey, zone)
+                        if (charts.daily.isEmpty() && charts.monthly.isEmpty()) Stage.Empty else Stage.Ready(charts)
+                    }
                 }
                 is AnalysisPage.Year -> {
                     val months = monthsOfYear(page.year)
@@ -340,6 +380,7 @@ class AnalysisViewModel(
             is AnalysisPage.Month -> {
                 monthTradesCache[page.monthKey] = stage
                 monthBalancesCache[page.monthKey] = stage
+                monthCategoriesCache[page.monthKey] = stage
             }
             is AnalysisPage.Year -> yearTradesCache[page.year] = stage
         }
@@ -348,7 +389,12 @@ class AnalysisViewModel(
 
     private fun publishTrades() {
         _state.update {
-            it.copy(monthTrades = monthTradesCache.toMap(), monthBalances = monthBalancesCache.toMap(), yearTrades = yearTradesCache.toMap())
+            it.copy(
+                monthTrades = monthTradesCache.toMap(),
+                monthBalances = monthBalancesCache.toMap(),
+                monthCategories = monthCategoriesCache.toMap(),
+                yearTrades = yearTradesCache.toMap(),
+            )
         }
     }
 
@@ -402,6 +448,7 @@ class AnalysisViewModel(
                     is AnalysisPage.Month -> {
                         monthTradesCache.remove(stale.monthKey)
                         monthBalancesCache.remove(stale.monthKey)
+                        monthCategoriesCache.remove(stale.monthKey)
                     }
                     is AnalysisPage.Year -> yearTradesCache.remove(stale.year)
                 }

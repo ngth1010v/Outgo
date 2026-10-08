@@ -4,6 +4,7 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Immutable
 import app.outgo.R
+import app.outgo.domain.CategoryKind
 
 /**
  * The user-arranged chart lists. The month pages share one ordered list of [ChartCard]s and the
@@ -25,8 +26,10 @@ enum class ChartType(
     val hasPicks: Boolean = false,
     /** Picks one parent account ([ChartCard.accountId]) and draws its subaccounts. */
     val hasParent: Boolean = false,
-    /** Each account it draws can be switched off ([ChartCard.hidden]). */
+    /** Each account (category) it draws can be switched off ([ChartCard.hidden]). */
     val hasToggles: Boolean = false,
+    /** A Categories-group chart of this [CategoryKind]; its [hasParent] picks a parent category. */
+    val categoryKind: Int? = null,
 ) {
     // Accounts, month pages only. "Account" charts add each parent's subaccounts up; "subaccount"
     // charts draw the subaccounts of one picked parent.
@@ -39,6 +42,25 @@ enum class ChartType(
     /** Stacked month-end balances of the last [BALANCE_MONTH_COUNT] months. */
     ACCOUNT_MONTHS(R.drawable.ph_stack, hasMode = false, hasToggles = true),
     SUBACCOUNT_MONTHS(R.drawable.ph_stack_simple, hasMode = false, hasParent = true, hasToggles = true),
+
+    // Categories group, month pages only: the same three charts as the Accounts group, for each
+    // kind. "Category" charts add each parent's subcategories up; "subcategory" charts draw the
+    // subcategories of one picked parent.
+    /** Month-to-date total, one line per category. */
+    EXPENSE_CATEGORY_DAILY(R.drawable.ph_shopping_cart, hasMode = false, hasZero = true, hasToggles = true, categoryKind = CategoryKind.EXPENSE),
+    EXPENSE_SUBCATEGORY_DAILY(R.drawable.ph_shopping_cart_simple, hasMode = false, hasZero = true, hasParent = true, hasToggles = true, categoryKind = CategoryKind.EXPENSE),
+    /** Pie of the month's totals, with each one's change since the month before. */
+    EXPENSE_CATEGORY_SHARE(R.drawable.ph_shopping_bag, hasMode = false, hasToggles = true, categoryKind = CategoryKind.EXPENSE),
+    EXPENSE_SUBCATEGORY_SHARE(R.drawable.ph_shopping_bag_open, hasMode = false, hasParent = true, hasToggles = true, categoryKind = CategoryKind.EXPENSE),
+    /** Stacked totals of the last [BALANCE_MONTH_COUNT] months. */
+    EXPENSE_CATEGORY_MONTHS(R.drawable.ph_basket, hasMode = false, hasToggles = true, categoryKind = CategoryKind.EXPENSE),
+    EXPENSE_SUBCATEGORY_MONTHS(R.drawable.ph_storefront, hasMode = false, hasParent = true, hasToggles = true, categoryKind = CategoryKind.EXPENSE),
+    INCOME_CATEGORY_DAILY(R.drawable.ph_hand_coins, hasMode = false, hasZero = true, hasToggles = true, categoryKind = CategoryKind.INCOME),
+    INCOME_SUBCATEGORY_DAILY(R.drawable.ph_hand_deposit, hasMode = false, hasZero = true, hasParent = true, hasToggles = true, categoryKind = CategoryKind.INCOME),
+    INCOME_CATEGORY_SHARE(R.drawable.ph_piggy_bank, hasMode = false, hasToggles = true, categoryKind = CategoryKind.INCOME),
+    INCOME_SUBCATEGORY_SHARE(R.drawable.ph_vault, hasMode = false, hasParent = true, hasToggles = true, categoryKind = CategoryKind.INCOME),
+    INCOME_CATEGORY_MONTHS(R.drawable.ph_money_wavy, hasMode = false, hasToggles = true, categoryKind = CategoryKind.INCOME),
+    INCOME_SUBCATEGORY_MONTHS(R.drawable.ph_currency_circle_dollar, hasMode = false, hasParent = true, hasToggles = true, categoryKind = CategoryKind.INCOME),
 
     // Categories, month
     SUMMARY(R.drawable.ph_receipt),
@@ -89,9 +111,10 @@ enum class LayoutSlot(
 ) {
     MONTH(
         "analysis_layout_month",
-        MonthBalanceCharts + MonthCategoryCharts + MonthAccountCharts + listOf(ChartType.BUDGET_DAILY, ChartType.SAVING_DAILY),
+        MonthBalanceCharts + MonthCategoryGroupCharts + MonthCategoryCharts + MonthAccountCharts + listOf(ChartType.BUDGET_DAILY, ChartType.SAVING_DAILY),
         listOf(
             ChartGroup(R.string.analysis_group_accounts, MonthBalanceCharts),
+            ChartGroup(R.string.analysis_group_categories, MonthCategoryGroupCharts),
             // ponytail: every chart from before the Accounts group, parked here until each finds its own group.
             ChartGroup(
                 R.string.analysis_group_other,
@@ -144,6 +167,21 @@ val MonthBalanceCharts
 /** Set once [MonthBalanceCharts] were put on top of the saved month list (or a fresh one started with them). */
 const val MONTH_BALANCE_ADDED_KEY = "analysis_layout_month_balance_added"
 
+/**
+ * The Categories group, in its first-run order; added after the Accounts group's charts of an older
+ * saved list once, see [MONTH_CATEGORY_ADDED_KEY].
+ */
+val MonthCategoryGroupCharts
+    get() = listOf(
+        ChartType.EXPENSE_CATEGORY_DAILY, ChartType.EXPENSE_SUBCATEGORY_DAILY, ChartType.EXPENSE_CATEGORY_SHARE,
+        ChartType.EXPENSE_SUBCATEGORY_SHARE, ChartType.EXPENSE_CATEGORY_MONTHS, ChartType.EXPENSE_SUBCATEGORY_MONTHS,
+        ChartType.INCOME_CATEGORY_DAILY, ChartType.INCOME_SUBCATEGORY_DAILY, ChartType.INCOME_CATEGORY_SHARE,
+        ChartType.INCOME_SUBCATEGORY_SHARE, ChartType.INCOME_CATEGORY_MONTHS, ChartType.INCOME_SUBCATEGORY_MONTHS,
+    )
+
+/** Set once [MonthCategoryGroupCharts] were put into the saved month list (or a fresh one started with them). */
+const val MONTH_CATEGORY_ADDED_KEY = "analysis_layout_month_category_added"
+
 private val MonthCategoryCharts
     get() = listOf(
         ChartType.SUMMARY, ChartType.DONUT, ChartType.PACE, ChartType.TREND, ChartType.MOVERS,
@@ -170,7 +208,10 @@ data class ChartCard(
     val id: Long,
     val type: ChartType,
     val mode: AnalysisMode = AnalysisMode.ALL,
-    /** Only for [ChartType.hasAccount]; null follows the first account. */
+    /**
+     * Only for [ChartType.hasAccount]; null follows the first account. A [ChartType.hasParent] chart
+     * keeps its parent account, or for a [ChartType.categoryKind] its parent category, here.
+     */
     val accountId: Long? = null,
     /** Only for [ChartType.hasZero]: the value axis always takes in 0, instead of fitting the data. */
     val zero: Boolean = false,
@@ -178,7 +219,7 @@ data class ChartCard(
     val ids: List<Long> = emptyList(),
     /** Only for [ChartType.hasPicks]: a fixed `yyyyMM`; null follows the page's month. */
     val month: Int? = null,
-    /** Only for [ChartType.hasToggles]: the accounts switched off, so an account added later shows. */
+    /** Only for [ChartType.hasToggles]: the accounts (categories) switched off, so one added later shows. */
     val hidden: List<Long> = emptyList(),
 )
 

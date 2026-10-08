@@ -76,6 +76,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.outgo.R
+import app.outgo.domain.CategoryKind
 import app.outgo.ui.LocalAppContainer
 import app.outgo.ui.component.reorderableItem
 import app.outgo.ui.component.rememberReorderState
@@ -473,13 +474,14 @@ private fun CardChips(card: ChartCard, state: AnalysisUiState, pageMonth: Int?, 
                 state.pages.filterIsInstance<AnalysisPage.Month>().reversed().map { it.monthKey to monthNumber(it.monthKey) }
             ChoiceChip((card.month ?: pageMonth)?.let(::monthNumber) ?: "—", months) { onChange(card.copy(month = it)) }
         }
+        val tree = treeOf(card.type, state)
         if (card.type.hasParent) {
-            val parents = state.accountTree.map { it.id to it.name }
+            val parents = tree.map { it.id to it.name }
             val id = card.accountId?.takeIf { picked -> parents.any { it.first == picked } } ?: parents.firstOrNull()?.first
             ChoiceChip(parents.firstOrNull { it.first == id }?.second ?: "—", parents) { onChange(card.copy(accountId = it)) }
         }
         if (card.type.hasToggles) {
-            val options = balanceGroups(state.accountTree, card.accountId, card.type.hasParent).map { it.first.id to it.first.name }
+            val options = balanceGroups(tree, card.accountId, card.type.hasParent).map { it.first.id to it.first.name }
             val shown = options.count { it.first !in card.hidden }
             val label = if (shown == options.size) stringResource(R.string.analysis_accounts_all) else stringResource(R.string.analysis_shown_count, shown, options.size)
             ChoiceChip(label, options, checked = { it !in card.hidden }) { id ->
@@ -501,6 +503,13 @@ private fun CardChips(card: ChartCard, state: AnalysisUiState, pageMonth: Int?, 
             ChoiceChip(options.first { it.first == card.zero }.second, options) { onChange(card.copy(zero = it)) }
         }
     }
+}
+
+/** What a [ChartType.hasParent]/[ChartType.hasToggles] chart picks from: categories of its kind, or accounts. */
+private fun treeOf(type: ChartType, state: AnalysisUiState): List<AccountNode> = when (type.categoryKind) {
+    CategoryKind.EXPENSE -> state.expenseTree
+    CategoryKind.INCOME -> state.incomeTree
+    else -> state.accountTree
 }
 
 /** A thin red edge while dragging; it opens as the finger nears it and turns solid when a drop would delete. */
@@ -613,6 +622,18 @@ private fun chartName(type: ChartType): String = stringResource(
         ChartType.SUBACCOUNT_SHARE -> R.string.analysis_subaccount_share_title
         ChartType.ACCOUNT_MONTHS -> R.string.analysis_account_months_title
         ChartType.SUBACCOUNT_MONTHS -> R.string.analysis_subaccount_months_title
+        ChartType.EXPENSE_CATEGORY_DAILY -> R.string.analysis_expense_category_daily_title
+        ChartType.EXPENSE_SUBCATEGORY_DAILY -> R.string.analysis_expense_subcategory_daily_title
+        ChartType.EXPENSE_CATEGORY_SHARE -> R.string.analysis_expense_category_share_title
+        ChartType.EXPENSE_SUBCATEGORY_SHARE -> R.string.analysis_expense_subcategory_share_title
+        ChartType.EXPENSE_CATEGORY_MONTHS -> R.string.analysis_expense_category_months_title
+        ChartType.EXPENSE_SUBCATEGORY_MONTHS -> R.string.analysis_expense_subcategory_months_title
+        ChartType.INCOME_CATEGORY_DAILY -> R.string.analysis_income_category_daily_title
+        ChartType.INCOME_SUBCATEGORY_DAILY -> R.string.analysis_income_subcategory_daily_title
+        ChartType.INCOME_CATEGORY_SHARE -> R.string.analysis_income_category_share_title
+        ChartType.INCOME_SUBCATEGORY_SHARE -> R.string.analysis_income_subcategory_share_title
+        ChartType.INCOME_CATEGORY_MONTHS -> R.string.analysis_income_category_months_title
+        ChartType.INCOME_SUBCATEGORY_MONTHS -> R.string.analysis_income_subcategory_months_title
     },
 )
 
@@ -686,6 +707,8 @@ private fun MonthPage(
             ChartType.ACCOUNT_DAILY, ChartType.SUBACCOUNT_DAILY, ChartType.ACCOUNT_SHARE, ChartType.SUBACCOUNT_SHARE,
             ChartType.ACCOUNT_MONTHS, ChartType.SUBACCOUNT_MONTHS ->
                 BalanceCard(card, height, state.monthBalances[month] ?: Stage.Loading, state.accountTree, month, animate)
+            in MonthCategoryGroupCharts ->
+                CategoryCard(card, height, state.monthCategories[month] ?: Stage.Loading, treeOf(card.type, state), month, animate)
             else -> AccountChart(card, height, accounts, transfers, state.accounts, accountSelection, animate, onOpenTrade)
         }
     }
@@ -724,6 +747,47 @@ private fun BalanceCard(card: ChartCard, height: Dp, accounts: Stage<AccountsUi>
                     sumLines(data.balance.lines, groups, data.balance.months.size).map { it.copy(values = it.values.takeLast(BALANCE_MONTH_COUNT)) }
                 }
                 BalanceMonthsSection(title, lines, months, animate)
+            }
+        }
+    }
+}
+
+/**
+ * A Categories-group chart: each parent category of the card's kind (its subcategories added up),
+ * or one parent's subcategories, without the ones switched off or without money in the window.
+ */
+@Composable
+private fun CategoryCard(card: ChartCard, height: Dp, data: Stage<CategoryChartsUi>, tree: List<AccountNode>, month: Int, animate: Boolean) {
+    val title = chartName(card.type)
+    val kind = card.type.categoryKind ?: CategoryKind.EXPENSE
+    val groups = remember(tree, card.accountId, card.type, card.hidden) {
+        balanceGroups(tree, card.accountId, card.type.hasParent).filter { it.first.id !in card.hidden }
+    }
+    StageSection(data, title, height) { charts ->
+        when (card.type) {
+            ChartType.EXPENSE_CATEGORY_DAILY, ChartType.EXPENSE_SUBCATEGORY_DAILY,
+            ChartType.INCOME_CATEGORY_DAILY, ChartType.INCOME_SUBCATEGORY_DAILY -> {
+                val lines = remember(charts, groups) {
+                    val length = charts.daily.maxOfOrNull { it.values.size } ?: 0
+                    if (length == 0) emptyList() else sumLines(charts.daily, groups, length).filter { line -> line.values.any { it != 0L } }
+                }
+                BalanceDaysSection(title, lines, charts.daysInMonth, card.zero, animate)
+            }
+            ChartType.EXPENSE_CATEGORY_SHARE, ChartType.EXPENSE_SUBCATEGORY_SHARE,
+            ChartType.INCOME_CATEGORY_SHARE, ChartType.INCOME_SUBCATEGORY_SHARE -> {
+                val selection = remember(month, card.id) { AnalysisSelection() }
+                val rows = remember(charts, groups) {
+                    // This month and the one before; a category at 0 in both has nothing to show.
+                    val lines = sumLines(charts.monthly, groups, charts.months.size).map { it.copy(values = it.values.takeLast(2)) }
+                    buildShare(lines.filter { line -> line.values.any { it != 0L } }, groups.associate { it.first.id to it.first })
+                }
+                BalanceShareSection(title, rows, selection, animate, kind)
+            }
+            else -> {
+                val lines = remember(charts, groups) {
+                    sumLines(charts.monthly, groups, charts.months.size).filter { line -> line.values.any { it != 0L } }
+                }
+                BalanceMonthsSection(title, lines, charts.months, animate)
             }
         }
     }
