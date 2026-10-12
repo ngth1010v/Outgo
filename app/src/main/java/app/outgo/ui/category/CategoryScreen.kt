@@ -86,6 +86,7 @@ import app.outgo.ui.component.ColorPickerGrid
 import app.outgo.ui.component.ConfirmDialog
 import app.outgo.ui.component.EditorScaffold
 import app.outgo.ui.component.IconPickerSheet
+import app.outgo.ui.component.ExceptionBadge
 import app.outgo.ui.component.IconView
 import app.outgo.ui.component.MonthPicker
 import app.outgo.ui.component.SwitchField
@@ -245,9 +246,21 @@ private fun CategoryRow(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp).clickable(onClick = onRowClick),
         ) {
-            IconView(iconId = category.iconId, size = 28.dp, color = category.color)
+            Box {
+                IconView(iconId = category.iconId, size = 28.dp, color = category.color)
+                if (category.isExempt) ExceptionBadge(28.dp)
+            }
             Spacer(Modifier.width(12.dp))
-            Text(category.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Column(Modifier.weight(1f)) {
+                Text(category.name, style = MaterialTheme.typography.bodyLarge)
+                if (category.isExempt) {
+                    Text(
+                        stringResource(R.string.category_parent_budget_exception),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             trailing?.invoke()
         }
         if (budget != null) {
@@ -299,6 +312,7 @@ private fun EditCategoryScreen(
     val canSumChildren = existing?.isParent ?: (target is EditTarget.NewParent)
     // The shown month's sum of subcategory limits, read while the budget sums them.
     var childSum by remember { mutableLongStateOf(0L) }
+    var exempt by remember { mutableStateOf(existing?.parentBudgetExempt ?: false) }
     var showIconPicker by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var hasTrades by remember { mutableStateOf(false) }
@@ -352,7 +366,7 @@ private fun EditCategoryScreen(
     }
 
     // Creating: compared against the values the editor opened with, for the discard check.
-    val fields = listOf(name, description, iconId, color, month, form)
+    val fields = listOf(name, description, iconId, color, month, form, exempt)
     val initialFields = remember { fields }
     EditorScaffold(
         title = title,
@@ -364,7 +378,7 @@ private fun EditCategoryScreen(
             {
                 val setting = form.toSetting().takeIf { form.enabled && effectiveType == CategoryKind.EXPENSE }
                 if (target is EditTarget.NewChild) {
-                    viewModel.createChild(target.parentId, name, iconId, color, setting, month, description.trim().ifEmpty { null })
+                    viewModel.createChild(target.parentId, name, iconId, color, setting, month, description.trim().ifEmpty { null }, exempt)
                 } else {
                     viewModel.createParent(name, iconId, color, setting, month, defaultChildName, description.trim().ifEmpty { null })
                 }
@@ -402,6 +416,21 @@ private fun EditCategoryScreen(
         Text(stringResource(R.string.category_color_label), style = MaterialTheme.typography.labelLarge)
         Spacer(Modifier.height(8.dp))
         ColorPickerGrid(selected = color, onSelect = { color = it })
+
+        // A spending sub-category can stay out of its parent's budget; editing saves the switch at once.
+        val isChild = existing?.let { !it.isParent } ?: (target is EditTarget.NewChild)
+        if (effectiveType == CategoryKind.EXPENSE && isChild) {
+            Spacer(Modifier.height(24.dp))
+            SectionHeader(
+                stringResource(R.string.category_parent_budget_exception),
+                stringResource(R.string.category_parent_budget_exception_info),
+            ) {
+                SectionSwitch(checked = exempt, onCheckedChange = {
+                    exempt = it
+                    existing?.let { c -> viewModel.setParentBudgetExempt(c.id, it) }
+                })
+            }
+        }
 
         // Only spending categories have a budget.
         if (effectiveType == CategoryKind.EXPENSE) {

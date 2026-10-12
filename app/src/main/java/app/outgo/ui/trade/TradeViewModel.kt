@@ -139,6 +139,11 @@ class TradeViewModel(
         _state.update { it.copy(pickers = it.pickers + (type to picker)) }
     }
 
+    /** Re-reads the quick picks, e.g. when the tab is shown again after a category was edited. */
+    fun refreshPickers() {
+        viewModelScope.launch { loadPickers() }
+    }
+
     private suspend fun loadPickers() {
         loadPicker(CategoryKind.EXPENSE)
         loadPicker(CategoryKind.INCOME)

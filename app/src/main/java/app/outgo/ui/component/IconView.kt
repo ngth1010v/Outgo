@@ -3,6 +3,8 @@ package app.outgo.ui.component
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -16,10 +18,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.outgo.R
@@ -71,6 +75,31 @@ fun IconView(iconId: Long?, modifier: Modifier = Modifier, size: Dp = 28.dp, col
                 modifier = Modifier.padding(size * 0.28f),
             )
         }
+    }
+}
+
+/**
+ * The "parent budget exception" badge on a sub-category's icon of [iconSize], in the Box around
+ * that icon: hung off its bottom-right corner like the budget badge on a History transfer.
+ */
+@Composable
+fun BoxScope.ExceptionBadge(iconSize: Dp) {
+    val size = iconSize * 0.616f
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .align(Alignment.BottomEnd)
+            .offset(x = iconSize * 0.125f, y = iconSize * 0.205f)
+            .shadow(2.dp, CircleShape)
+            .size(size)
+            .background(MaterialTheme.colorScheme.surface, CircleShape),
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ph_prohibit),
+            contentDescription = stringResource(R.string.category_parent_budget_exception),
+            tint = MaterialTheme.colorScheme.error,
+            modifier = Modifier.size(size * 0.8f),
+        )
     }
 }
 

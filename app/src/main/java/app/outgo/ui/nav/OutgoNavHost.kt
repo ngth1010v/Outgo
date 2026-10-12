@@ -181,7 +181,7 @@ fun OutgoRoot(openSetting: Boolean = false) {
 @Composable
 private fun TabContent(route: String, shown: Boolean, navController: NavHostController) {
     when (route) {
-        Routes.TRADE -> TradeScreen(editingTradeId = null, onClose = {})
+        Routes.TRADE -> TradeScreen(editingTradeId = null, onClose = {}, visible = shown)
         Routes.HOME -> HomeScreen()
         Routes.BALANCE -> BalanceScreen(onOpenEditor = { id, parentId -> navController.navigate(Routes.accountEdit(id, parentId)) })
         Routes.CATEGORY -> CategoryScreen(

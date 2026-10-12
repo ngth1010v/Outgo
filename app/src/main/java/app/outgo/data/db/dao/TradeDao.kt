@@ -202,7 +202,7 @@ interface TradeDao {
         """
         SELECT t.id, t.type, t.amount, t.occurred_at AS occurredAt, t.category_id AS categoryId, t.note, t.account_id AS accountId
         FROM trade t JOIN category c ON c.id = t.category_id
-        WHERE t.month_key = :monthKey AND (c.id = :categoryId OR c.parent_id = :categoryId)
+        WHERE t.month_key = :monthKey AND (c.id = :categoryId OR (c.parent_id = :categoryId AND c.parent_budget_exempt = 0))
         """,
     )
     suspend fun budgetTradesForMonth(categoryId: Long, monthKey: Int): List<TradeSlim>
@@ -213,9 +213,9 @@ interface TradeDao {
         SELECT id, type, amount, occurred_at AS occurredAt, category_id AS categoryId, note, account_id AS accountId
         FROM trade
         WHERE month_key = :monthKey
-          AND ((type = 1 AND account_id IN (SELECT id FROM account WHERE id = :accountId OR parent_id = :accountId))
-            OR (type = 4 AND to_account_id IN (SELECT id FROM account WHERE id = :accountId OR parent_id = :accountId)
-                AND account_id NOT IN (SELECT id FROM account WHERE id = :accountId OR parent_id = :accountId)))
+          AND ((type = 1 AND account_id IN (SELECT id FROM account WHERE id = :accountId OR (parent_id = :accountId AND parent_saving_exempt = 0)))
+            OR (type = 4 AND to_account_id IN (SELECT id FROM account WHERE id = :accountId OR (parent_id = :accountId AND parent_saving_exempt = 0))
+                AND account_id NOT IN (SELECT id FROM account WHERE id = :accountId OR (parent_id = :accountId AND parent_saving_exempt = 0))))
         """,
     )
     suspend fun savingTradesForMonth(accountId: Long, monthKey: Int): List<TradeSlim>

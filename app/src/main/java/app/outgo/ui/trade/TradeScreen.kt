@@ -76,6 +76,7 @@ import app.outgo.ui.component.ConfirmDialog
 import app.outgo.ui.component.AccountSheet
 import app.outgo.ui.component.BudgetSheet
 import app.outgo.ui.component.GroupedPickerSheet
+import app.outgo.ui.component.ExceptionBadge
 import app.outgo.ui.component.IconView
 import app.outgo.ui.component.PickCell
 import app.outgo.ui.component.rememberSwipeLevel
@@ -90,7 +91,7 @@ import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit) {
+fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit, visible: Boolean = true) {
     val container = LocalAppContainer.current
     val viewModel: TradeViewModel = viewModel(
         key = "trade-$editingTradeId",
@@ -100,6 +101,12 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit) {
             }
         },
     )
+    // The tab stays composed: on coming back, re-read the quick picks so a category edited meanwhile
+    // (name, icon, parent budget exception) shows as it is now. Not on first show: init loads them.
+    var wasHidden by remember { mutableStateOf(false) }
+    LaunchedEffect(visible) {
+        if (!visible) wasHidden = true else if (wasHidden) viewModel.refreshPickers()
+    }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -380,7 +387,10 @@ private fun SelectedCategoryChip(parent: CategoryEntity?, category: CategoryEnti
             Text("/", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.width(6.dp))
         }
-        IconView(iconId = category.iconId, size = 20.dp, color = category.color)
+        Box {
+            IconView(iconId = category.iconId, size = 20.dp, color = category.color)
+            if (category.isExempt) ExceptionBadge(20.dp)
+        }
         Spacer(Modifier.width(6.dp))
         Text(category.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
     }
@@ -429,7 +439,7 @@ private fun CategoryPickerSection(
 
 @Composable
 private fun CategoryCell(category: CategoryEntity, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) =
-    PickCell(category.name, category.iconId, category.color, selected, onClick, modifier)
+    PickCell(category.name, category.iconId, category.color, selected, onClick, modifier, exception = category.isExempt)
 
 /** The account field: tapping it opens [AccountSheet]. A subaccount named unlike its parent shows as "parent / sub". */
 @Composable
@@ -451,7 +461,10 @@ private fun AccountDropdown(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconView(iconId = selectedAccount?.iconId, size = 24.dp, color = selectedAccount?.color)
+            Box {
+                IconView(iconId = selectedAccount?.iconId, size = 24.dp, color = selectedAccount?.color)
+                if (selectedAccount?.isExempt == true) ExceptionBadge(24.dp)
+            }
             Spacer(Modifier.width(8.dp))
             val name = selectedAccount?.name ?: "—"
             Text(if (parent == null || parent.name == name) name else "${parent.name} / $name", modifier = Modifier.weight(1f))

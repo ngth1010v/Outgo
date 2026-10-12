@@ -1,6 +1,5 @@
 package app.outgo.ui.component
 
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,6 +31,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.painterResource
@@ -47,17 +48,25 @@ import app.outgo.domain.CategoryKind
 import app.outgo.ui.LocalAppContainer
 
 @Composable
-fun PickCell(name: String, iconId: Long?, color: Int, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun PickCell(
+    name: String, iconId: Long?, color: Int, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier,
+    exception: Boolean = false,
+) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier.clickable(onClick = onClick).padding(4.dp),
     ) {
+        val ring = MaterialTheme.colorScheme.primary
         Box(
             modifier = Modifier
                 .size(48.dp)
                 .then(
                     if (selected) {
-                        Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                        // Behind the icon, unlike Modifier.border, so an exception badge stays on top of it.
+                        Modifier.drawBehind {
+                            val width = 2.dp.toPx()
+                            drawCircle(ring, radius = (size.minDimension - width) / 2, style = Stroke(width))
+                        }
                     } else {
                         Modifier
                     },
@@ -65,7 +74,11 @@ fun PickCell(name: String, iconId: Long?, color: Int, selected: Boolean, onClick
                 .padding(2.dp),
             contentAlignment = Alignment.Center,
         ) {
-            IconView(iconId = iconId, size = 40.dp, color = color)
+            Box {
+                IconView(iconId = iconId, size = 40.dp, color = color)
+                // Sized as for a smaller icon, so it hangs less over the name below.
+                if (exception) ExceptionBadge(32.dp)
+            }
         }
         Text(
             name,
@@ -86,7 +99,7 @@ fun AccountSheet(accounts: List<AccountEntity>, selectedId: Long?, onSelect: (Ac
         id = { it.id },
         name = { it.name },
         selectedId = selectedId,
-        cell = { item, selected, onClick, modifier -> PickCell(item.name, item.iconId, item.color, selected, onClick, modifier) },
+        cell = { item, selected, onClick, modifier -> PickCell(item.name, item.iconId, item.color, selected, onClick, modifier, exception = item.isExempt) },
         onSelect = onSelect,
         onDismiss = onDismiss,
     )

@@ -5,6 +5,7 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import app.outgo.domain.AccountType
 
 /**
  * A place money is held (cash, a bank account, an e-wallet, a savings pot…).
@@ -68,6 +69,15 @@ data class AccountEntity(
     val createdAt: Long,
     @ColumnInfo(name = "updated_at")
     val updatedAt: Long,
+    /**
+     * Savings subaccounts only: what comes into this subaccount is left out of its parent's
+     * monthly savings progress. Balances, and this subaccount's own target, still count it.
+     */
+    @ColumnInfo(name = "parent_saving_exempt", defaultValue = "0")
+    val parentSavingExempt: Boolean = false,
 ) {
     val isParent: Boolean get() = parentId == null
+
+    /** A savings subaccount left out of its parent's savings progress; the flag means nothing elsewhere. */
+    val isExempt: Boolean get() = parentId != null && accountType == AccountType.SAVINGS && parentSavingExempt
 }

@@ -74,8 +74,12 @@ class CategoryViewModel(
         write { categoryRepository.createParent(type.value, name, iconId, color, budget, monthKey, defaultChildName, description) }
     }
 
-    fun createChild(parentId: Long, name: String, iconId: Long?, color: Int, budget: BudgetSetting?, monthKey: Int, description: String?) {
-        write { categoryRepository.createChild(parentId, name, iconId, color, budget, monthKey, description) }
+    fun createChild(parentId: Long, name: String, iconId: Long?, color: Int, budget: BudgetSetting?, monthKey: Int, description: String?, parentBudgetExempt: Boolean) {
+        write { categoryRepository.createChild(parentId, name, iconId, color, budget, monthKey, description, parentBudgetExempt) }
+    }
+
+    fun setParentBudgetExempt(categoryId: Long, exempt: Boolean) {
+        write { categoryRepository.setParentBudgetExempt(categoryId, exempt) }
     }
 
     fun update(category: CategoryEntity, name: String, iconId: Long?, color: Int, description: String?) {

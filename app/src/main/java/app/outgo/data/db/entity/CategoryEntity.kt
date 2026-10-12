@@ -62,6 +62,15 @@ data class CategoryEntity(
     val archived: Boolean = false,
     @ColumnInfo(name = "created_at")
     val createdAt: Long,
+    /**
+     * Sub-categories only: this child's spending is left out of its parent's budget. Its own
+     * budget, the stats and the Analysis category charts still count it.
+     */
+    @ColumnInfo(name = "parent_budget_exempt", defaultValue = "0")
+    val parentBudgetExempt: Boolean = false,
 ) {
     val isParent: Boolean get() = parentId == null
+
+    /** A sub-category left out of its parent's budget; the flag means nothing on a parent. */
+    val isExempt: Boolean get() = parentId != null && parentBudgetExempt
 }

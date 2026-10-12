@@ -12,13 +12,14 @@ import kotlinx.coroutines.flow.Flow
 
 /**
  * The summed monthly target of the outer row a's active savings subaccounts in :monthKey: each one's
- * target in effect then, when that one is on. A subaccount can't sum, so its own sum is never used.
+ * target in effect then, when that one is on, except a parent saving exception (its income isn't
+ * counted here either). A subaccount can't sum, so its own sum is never used.
  */
 private const val CHILD_TARGET_SUM = """COALESCE((
                 SELECT SUM(cm.target) FROM account c
                 JOIN savings_month cm ON cm.account_id = c.id AND cm.month_key =
                     (SELECT MAX(month_key) FROM savings_month WHERE account_id = c.id AND month_key <= :monthKey)
-                WHERE c.parent_id = a.id AND c.archived = 0 AND c.account_type = 1 AND cm.enabled = 1
+                WHERE c.parent_id = a.id AND c.archived = 0 AND c.account_type = 1 AND c.parent_saving_exempt = 0 AND cm.enabled = 1
             ), 0)"""
 
 @Dao
@@ -27,23 +28,24 @@ interface AccountDao {
      * Active accounts (parents and subaccounts) joined with this month's income and, for a savings
      * account, the target in effect this month (newest snapshot at or before it, when that one is on).
      * A parent's income and balance are its active subaccounts' together; a transfer between two of
-     * them moves nothing into the parent, so it isn't income there.
+     * them moves nothing into the parent, so it isn't income there. A subaccount marked
+     * parent_saving_exempt is outside its parent's income: what comes from it into a sibling counts.
      */
     @Query(
         """
         SELECT a.*, COALESCE((
             SELECT SUM(t.amount) FROM trade t
              WHERE t.month_key = :monthKey
-               AND ((t.type = 1 AND t.account_id IN (SELECT g.id FROM account g WHERE g.id = a.id OR g.parent_id = a.id))
-                 OR (t.type = 4 AND t.to_account_id IN (SELECT g.id FROM account g WHERE g.id = a.id OR g.parent_id = a.id)
-                     AND t.account_id NOT IN (SELECT g.id FROM account g WHERE g.id = a.id OR g.parent_id = a.id)))
+               AND ((t.type = 1 AND t.account_id IN (SELECT g.id FROM account g WHERE g.id = a.id OR (g.parent_id = a.id AND g.parent_saving_exempt = 0)))
+                 OR (t.type = 4 AND t.to_account_id IN (SELECT g.id FROM account g WHERE g.id = a.id OR (g.parent_id = a.id AND g.parent_saving_exempt = 0))
+                     AND t.account_id NOT IN (SELECT g.id FROM account g WHERE g.id = a.id OR (g.parent_id = a.id AND g.parent_saving_exempt = 0))))
         ), 0) AS monthlyIncome,
         COALESCE((
             SELECT SUM(t.amount) FROM trade t
              WHERE t.month_key = :prevMonthKey
-               AND ((t.type = 1 AND t.account_id IN (SELECT g.id FROM account g WHERE g.id = a.id OR g.parent_id = a.id))
-                 OR (t.type = 4 AND t.to_account_id IN (SELECT g.id FROM account g WHERE g.id = a.id OR g.parent_id = a.id)
-                     AND t.account_id NOT IN (SELECT g.id FROM account g WHERE g.id = a.id OR g.parent_id = a.id)))
+               AND ((t.type = 1 AND t.account_id IN (SELECT g.id FROM account g WHERE g.id = a.id OR (g.parent_id = a.id AND g.parent_saving_exempt = 0)))
+                 OR (t.type = 4 AND t.to_account_id IN (SELECT g.id FROM account g WHERE g.id = a.id OR (g.parent_id = a.id AND g.parent_saving_exempt = 0))
+                     AND t.account_id NOT IN (SELECT g.id FROM account g WHERE g.id = a.id OR (g.parent_id = a.id AND g.parent_saving_exempt = 0))))
         ), 0) AS prevMonthlyIncome,
         CASE WHEN a.account_type = 1 THEN (
             SELECT CASE
@@ -69,7 +71,7 @@ interface AccountDao {
         SELECT COALESCE(SUM(cm.target), 0) FROM account c
         JOIN savings_month cm ON cm.account_id = c.id AND cm.month_key =
             (SELECT MAX(month_key) FROM savings_month WHERE account_id = c.id AND month_key <= :monthKey)
-        WHERE c.parent_id = :accountId AND c.archived = 0 AND c.account_type = 1 AND cm.enabled = 1
+        WHERE c.parent_id = :accountId AND c.archived = 0 AND c.account_type = 1 AND c.parent_saving_exempt = 0 AND cm.enabled = 1
         """,
     )
     suspend fun childTargetSum(accountId: Long, monthKey: Int): Long
@@ -84,6 +86,9 @@ interface AccountDao {
 
     @Update
     suspend fun update(account: AccountEntity)
+
+    @Query("UPDATE account SET parent_saving_exempt = :exempt WHERE id = :id")
+    suspend fun setParentSavingExempt(id: Long, exempt: Boolean)
 
     @Delete
     suspend fun delete(account: AccountEntity)

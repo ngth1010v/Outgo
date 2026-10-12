@@ -78,7 +78,10 @@ class CategoryRepository(
             }
         }
 
-    suspend fun createChild(parentId: Long, name: String, iconId: Long?, color: Int, budget: BudgetSetting?, monthKey: Int, description: String?): Long = withContext(Dispatchers.IO) {
+    suspend fun createChild(
+        parentId: Long, name: String, iconId: Long?, color: Int, budget: BudgetSetting?, monthKey: Int, description: String?,
+        parentBudgetExempt: Boolean,
+    ): Long = withContext(Dispatchers.IO) {
         db.withTransaction {
             val parent = categoryDao.findById(parentId) ?: error("parent category not found")
             val order = categoryDao.maxSortOrder(parentId) + 1
@@ -92,6 +95,7 @@ class CategoryRepository(
                     color = color,
                     sortOrder = order,
                     createdAt = System.currentTimeMillis(),
+                    parentBudgetExempt = parentBudgetExempt,
                 ),
             )
             budget?.takeIf { it.enabled }?.let { budgetRepository.setMonth(id, monthKey, it) }
@@ -101,6 +105,17 @@ class CategoryRepository(
 
     suspend fun update(category: CategoryEntity, name: String, iconId: Long?, color: Int, description: String?) = withContext(Dispatchers.IO) {
         categoryDao.update(category.copy(name = name, iconId = iconId, color = color, description = description))
+    }
+
+    /**
+     * Leaves a sub-category's spending out of its parent's budget (or counts it again), in every
+     * month, so the parent's past months change too and their account offsets are redone.
+     */
+    suspend fun setParentBudgetExempt(categoryId: Long, exempt: Boolean) = withContext(Dispatchers.IO) {
+        db.withTransaction {
+            categoryDao.setParentBudgetExempt(categoryId, exempt)
+            budgetRepository.resyncAllAccountOffsets()
+        }
     }
 
     /**

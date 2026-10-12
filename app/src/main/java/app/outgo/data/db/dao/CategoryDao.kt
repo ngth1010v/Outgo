@@ -16,6 +16,9 @@ interface CategoryDao {
     @Update
     suspend fun update(category: CategoryEntity)
 
+    @Query("UPDATE category SET parent_budget_exempt = :exempt WHERE id = :id")
+    suspend fun setParentBudgetExempt(id: Long, exempt: Boolean)
+
     @Delete
     suspend fun delete(category: CategoryEntity)
 

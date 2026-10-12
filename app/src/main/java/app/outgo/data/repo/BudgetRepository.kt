@@ -130,6 +130,11 @@ class BudgetRepository(
         }
     }
 
+    /** Redoes every automatic transfer already made, after a change to what the budgets count as spent. */
+    suspend fun resyncAllAccountOffsets() = withContext(Dispatchers.IO) {
+        db.withTransaction { resyncAccountOffsets(Int.MIN_VALUE) }
+    }
+
     /**
      * Makes the automatic transfers already made for months from [fromMonth] on match what the
      * budgets' monthly settings give now: the amount follows, a month that no longer leaves money

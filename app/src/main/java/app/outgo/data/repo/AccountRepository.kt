@@ -69,6 +69,7 @@ class AccountRepository(
         monthKey: Int = MonthKey.current(),
         description: String? = null,
         parentId: Long? = null,
+        parentSavingExempt: Boolean = false,
     ): Long = withContext(Dispatchers.IO) {
         db.withTransaction {
             val now = System.currentTimeMillis()
@@ -85,7 +86,7 @@ class AccountRepository(
                 createdAt = now,
                 updatedAt = now,
             )
-            val id = accountDao.insert(row(parentId, accountDao.maxSortOrder(parentId) + 1))
+            val id = accountDao.insert(row(parentId, accountDao.maxSortOrder(parentId) + 1).copy(parentSavingExempt = parentId != null && parentSavingExempt))
             val subId = if (parentId == null) accountDao.insert(row(id, 0)) else id
             if (initialBalance != 0L) tradeRepository.recordAdjustment(subId, initialBalance)
             if (savings != null && type == AccountType.SAVINGS) setSavingsMonth(id, monthKey, savings)
@@ -123,6 +124,10 @@ class AccountRepository(
             if (delta != 0L) tradeRepository.recordAdjustment(accountId, delta)
         }
     }
+
+    /** Leaves a subaccount's income out of its parent's savings progress (or counts it again), in every month. */
+    suspend fun setParentSavingExempt(accountId: Long, exempt: Boolean) =
+        withContext(Dispatchers.IO) { accountDao.setParentSavingExempt(accountId, exempt) }
 
     /** [accountId]'s savings target in effect in [monthKey], or null when it has none by then. */
     suspend fun savingsAt(accountId: Long, monthKey: Int): SavingsSetting? = withContext(Dispatchers.IO) {

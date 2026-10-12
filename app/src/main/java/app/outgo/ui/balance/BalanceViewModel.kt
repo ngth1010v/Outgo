@@ -22,8 +22,15 @@ class BalanceViewModel(private val accountRepository: AccountRepository) : ViewM
     suspend fun hasTrades(accountId: Long): Boolean = accountRepository.hasTrades(accountId)
     suspend fun childCount(parentId: Long): Int = accountRepository.childCount(parentId)
 
-    fun create(name: String, iconId: Long?, color: Int, balance: Long, accountType: Int, savings: SavingsSetting?, monthKey: Int, description: String?, parentId: Long?) {
-        write { accountRepository.create(name, iconId, color, balance, accountType, savings, monthKey, description, parentId) }
+    fun create(
+        name: String, iconId: Long?, color: Int, balance: Long, accountType: Int, savings: SavingsSetting?, monthKey: Int, description: String?, parentId: Long?,
+        parentSavingExempt: Boolean,
+    ) {
+        write { accountRepository.create(name, iconId, color, balance, accountType, savings, monthKey, description, parentId, parentSavingExempt) }
+    }
+
+    fun setParentSavingExempt(accountId: Long, exempt: Boolean) {
+        write { accountRepository.setParentSavingExempt(accountId, exempt) }
     }
 
     fun update(accountId: Long, name: String, iconId: Long?, color: Int, balance: Long?, accountType: Int, description: String?) {

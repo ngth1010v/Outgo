@@ -4,6 +4,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -63,6 +64,7 @@ import app.outgo.ui.component.ColorPickerGrid
 import app.outgo.ui.component.ConfirmDialog
 import app.outgo.ui.component.EditorScaffold
 import app.outgo.ui.component.IconPickerSheet
+import app.outgo.ui.component.ExceptionBadge
 import app.outgo.ui.component.IconView
 import app.outgo.ui.component.MonthPicker
 import app.outgo.ui.component.SwitchField
@@ -144,13 +146,17 @@ private fun AccountRow(row: AccountWithProgress, onClick: () -> Unit, modifier: 
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp).clickable(onClick = onClick),
         ) {
-            IconView(iconId = account.iconId, size = 28.dp, color = account.color)
+            Box {
+                IconView(iconId = account.iconId, size = 28.dp, color = account.color)
+                if (account.isExempt) ExceptionBadge(28.dp)
+            }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(account.name, style = MaterialTheme.typography.bodyLarge)
                 if (account.accountType == AccountType.SAVINGS) {
+                    val savings = stringResource(R.string.balance_savings_label)
                     Text(
-                        stringResource(R.string.balance_savings_label),
+                        if (account.isExempt) savings + " · " + stringResource(R.string.balance_parent_saving_exception) else savings,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -246,6 +252,7 @@ private fun EditAccountScreen(
         mutableStateOf(if (typeLocked) AccountType.SAVINGS else account?.accountType ?: parent?.accountType ?: AccountType.NORMAL)
     }
     var showConvertConfirm by remember { mutableStateOf(false) }
+    var exempt by remember { mutableStateOf(account?.parentSavingExempt ?: false) }
     var name by remember { mutableStateOf(account?.name.orEmpty()) }
     var description by remember { mutableStateOf(account?.description.orEmpty()) }
     var balanceText by remember { mutableStateOf(row?.totalBalance?.takeIf { it != 0L }?.toString().orEmpty()) }
@@ -302,7 +309,7 @@ private fun EditAccountScreen(
     }
 
     // Creating: compared against the values the editor opened with, for the discard check.
-    val fields = listOf(accountType, name, description, balanceText, month, form, iconId, color)
+    val fields = listOf(accountType, name, description, balanceText, month, form, iconId, color, exempt)
     val initialFields = remember { fields }
     val savingsShown = accountType == AccountType.SAVINGS && form.enabled
     EditorScaffold(
@@ -318,7 +325,7 @@ private fun EditAccountScreen(
         } else {
             {
                 val savings = form.toSetting().takeIf { savingsShown }
-                viewModel.create(name, iconId, color, balanceText.toLongOrNull() ?: 0L, accountType, savings, month, description.trim().ifEmpty { null }, parent?.id)
+                viewModel.create(name, iconId, color, balanceText.toLongOrNull() ?: 0L, accountType, savings, month, description.trim().ifEmpty { null }, parent?.id, exempt)
                 onDismiss()
             }
         },
@@ -391,6 +398,20 @@ private fun EditAccountScreen(
         Text(stringResource(R.string.category_color_label), style = MaterialTheme.typography.labelLarge)
         Spacer(Modifier.height(8.dp))
         ColorPickerGrid(selected = color, onSelect = { color = it })
+
+        // A savings parent's subaccount can stay out of its savings progress; editing saves the switch at once.
+        if (parent?.accountType == AccountType.SAVINGS) {
+            Spacer(Modifier.height(24.dp))
+            SectionHeader(
+                stringResource(R.string.balance_parent_saving_exception),
+                stringResource(R.string.balance_parent_saving_exception_info),
+            ) {
+                SectionSwitch(checked = exempt, onCheckedChange = {
+                    exempt = it
+                    account?.let { a -> viewModel.setParentSavingExempt(a.id, it) }
+                })
+            }
+        }
 
         // Only a savings account has a target; a normal one shows the switch off and disabled,
         // its monthly targets kept for if it becomes a savings account again.

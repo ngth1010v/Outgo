@@ -12,14 +12,15 @@ import kotlinx.coroutines.flow.Flow
 
 /**
  * The summed limit of a parent category's subcategories in :monthKey: each active subcategory's
- * budget whose settings in effect then are on. Their own sums are never used (a subcategory can't sum).
+ * budget whose settings in effect then are on, except a parent budget exception (its spend isn't counted
+ * here either). Their own sums are never used (a subcategory can't sum).
  */
 private const val CHILD_LIMIT_SUM = """COALESCE((
                    SELECT SUM(cm.limit_amount) FROM budget cb
                    JOIN category cc ON cc.id = cb.category_id
                    JOIN budget_month cm ON cm.budget_id = cb.id AND cm.month_key =
                        (SELECT MAX(month_key) FROM budget_month WHERE budget_id = cb.id AND month_key <= :monthKey)
-                   WHERE cb.kind = 0 AND cc.parent_id = b.category_id AND cc.archived = 0 AND cm.enabled = 1
+                   WHERE cb.kind = 0 AND cc.parent_id = b.category_id AND cc.archived = 0 AND cc.parent_budget_exempt = 0 AND cm.enabled = 1
                ), 0)"""
 
 private const val BUDGETS_WITH_PROGRESS = """
@@ -30,11 +31,11 @@ private const val BUDGETS_WITH_PROGRESS = """
                b.sort_order AS sortOrder,
                COALESCE((
                    SELECT SUM(s.total) FROM category_month_stat s JOIN category c ON c.id = s.category_id
-                   WHERE s.month_key = :monthKey AND (c.id = b.category_id OR c.parent_id = b.category_id)
+                   WHERE s.month_key = :monthKey AND (c.id = b.category_id OR (c.parent_id = b.category_id AND c.parent_budget_exempt = 0))
                ), 0) AS spent,
                COALESCE((
                    SELECT SUM(s.total) FROM category_month_stat s JOIN category c ON c.id = s.category_id
-                   WHERE s.month_key = :prevMonthKey AND (c.id = b.category_id OR c.parent_id = b.category_id)
+                   WHERE s.month_key = :prevMonthKey AND (c.id = b.category_id OR (c.parent_id = b.category_id AND c.parent_budget_exempt = 0))
                ), 0) AS prevSpent,
                cat.name AS categoryName,
                cat.icon_id AS categoryIconId,
@@ -57,7 +58,7 @@ private const val BUDGETS_WITH_PROGRESS = """
 private const val CARRY_SPEND = """
         SELECT b.category_id AS categoryId, s.month_key AS monthKey, SUM(s.total) AS spent
         FROM budget b
-        JOIN category c ON c.id = b.category_id OR c.parent_id = b.category_id
+        JOIN category c ON c.id = b.category_id OR (c.parent_id = b.category_id AND c.parent_budget_exempt = 0)
         JOIN category_month_stat s ON s.category_id = c.id
         WHERE b.kind = 0 AND s.month_key < :monthKey
           AND s.month_key >= (SELECT MIN(month_key) FROM budget_month WHERE budget_id = b.id)
@@ -84,7 +85,7 @@ interface BudgetDao {
     /**
      * LIMIT budgets with the settings in effect in [monthKey] (newest snapshot at or before it;
      * none: off, null limit and offsets), joined with that month's progress. A LIMIT budget on a
-     * parent category also counts its children's spend. (Budgets used to
+     * parent category also counts its children's spend, except a child marked parent_budget_exempt. (Budgets used to
      * also have a SAVING kind tied to an account; that's been replaced by
      * savings accounts, see [app.outgo.domain.AccountType.SAVINGS].)
      * Listed in the Category screen's order: by parent, a parent's own budget before its children's.
@@ -133,7 +134,7 @@ interface BudgetDao {
         JOIN category cc ON cc.id = cb.category_id
         JOIN budget_month cm ON cm.budget_id = cb.id AND cm.month_key =
             (SELECT MAX(month_key) FROM budget_month WHERE budget_id = cb.id AND month_key <= :monthKey)
-        WHERE cb.kind = 0 AND cc.parent_id = :parentCategoryId AND cc.archived = 0 AND cm.enabled = 1
+        WHERE cb.kind = 0 AND cc.parent_id = :parentCategoryId AND cc.archived = 0 AND cc.parent_budget_exempt = 0 AND cm.enabled = 1
         """)
     suspend fun childLimitSum(parentCategoryId: Long, monthKey: Int): Long
 
