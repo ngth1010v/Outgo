@@ -9,6 +9,7 @@ import app.outgo.data.repo.AccountRepository
 import app.outgo.data.repo.BudgetRepository
 import app.outgo.data.repo.CategoryRepository
 import app.outgo.data.repo.TradeRepository
+import app.outgo.domain.AccountType
 import app.outgo.domain.CategoryKind
 import app.outgo.domain.CategoryPicker
 import app.outgo.domain.TradeDraft
@@ -42,6 +43,9 @@ data class TradeUiState(
     val editingTradeId: Long? = null,
     /** The edited trade is an automatic budget-offset transfer: it follows its budget, so it is read-only. */
     val locked: Boolean = false,
+    /** As picked; saved only while its chip shows, see [showBudgetExempt] / [showSavingExempt]. */
+    val budgetExempt: Boolean = false,
+    val savingExempt: Boolean = false,
 ) {
     val isEditing: Boolean get() = editingTradeId != null
     val picker: CategoryPicker get() = pickers[type] ?: CategoryPicker(emptyList(), emptyList())
@@ -62,6 +66,34 @@ data class TradeUiState(
      */
     val budgetOptions: List<BudgetWithProgress>
         get() = budgets.filter { it.enabled || it.categoryId == selectedCategory?.id }
+
+    /** The category whose budgets an expense counts in; a budget exception is for expenses only. */
+    val budgetCategory: CategoryEntity? get() = selectedCategory.takeIf { type == CategoryKind.EXPENSE }
+
+    /** The account whose savings target the trade counts toward: an income's, or a transfer's "To". */
+    val savingAccount: AccountEntity? get() = when (type) {
+        CategoryKind.INCOME -> selectedAccount
+        TradeType.TRANSFER -> selectedToAccount
+        else -> null
+    }
+
+    /** A parent budget exception subcategory: its expenses are always budget exceptions. */
+    val budgetExemptLocked: Boolean get() = budgetCategory?.isExempt == true
+
+    /** A parent saving exception subaccount: what comes into it is always a saving exception. */
+    val savingExemptLocked: Boolean get() = savingAccount?.isExempt == true
+
+    /** The budget exception switch can be on when the category or its parent has a budget (or it already is on). */
+    val showBudgetExempt: Boolean
+        get() = budgetCategory?.let { c -> budgetExempt || budgetExemptLocked || budgets.any { it.categoryId == c.id || it.categoryId == c.parentId } } ?: false
+
+    /** The saving exception switch can be on when the account is a savings account (or it already is on). */
+    val showSavingExempt: Boolean
+        get() = savingAccount?.let { savingExempt || savingExemptLocked || it.accountType == AccountType.SAVINGS } ?: false
+
+    /** What the switches show and the trade is saved with. */
+    val effectiveBudgetExempt: Boolean get() = showBudgetExempt && (budgetExempt || budgetExemptLocked)
+    val effectiveSavingExempt: Boolean get() = showSavingExempt && (savingExempt || savingExemptLocked)
 }
 
 sealed interface TradeEvent {
@@ -130,6 +162,8 @@ class TradeViewModel(
                 occurredAt = trade.occurredAt,
                 note = trade.note.orEmpty(),
                 locked = trade.offsetMonth != null,
+                budgetExempt = trade.budgetExempt,
+                savingExempt = trade.savingExempt,
             )
         }
     }
@@ -205,6 +239,14 @@ class TradeViewModel(
         }
     }
 
+    fun onBudgetExemptChange(on: Boolean) {
+        _state.update { it.copy(budgetExempt = on) }
+    }
+
+    fun onSavingExemptChange(on: Boolean) {
+        _state.update { it.copy(savingExempt = on) }
+    }
+
     fun onNoteChange(note: String) {
         _state.update { it.copy(note = note.take(100)) }
     }
@@ -221,6 +263,8 @@ class TradeViewModel(
             toAccountId = if (s.isTransfer) s.selectedToAccountId else null,
             occurredAt = s.occurredAt,
             note = s.note,
+            budgetExempt = s.effectiveBudgetExempt,
+            savingExempt = s.effectiveSavingExempt,
         )
         viewModelScope.launch {
             _state.update { it.copy(isSaving = true) }
@@ -264,6 +308,8 @@ class TradeViewModel(
                 occurredAt = System.currentTimeMillis(),
                 note = "",
                 type = CategoryKind.EXPENSE,
+                budgetExempt = false,
+                savingExempt = false,
             )
         }
         viewModelScope.launch { loadPickers() }

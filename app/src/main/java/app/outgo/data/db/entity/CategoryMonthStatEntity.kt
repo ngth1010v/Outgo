@@ -33,4 +33,7 @@ data class CategoryMonthStatEntity(
     val total: Long = 0,
     @ColumnInfo(name = "trade_count")
     val tradeCount: Int = 0,
+    /** The part of [total] from trades marked budget_exempt: budgets count total - exemptTotal. */
+    @ColumnInfo(name = "exempt_total", defaultValue = "0")
+    val exemptTotal: Long = 0,
 )

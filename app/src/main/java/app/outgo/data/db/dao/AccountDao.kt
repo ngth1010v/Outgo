@@ -35,14 +35,14 @@ interface AccountDao {
         """
         SELECT a.*, COALESCE((
             SELECT SUM(t.amount) FROM trade t
-             WHERE t.month_key = :monthKey
+             WHERE t.month_key = :monthKey AND t.saving_exempt = 0
                AND ((t.type = 1 AND t.account_id IN (SELECT g.id FROM account g WHERE g.id = a.id OR (g.parent_id = a.id AND g.parent_saving_exempt = 0)))
                  OR (t.type = 4 AND t.to_account_id IN (SELECT g.id FROM account g WHERE g.id = a.id OR (g.parent_id = a.id AND g.parent_saving_exempt = 0))
                      AND t.account_id NOT IN (SELECT g.id FROM account g WHERE g.id = a.id OR (g.parent_id = a.id AND g.parent_saving_exempt = 0))))
         ), 0) AS monthlyIncome,
         COALESCE((
             SELECT SUM(t.amount) FROM trade t
-             WHERE t.month_key = :prevMonthKey
+             WHERE t.month_key = :prevMonthKey AND t.saving_exempt = 0
                AND ((t.type = 1 AND t.account_id IN (SELECT g.id FROM account g WHERE g.id = a.id OR (g.parent_id = a.id AND g.parent_saving_exempt = 0)))
                  OR (t.type = 4 AND t.to_account_id IN (SELECT g.id FROM account g WHERE g.id = a.id OR (g.parent_id = a.id AND g.parent_saving_exempt = 0))
                      AND t.account_id NOT IN (SELECT g.id FROM account g WHERE g.id = a.id OR (g.parent_id = a.id AND g.parent_saving_exempt = 0))))

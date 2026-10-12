@@ -9,6 +9,8 @@ data class TradeDraft(
     val toAccountId: Long? = null, // set for TradeType.TRANSFER
     val occurredAt: Long,
     val note: String?,
+    val budgetExempt: Boolean = false,
+    val savingExempt: Boolean = false,
 )
 
 /** The two rows of quick-pick categories shown on the Trade screen. */

@@ -84,4 +84,13 @@ data class TradeEntity(
     val offsetCategoryId: Long? = null,
     @ColumnInfo(name = "offset_month")
     val offsetMonth: Int? = null,
+    /**
+     * Left out of every budget: the triggers add it to [CategoryMonthStatEntity.exemptTotal] as well
+     * as the total, and budgets count total - exemptTotal. Only on a trade with a category.
+     */
+    @ColumnInfo(name = "budget_exempt", defaultValue = "0")
+    val budgetExempt: Boolean = false,
+    /** Left out of every savings target: an income, or a transfer into a savings account. */
+    @ColumnInfo(name = "saving_exempt", defaultValue = "0")
+    val savingExempt: Boolean = false,
 )

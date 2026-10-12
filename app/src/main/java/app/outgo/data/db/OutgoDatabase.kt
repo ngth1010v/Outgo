@@ -48,7 +48,7 @@ import app.outgo.domain.IconKind
         BudgetMonthEntity::class,
         SavingsMonthEntity::class,
     ],
-    version = 16,
+    version = 17,
     exportSchema = true,
 )
 abstract class OutgoDatabase : RoomDatabase() {
@@ -62,7 +62,7 @@ abstract class OutgoDatabase : RoomDatabase() {
 
     companion object {
         const val FILE_NAME = "outgo.sqlite"
-        const val SCHEMA_VERSION = 16
+        const val SCHEMA_VERSION = 17
 
         // "OUTO" packed into 4 bytes, stamped once via PRAGMA application_id so a
         // restore can reject a file that isn't an Outgo backup before touching real data.
@@ -93,7 +93,8 @@ abstract class OutgoDatabase : RoomDatabase() {
                 db.execSQL("DROP TRIGGER IF EXISTS trg_trade_ai")
                 db.execSQL("DROP TRIGGER IF EXISTS trg_trade_ad")
                 db.execSQL("DROP TRIGGER IF EXISTS trg_trade_au")
-                createTradeTriggers(db)
+                // The exempt columns only arrive in 16 -> 17; later migrations write trades meanwhile.
+                createTradeTriggers(db, exemptColumns = false)
             }
         }
 
@@ -234,11 +235,24 @@ abstract class OutgoDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_16_17 = object : Migration(16, 17) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE trade ADD COLUMN budget_exempt INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE trade ADD COLUMN saving_exempt INTEGER NOT NULL DEFAULT 0")
+                // No trade is exempt yet, so 0 is every row's right value.
+                db.execSQL("ALTER TABLE category_month_stat ADD COLUMN exempt_total INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("DROP TRIGGER IF EXISTS trg_trade_ai")
+                db.execSQL("DROP TRIGGER IF EXISTS trg_trade_ad")
+                db.execSQL("DROP TRIGGER IF EXISTS trg_trade_au")
+                createTradeTriggers(db)
+            }
+        }
+
         fun build(context: Context): OutgoDatabase =
             Room.databaseBuilder(context.applicationContext, OutgoDatabase::class.java, FILE_NAME)
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
                 .addCallback(OutgoCallback)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17)
                 .build()
     }
 }
@@ -417,8 +431,16 @@ private object OutgoCallback : RoomDatabase.Callback() {
  * [app.outgo.domain.TradeType]). EXPENSE/ADJUST_OUT/TRANSFER debit `account_id`; INCOME/ADJUST_IN
  * credit it. TRANSFER additionally credits `to_account_id` — the WHERE clause on those extra
  * statements makes them no-ops for every other type.
+ *
+ * A trade marked budget_exempt also goes into `category_month_stat.exempt_total`, which budgets
+ * subtract. [exemptColumns] is false only for migrations run before those columns exist.
  */
-private fun createTradeTriggers(db: SupportSQLiteDatabase) {
+private fun createTradeTriggers(db: SupportSQLiteDatabase, exemptColumns: Boolean = true) {
+    // Budget-exempt part of a row's amount, and the stat column it goes into.
+    fun exempt(row: String) = if (exemptColumns) ", CASE WHEN $row.budget_exempt = 1 THEN $row.amount ELSE 0 END" else ""
+    val exemptCol = if (exemptColumns) ", exempt_total" else ""
+    val exemptAdd = if (exemptColumns) ", exempt_total = exempt_total + excluded.exempt_total" else ""
+    fun exemptSub(row: String) = if (exemptColumns) ", exempt_total = exempt_total - CASE WHEN $row.budget_exempt = 1 THEN $row.amount ELSE 0 END" else ""
     db.execSQL(
         """
         CREATE TRIGGER trg_trade_ai AFTER INSERT ON trade
@@ -431,10 +453,10 @@ private fun createTradeTriggers(db: SupportSQLiteDatabase) {
              SET balance = balance + NEW.amount, updated_at = NEW.updated_at
            WHERE NEW.type = 4 AND id = NEW.to_account_id;
 
-          INSERT INTO category_month_stat(category_id, month_key, total, trade_count)
-            SELECT NEW.category_id, NEW.month_key, NEW.amount, 1 WHERE NEW.category_id IS NOT NULL
+          INSERT INTO category_month_stat(category_id, month_key, total, trade_count$exemptCol)
+            SELECT NEW.category_id, NEW.month_key, NEW.amount, 1${exempt("NEW")} WHERE NEW.category_id IS NOT NULL
           ON CONFLICT(category_id, month_key) DO UPDATE
-             SET total = total + excluded.total, trade_count = trade_count + excluded.trade_count;
+             SET total = total + excluded.total, trade_count = trade_count + excluded.trade_count$exemptAdd;
 
           UPDATE category
              SET use_count = use_count + 1,
@@ -456,7 +478,7 @@ private fun createTradeTriggers(db: SupportSQLiteDatabase) {
            WHERE OLD.type = 4 AND id = OLD.to_account_id;
 
           UPDATE category_month_stat
-             SET total = total - OLD.amount, trade_count = trade_count - 1
+             SET total = total - OLD.amount, trade_count = trade_count - 1${exemptSub("OLD")}
            WHERE category_id = OLD.category_id AND month_key = OLD.month_key;
           DELETE FROM category_month_stat
            WHERE category_id = OLD.category_id AND month_key = OLD.month_key AND trade_count = 0;
@@ -489,14 +511,14 @@ private fun createTradeTriggers(db: SupportSQLiteDatabase) {
            WHERE NEW.type = 4 AND id = NEW.to_account_id;
 
           UPDATE category_month_stat
-             SET total = total - OLD.amount, trade_count = trade_count - 1
+             SET total = total - OLD.amount, trade_count = trade_count - 1${exemptSub("OLD")}
            WHERE category_id = OLD.category_id AND month_key = OLD.month_key;
           DELETE FROM category_month_stat
            WHERE category_id = OLD.category_id AND month_key = OLD.month_key AND trade_count = 0;
-          INSERT INTO category_month_stat(category_id, month_key, total, trade_count)
-            SELECT NEW.category_id, NEW.month_key, NEW.amount, 1 WHERE NEW.category_id IS NOT NULL
+          INSERT INTO category_month_stat(category_id, month_key, total, trade_count$exemptCol)
+            SELECT NEW.category_id, NEW.month_key, NEW.amount, 1${exempt("NEW")} WHERE NEW.category_id IS NOT NULL
           ON CONFLICT(category_id, month_key) DO UPDATE
-             SET total = total + excluded.total, trade_count = trade_count + excluded.trade_count;
+             SET total = total + excluded.total, trade_count = trade_count + excluded.trade_count$exemptAdd;
 
           UPDATE category SET use_count = use_count - 1 WHERE id = OLD.category_id;
           UPDATE category SET use_count = use_count + 1 WHERE id = NEW.category_id;

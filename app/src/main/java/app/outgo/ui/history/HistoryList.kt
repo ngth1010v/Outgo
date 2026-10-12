@@ -37,6 +37,7 @@ import app.outgo.data.db.entity.AccountEntity
 import app.outgo.data.db.entity.CategoryEntity
 import app.outgo.data.db.entity.TradeEntity
 import app.outgo.domain.TradeType
+import app.outgo.ui.component.ExceptionBadge
 import app.outgo.ui.component.IconView
 import app.outgo.util.Money
 import app.outgo.util.formatDayHeader
@@ -179,11 +180,26 @@ private fun TradeRow(
         modifier = modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Left out of budgets / savings targets, by the trade itself or by its subcategory/subaccount:
+        // a badge on the category icon (an expense's budget, an income's account) or the "to" account.
         if (isTransfer) {
             // A transfer's category is the budget it was taken from.
-            TransferIconStack(fromAccount = fromAccount, toAccount = toAccount, budget = category)
+            TransferIconStack(
+                fromAccount = fromAccount,
+                toAccount = toAccount,
+                budget = category,
+                toExempt = trade.savingExempt || toAccount?.isExempt == true,
+            )
         } else {
-            IconView(iconId = category?.iconId, size = 32.dp, color = category?.color)
+            val exempt = when (trade.type) {
+                TradeType.EXPENSE -> trade.budgetExempt || category?.isExempt == true
+                TradeType.INCOME -> trade.savingExempt || fromAccount?.isExempt == true
+                else -> false
+            }
+            Box {
+                IconView(iconId = category?.iconId, size = 32.dp, color = category?.color)
+                if (exempt) ExceptionBadge(32.dp)
+            }
         }
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
@@ -279,7 +295,7 @@ internal fun PendingBanner(count: Int, modifier: Modifier = Modifier) {
  * budget a transfer was taken from sits as a badge on the from-account icon's corner.
  */
 @Composable
-private fun TransferIconStack(fromAccount: AccountEntity?, toAccount: AccountEntity?, budget: CategoryEntity?) {
+private fun TransferIconStack(fromAccount: AccountEntity?, toAccount: AccountEntity?, budget: CategoryEntity?, toExempt: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box {
             IconView(iconId = fromAccount?.iconId, size = 28.dp, color = fromAccount?.color)
@@ -300,7 +316,10 @@ private fun TransferIconStack(fromAccount: AccountEntity?, toAccount: AccountEnt
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(14.dp).padding(horizontal = 1.dp),
         )
-        IconView(iconId = toAccount?.iconId, size = 28.dp, color = toAccount?.color)
+        Box {
+            IconView(iconId = toAccount?.iconId, size = 28.dp, color = toAccount?.color)
+            if (toExempt) ExceptionBadge(28.dp)
+        }
     }
 }
 

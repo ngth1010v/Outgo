@@ -302,6 +302,10 @@
     <string name="common_cancel">Cancel</string>
     <string name="common_close">Close</string>
     <string name="trade_auto_transfer_locked">This is an automatic transfer: it moves a budget month\'s unspent amount and follows that budget. To change it, change the budget\'s settings for that month.</string>
+    <string name="trade_budget_exception">Budget exception</string>
+    <string name="trade_saving_exception">Saving exception</string>
+    <string name="trade_budget_exception_info">Leave this trade out of every budget: its subcategory\'s own budget and its parent category\'s. It still counts in the Analysis category charts.\n\nIt can only be turned on when the trade\'s subcategory or its parent category has a budget, and it is always on for a subcategory marked Parent budget exception.</string>
+    <string name="trade_saving_exception_info">Leave this trade out of every savings target: the account\'s own monthly target and its parent account\'s. Balances still include it.\n\nOn an income it is the trade\'s account; on a transfer, the To account. It can only be turned on when that account is a savings account, and it is always on for a subaccount marked Parent saving exception.</string>
     <string name="month_picker_label">Choose month</string>
     <string name="month_picker_prev_year">Previous year</string>
     <string name="month_picker_next_year">Next year</string>

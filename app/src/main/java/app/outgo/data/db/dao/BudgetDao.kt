@@ -30,11 +30,11 @@ private const val BUDGETS_WITH_PROGRESS = """
                COALESCE(m.sum_children, 0) AS sumChildren,
                b.sort_order AS sortOrder,
                COALESCE((
-                   SELECT SUM(s.total) FROM category_month_stat s JOIN category c ON c.id = s.category_id
+                   SELECT SUM(s.total - s.exempt_total) FROM category_month_stat s JOIN category c ON c.id = s.category_id
                    WHERE s.month_key = :monthKey AND (c.id = b.category_id OR (c.parent_id = b.category_id AND c.parent_budget_exempt = 0))
                ), 0) AS spent,
                COALESCE((
-                   SELECT SUM(s.total) FROM category_month_stat s JOIN category c ON c.id = s.category_id
+                   SELECT SUM(s.total - s.exempt_total) FROM category_month_stat s JOIN category c ON c.id = s.category_id
                    WHERE s.month_key = :prevMonthKey AND (c.id = b.category_id OR (c.parent_id = b.category_id AND c.parent_budget_exempt = 0))
                ), 0) AS prevSpent,
                cat.name AS categoryName,
@@ -56,7 +56,7 @@ private const val BUDGETS_WITH_PROGRESS = """
         """
 
 private const val CARRY_SPEND = """
-        SELECT b.category_id AS categoryId, s.month_key AS monthKey, SUM(s.total) AS spent
+        SELECT b.category_id AS categoryId, s.month_key AS monthKey, SUM(s.total - s.exempt_total) AS spent
         FROM budget b
         JOIN category c ON c.id = b.category_id OR (c.parent_id = b.category_id AND c.parent_budget_exempt = 0)
         JOIN category_month_stat s ON s.category_id = c.id

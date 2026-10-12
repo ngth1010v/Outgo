@@ -50,6 +50,8 @@ class TradeRepository(private val tradeDao: TradeDao) {
                 note = draft.note?.takeIf { it.isNotBlank() },
                 createdAt = now,
                 updatedAt = now,
+                budgetExempt = draft.budgetExempt,
+                savingExempt = draft.savingExempt,
             ),
         ).also { signalChange() }
     }
@@ -67,6 +69,8 @@ class TradeRepository(private val tradeDao: TradeDao) {
                 occurredAt = draft.occurredAt,
                 monthKey = MonthKey.of(draft.occurredAt),
                 note = draft.note?.takeIf { it.isNotBlank() },
+                budgetExempt = draft.budgetExempt,
+                savingExempt = draft.savingExempt,
                 updatedAt = System.currentTimeMillis(),
                 // Saved by hand with a real amount: no longer waiting on the offset.
                 pendingAmount = null,

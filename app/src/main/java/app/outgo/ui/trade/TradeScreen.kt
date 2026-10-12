@@ -76,6 +76,8 @@ import app.outgo.ui.component.ConfirmDialog
 import app.outgo.ui.component.AccountSheet
 import app.outgo.ui.component.BudgetSheet
 import app.outgo.ui.component.GroupedPickerSheet
+import app.outgo.ui.category.SectionHeader
+import app.outgo.ui.category.SectionSwitch
 import app.outgo.ui.component.ExceptionBadge
 import app.outgo.ui.component.IconView
 import app.outgo.ui.component.PickCell
@@ -273,6 +275,8 @@ private fun TradeForm(
                     Spacer(Modifier.height(16.dp))
                 }
 
+                ExemptRows(state, viewModel::onBudgetExemptChange, viewModel::onSavingExemptChange)
+
                 DateTimeRow(
                     occurredAt = state.occurredAt,
                     onDateChange = viewModel::onDateChange,
@@ -369,6 +373,34 @@ private fun ExpenseIncomeToggle(type: Int, onTypeChange: (Int) -> Unit, enabled:
             shape = SegmentedButtonDefaults.itemShape(2, 3),
         ) { Text(stringResource(R.string.trade_transfer)) }
     }
+}
+
+/**
+ * The trade's "Budget exception" / "Saving exception" rows: the budget one on an expense, the saving
+ * one on an income or a transfer. A row's switch is off and disabled where it can't matter (see
+ * [TradeUiState.showBudgetExempt]), and on and disabled for a subcategory or subaccount that is a
+ * parent exception (see [TradeUiState.budgetExemptLocked]).
+ */
+@Composable
+private fun ExemptRows(state: TradeUiState, onBudget: (Boolean) -> Unit, onSaving: (Boolean) -> Unit) {
+    if (state.type == CategoryKind.EXPENSE) {
+        SectionHeader(stringResource(R.string.trade_budget_exception), stringResource(R.string.trade_budget_exception_info)) {
+            SectionSwitch(
+                checked = state.effectiveBudgetExempt,
+                onCheckedChange = onBudget,
+                enabled = state.showBudgetExempt && !state.budgetExemptLocked,
+            )
+        }
+    } else {
+        SectionHeader(stringResource(R.string.trade_saving_exception), stringResource(R.string.trade_saving_exception_info)) {
+            SectionSwitch(
+                checked = state.effectiveSavingExempt,
+                onCheckedChange = onSaving,
+                enabled = state.showSavingExempt && !state.savingExemptLocked,
+            )
+        }
+    }
+    Spacer(Modifier.height(12.dp))
 }
 
 @Composable

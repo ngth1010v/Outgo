@@ -291,6 +291,10 @@
     <string name="common_cancel">Huỷ</string>
     <string name="common_close">Đóng</string>
     <string name="trade_auto_transfer_locked">Đây là giao dịch chuyển tự động: chuyển phần chưa chi hết của một tháng ngân sách và đi theo ngân sách đó. Muốn đổi, hãy sửa cài đặt ngân sách của tháng đó.</string>
+    <string name="trade_budget_exception">Ngoại lệ ngân sách</string>
+    <string name="trade_saving_exception">Ngoại lệ tiết kiệm</string>
+    <string name="trade_budget_exception_info">Không tính giao dịch này vào bất kỳ ngân sách nào: ngân sách riêng của danh mục con và ngân sách của danh mục cha. Giao dịch vẫn được tính trong các biểu đồ danh mục ở Phân tích.\n\nChỉ bật được khi danh mục con của giao dịch hoặc danh mục cha có ngân sách, và luôn bật với danh mục con được đánh dấu Ngoại lệ ngân sách danh mục cha.</string>
+    <string name="trade_saving_exception_info">Không tính giao dịch này vào bất kỳ mục tiêu tiết kiệm nào: mục tiêu hằng tháng của chính tài khoản và của tài khoản cha. Số dư vẫn bao gồm giao dịch.\n\nVới khoản thu là tài khoản của giao dịch; với chuyển khoản là tài khoản Đến. Chỉ bật được khi tài khoản đó là tài khoản tiết kiệm, và luôn bật với tài khoản con được đánh dấu Ngoại lệ tiết kiệm tài khoản cha.</string>
     <string name="month_picker_label">Chọn tháng</string>
     <string name="month_picker_prev_year">Năm trước</string>
     <string name="month_picker_next_year">Năm sau</string>
