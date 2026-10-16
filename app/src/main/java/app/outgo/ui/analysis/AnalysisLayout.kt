@@ -95,8 +95,11 @@ enum class ChartType(
     SAVING_DAILY(R.drawable.ph_wallet_fill, hasMode = false, hasPicks = true),
 }
 
-/** A heading in the "+" sheet and the charts under it. */
-data class ChartGroup(@StringRes val title: Int, val charts: List<ChartType>)
+/**
+ * A heading in the "+" sheet and the charts under it, then its [sub] groups: a sub-header each,
+ * whose charts get the short two-line "<kind> / <by day | breakdown | 5 months>" names, see shortChartName.
+ */
+data class ChartGroup(@StringRes val title: Int, val charts: List<ChartType>, val sub: List<ChartGroup> = emptyList())
 
 /**
  * One saved list. [charts] is the first-run layout; [groups] is what the "+" sheet offers, and
@@ -113,8 +116,39 @@ enum class LayoutSlot(
         "analysis_layout_month",
         MonthBalanceCharts + MonthCategoryGroupCharts + MonthCategoryCharts + MonthAccountCharts + listOf(ChartType.BUDGET_DAILY, ChartType.SAVING_DAILY),
         listOf(
-            ChartGroup(R.string.analysis_group_accounts, MonthBalanceCharts),
-            ChartGroup(R.string.analysis_group_categories, MonthCategoryGroupCharts),
+            ChartGroup(
+                R.string.analysis_group_accounts,
+                emptyList(),
+                listOf(
+                    ChartGroup(
+                        R.string.analysis_sub_balance,
+                        listOf(
+                            ChartType.ACCOUNT_DAILY, ChartType.ACCOUNT_SHARE, ChartType.ACCOUNT_MONTHS,
+                            ChartType.SUBACCOUNT_DAILY, ChartType.SUBACCOUNT_SHARE, ChartType.SUBACCOUNT_MONTHS,
+                        ),
+                    ),
+                ),
+            ),
+            ChartGroup(
+                R.string.analysis_group_categories,
+                emptyList(),
+                listOf(
+                    ChartGroup(
+                        R.string.analysis_sub_category,
+                        listOf(
+                            ChartType.EXPENSE_CATEGORY_DAILY, ChartType.EXPENSE_CATEGORY_SHARE, ChartType.EXPENSE_CATEGORY_MONTHS,
+                            ChartType.INCOME_CATEGORY_DAILY, ChartType.INCOME_CATEGORY_SHARE, ChartType.INCOME_CATEGORY_MONTHS,
+                        ),
+                    ),
+                    ChartGroup(
+                        R.string.analysis_sub_subcategory,
+                        listOf(
+                            ChartType.EXPENSE_SUBCATEGORY_DAILY, ChartType.EXPENSE_SUBCATEGORY_SHARE, ChartType.EXPENSE_SUBCATEGORY_MONTHS,
+                            ChartType.INCOME_SUBCATEGORY_DAILY, ChartType.INCOME_SUBCATEGORY_SHARE, ChartType.INCOME_SUBCATEGORY_MONTHS,
+                        ),
+                    ),
+                ),
+            ),
             // ponytail: every chart from before the Accounts group, parked here until each finds its own group.
             ChartGroup(
                 R.string.analysis_group_other,

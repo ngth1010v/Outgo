@@ -17,6 +17,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.text.style.Hyphens
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.Arrangement
@@ -71,6 +72,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
@@ -552,11 +554,15 @@ private fun AddChartSheet(slot: LayoutSlot, onSelect: (ChartType) -> Unit, onDis
                 Column {
                     Text(stringResource(group.title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium)
                     Spacer(Modifier.height(8.dp))
-                    group.charts.chunked(5).forEach { row ->
-                        Row(modifier = Modifier.fillMaxWidth()) {
-                            row.forEach { type -> ChartCell(type, { onSelect(type) }, Modifier.weight(1f)) }
-                            repeat(5 - row.size) { Spacer(Modifier.weight(1f)) }
-                        }
+                    ChartCells(group.charts, short = false, onSelect)
+                    group.sub.forEach { sub ->
+                        Text(
+                            stringResource(sub.title),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                        ChartCells(sub.charts, short = true, onSelect)
                     }
                 }
             }
@@ -565,7 +571,17 @@ private fun AddChartSheet(slot: LayoutSlot, onSelect: (ChartType) -> Unit, onDis
 }
 
 @Composable
-private fun ChartCell(type: ChartType, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun ChartCells(charts: List<ChartType>, short: Boolean, onSelect: (ChartType) -> Unit) {
+    charts.chunked(6).forEach { row ->
+        Row(modifier = Modifier.fillMaxWidth()) {
+            row.forEach { type -> ChartCell(type, short, { onSelect(type) }, Modifier.weight(1f)) }
+            repeat(6 - row.size) { Spacer(Modifier.weight(1f)) }
+        }
+    }
+}
+
+@Composable
+private fun ChartCell(type: ChartType, short: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier.clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick).padding(vertical = 8.dp, horizontal = 2.dp),
@@ -583,13 +599,34 @@ private fun ChartCell(type: ChartType, onClick: () -> Unit, modifier: Modifier =
         }
         Spacer(Modifier.height(6.dp))
         Text(
-            chartName(type),
-            style = MaterialTheme.typography.labelSmall,
+            if (short) shortChartName(type) else chartName(type),
+            // Six cells a row leave ~55dp each: no extra tracking, and long words hyphenate instead of splitting anywhere.
+            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp, hyphens = Hyphens.Auto),
             textAlign = TextAlign.Center,
-            maxLines = 2,
+            maxLines = 3,
             overflow = TextOverflow.Ellipsis,
         )
     }
+}
+
+/**
+ * A sub-grouped chart's name under its sub-header (Accounts and Categories groups): which account
+ * level or category kind on the first line, which of the three charts on the second.
+ */
+@Composable
+private fun shortChartName(type: ChartType): String {
+    val kind = when {
+        type.name.startsWith("ACCOUNT_") -> R.string.analysis_short_account
+        type.name.startsWith("SUBACCOUNT_") -> R.string.analysis_short_subaccount
+        type.name.startsWith("EXPENSE_") -> R.string.analysis_short_expense
+        else -> R.string.analysis_short_income
+    }
+    val chart = when {
+        type.name.endsWith("_DAILY") -> R.string.analysis_short_daily
+        type.name.endsWith("_SHARE") -> R.string.analysis_short_share
+        else -> R.string.analysis_short_months
+    }
+    return stringResource(kind) + "\n" + stringResource(chart)
 }
 
 /** The "+" sheet's name for a chart: never names a kind, since the card's own chip picks that. */

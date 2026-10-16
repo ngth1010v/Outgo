@@ -367,6 +367,16 @@
     <string name="analysis_income_subcategory_share_title">Cơ cấu thu nhập theo danh mục con</string>
     <string name="analysis_income_category_months_title">Thu nhập theo danh mục 5 tháng gần nhất</string>
     <string name="analysis_income_subcategory_months_title">Thu nhập theo danh mục con 5 tháng gần nhất</string>
+    <string name="analysis_sub_balance">Số dư</string>
+    <string name="analysis_sub_category">Theo danh mục</string>
+    <string name="analysis_sub_subcategory">Theo danh mục con</string>
+    <string name="analysis_short_account">Tài khoản</string>
+    <string name="analysis_short_subaccount">Tài khoản con</string>
+    <string name="analysis_short_expense">Chi tiêu</string>
+    <string name="analysis_short_income">Thu nhập</string>
+    <string name="analysis_short_daily">theo ngày</string>
+    <string name="analysis_short_share">cơ cấu</string>
+    <string name="analysis_short_months">5 tháng</string>
     <string name="analysis_group_other">Khác</string>
     <string name="analysis_account_daily_title">Số dư tài khoản theo ngày</string>
     <string name="analysis_subaccount_daily_title">Số dư tài khoản con theo ngày</string>
