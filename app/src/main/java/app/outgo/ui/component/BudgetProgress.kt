@@ -110,7 +110,7 @@ private fun PacePanel(color: Color, current: Long, total: Long, lineName: String
     // Even share of [total] from the 1st through today, minus [current]. Budget: what can still be
     // spent today; savings: what still has to be saved today to catch up with that pace.
     val pace = total * today.dayOfMonth / daysInMonth
-    val todayAmount = (pace - current).coerceAtLeast(0)
+    val todayAmount = pace - current
     val planColor = MaterialTheme.colorScheme.outlineVariant.toArgb()
     val planName = stringResource(R.string.progress_line_plan)
     Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
@@ -123,10 +123,11 @@ private fun PacePanel(color: Color, current: Long, total: Long, lineName: String
                 color = color,
             )
             Text(
-                stringResource(
-                    if (greenWhenLower) R.string.progress_today_spend else R.string.progress_today_save,
-                    Money.format(todayAmount),
-                ),
+                when {
+                    !greenWhenLower -> stringResource(R.string.progress_today_save, Money.format(todayAmount.coerceAtLeast(0)))
+                    todayAmount >= 0 -> stringResource(R.string.progress_today_spend, Money.format(todayAmount))
+                    else -> stringResource(R.string.progress_today_over, Money.format(-todayAmount))
+                },
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.alignByBaseline(),
                 color = color,
@@ -144,7 +145,7 @@ private fun PacePanel(color: Color, current: Long, total: Long, lineName: String
             daysInMonth,
             zero = true,
             progress = { 1f },
-            modifier = Modifier.fillMaxWidth().height(140.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(140.dp),
             gapColors = if (greenWhenLower) ExpenseRed to IncomeGreen else IncomeGreen to ExpenseRed,
             pad = false,
         )
