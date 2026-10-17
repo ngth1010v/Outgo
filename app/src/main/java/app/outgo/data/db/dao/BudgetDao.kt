@@ -23,6 +23,15 @@ private const val CHILD_LIMIT_SUM = """COALESCE((
                    WHERE cb.kind = 0 AND cc.parent_id = b.category_id AND cc.archived = 0 AND cc.parent_budget_exempt = 0 AND cm.enabled = 1
                ), 0)"""
 
+/**
+ * Transfers that top up b's budget in :monthKey ("To budget"): to its own category, or to a
+ * subcategory that counts in it, the same way that subcategory's spend does.
+ */
+private const val FUNDED = """COALESCE((
+                   SELECT SUM(t.amount) FROM trade t JOIN category c ON c.id = t.to_category_id
+                   WHERE t.type = 4 AND t.month_key = :monthKey AND (c.id = b.category_id OR (c.parent_id = b.category_id AND c.parent_budget_exempt = 0))
+               ), 0)"""
+
 private const val BUDGETS_WITH_PROGRESS = """
         SELECT b.id, b.kind, b.name, b.icon_id AS iconId, b.category_id AS categoryId,
                cat.parent_id AS parentCategoryId,
@@ -37,6 +46,7 @@ private const val BUDGETS_WITH_PROGRESS = """
                    SELECT SUM(s.total - s.exempt_total) FROM category_month_stat s JOIN category c ON c.id = s.category_id
                    WHERE s.month_key = :prevMonthKey AND (c.id = b.category_id OR (c.parent_id = b.category_id AND c.parent_budget_exempt = 0))
                ), 0) AS prevSpent,
+               """ + FUNDED + """ AS funded,
                cat.name AS categoryName,
                cat.icon_id AS categoryIconId,
                cat.color AS categoryColor,
@@ -55,14 +65,23 @@ private const val BUDGETS_WITH_PROGRESS = """
                  cat.parent_id IS NOT NULL, cat.sort_order, b.id
         """
 
+// A top-up ("To budget") counts as negative spend here: it raises what is left the same way.
 private const val CARRY_SPEND = """
-        SELECT b.category_id AS categoryId, s.month_key AS monthKey, SUM(s.total - s.exempt_total) AS spent
-        FROM budget b
-        JOIN category c ON c.id = b.category_id OR (c.parent_id = b.category_id AND c.parent_budget_exempt = 0)
-        JOIN category_month_stat s ON s.category_id = c.id
-        WHERE b.kind = 0 AND s.month_key < :monthKey
-          AND s.month_key >= (SELECT MIN(month_key) FROM budget_month WHERE budget_id = b.id)
-        GROUP BY b.category_id, s.month_key
+        SELECT categoryId, monthKey, SUM(spent) AS spent FROM (
+            SELECT b.id AS budgetId, b.category_id AS categoryId, s.month_key AS monthKey, s.total - s.exempt_total AS spent
+            FROM budget b
+            JOIN category c ON c.id = b.category_id OR (c.parent_id = b.category_id AND c.parent_budget_exempt = 0)
+            JOIN category_month_stat s ON s.category_id = c.id
+            WHERE b.kind = 0 AND s.month_key < :monthKey
+            UNION ALL
+            SELECT b.id, b.category_id, t.month_key, -t.amount
+            FROM budget b
+            JOIN category c ON c.id = b.category_id OR (c.parent_id = b.category_id AND c.parent_budget_exempt = 0)
+            JOIN trade t ON t.to_category_id = c.id AND t.type = 4
+            WHERE b.kind = 0 AND t.month_key < :monthKey
+        ) x
+        WHERE monthKey >= (SELECT MIN(month_key) FROM budget_month WHERE budget_id = x.budgetId)
+        GROUP BY categoryId, monthKey
         """
 
 @Dao

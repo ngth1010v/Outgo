@@ -146,12 +146,15 @@ internal fun HistoryItem(
             // An automatic transfer shows the budget it moves the unspent amount of.
             val category = categoriesById[item.trade.categoryId ?: item.trade.offsetCategoryId]
             val fromAccount = accountsById[item.trade.accountId]
+            val toBudget = categoriesById[item.trade.toCategoryId]
             TradeRow(
             trade = item.trade,
             category = category,
             // "parent/sub", or just the name of a parent-level one.
             fromPath = fromAccount?.let { a -> listOfNotNull(accountsById[a.parentId]?.name, a.name).joinToString("/") }.orEmpty(),
             budgetPath = category?.let { c -> listOfNotNull(categoriesById[c.parentId]?.name, c.name).joinToString("/") },
+            toBudget = toBudget,
+            toBudgetPath = toBudget?.let { c -> listOfNotNull(categoriesById[c.parentId]?.name, c.name).joinToString("/") },
             fromAccount = fromAccount,
             toAccount = accountsById[item.trade.toAccountId],
             onClick = { onOpenTrade(item.trade.id) },
@@ -168,6 +171,8 @@ private fun TradeRow(
     category: CategoryEntity?,
     fromPath: String,
     budgetPath: String?,
+    toBudget: CategoryEntity?,
+    toBudgetPath: String?,
     fromAccount: AccountEntity?,
     toAccount: AccountEntity?,
     onClick: () -> Unit,
@@ -188,7 +193,7 @@ private fun TradeRow(
                 fromAccount = fromAccount,
                 toAccount = toAccount,
                 budget = category,
-                toExempt = trade.savingExempt || toAccount?.isExempt == true,
+                toBudget = toBudget,
             )
         } else {
             val exempt = when (trade.type) {
@@ -240,9 +245,15 @@ private fun TradeRow(
                     )
                 }
             }
-            // A transfer taken from a budget names it on a line of its own, above the account.
-            if (isTransfer && budgetPath != null) {
-                Text(budgetPath, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // A transfer taken from / topping up a budget names it on a line of its own, above the
+            // account: "From", "From → To" or "→ To".
+            val budgets = if (isTransfer && (budgetPath != null || toBudgetPath != null)) {
+                listOfNotNull(budgetPath, toBudgetPath?.let { "→ $it" }).joinToString(" ")
+            } else {
+                null
+            }
+            if (budgets != null) {
+                Text(budgets, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text(
                 "$fromPath · " + formatTime(trade.occurredAt),
@@ -292,10 +303,16 @@ internal fun PendingBanner(count: Int, modifier: Modifier = Modifier) {
 
 /**
  * Transfer row leading visual: from-account icon, a neutral arrow, then to-account icon. The
- * budget a transfer was taken from sits as a badge on the from-account icon's corner.
+ * budget a transfer was taken from sits as a badge on the from-account icon's corner, the budget
+ * it tops up on the to-account icon's. No exception badge here: the budget badges take that corner.
  */
 @Composable
-private fun TransferIconStack(fromAccount: AccountEntity?, toAccount: AccountEntity?, budget: CategoryEntity?, toExempt: Boolean) {
+private fun TransferIconStack(
+    fromAccount: AccountEntity?,
+    toAccount: AccountEntity?,
+    budget: CategoryEntity?,
+    toBudget: CategoryEntity?,
+) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box {
             IconView(iconId = fromAccount?.iconId, size = 28.dp, color = fromAccount?.color)
@@ -318,7 +335,14 @@ private fun TransferIconStack(fromAccount: AccountEntity?, toAccount: AccountEnt
         )
         Box {
             IconView(iconId = toAccount?.iconId, size = 28.dp, color = toAccount?.color)
-            if (toExempt) ExceptionBadge(28.dp)
+            if (toBudget != null) {
+                IconView(
+                    iconId = toBudget.iconId,
+                    size = 17.25.dp,
+                    color = toBudget.color,
+                    modifier = Modifier.align(Alignment.BottomEnd).offset(x = 3.5.dp, y = 5.75.dp).shadow(2.dp, CircleShape),
+                )
+            }
         }
     }
 }

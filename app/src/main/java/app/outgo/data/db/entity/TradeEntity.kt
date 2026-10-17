@@ -27,6 +27,12 @@ import androidx.room.PrimaryKey
             childColumns = ["category_id"],
             onDelete = ForeignKey.RESTRICT,
         ),
+        ForeignKey(
+            entity = CategoryEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["to_category_id"],
+            onDelete = ForeignKey.SET_NULL,
+        ),
     ],
     indices = [
         Index(value = ["type", "occurred_at", "id"]),
@@ -36,6 +42,8 @@ import androidx.room.PrimaryKey
         Index(value = ["month_key", "type"]),
         // Home's pending-transfer badge counts these after every trade write; without it, a full scan.
         Index("pending_amount"),
+        // Budget top-ups per month, read with every budget's progress.
+        Index(value = ["to_category_id", "month_key"]),
     ],
 )
 data class TradeEntity(
@@ -93,4 +101,10 @@ data class TradeEntity(
     /** Left out of every savings target: an income, or a transfer into a savings account. */
     @ColumnInfo(name = "saving_exempt", defaultValue = "0")
     val savingExempt: Boolean = false,
+    /**
+     * On a [app.outgo.domain.TradeType.TRANSFER], the category of the budget it tops up ("To budget"):
+     * that budget's (and its parent's) limit grows by [amount] in [monthKey]. Null otherwise.
+     */
+    @ColumnInfo(name = "to_category_id")
+    val toCategoryId: Long? = null,
 )

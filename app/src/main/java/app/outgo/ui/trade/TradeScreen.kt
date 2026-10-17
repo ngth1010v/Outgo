@@ -120,7 +120,7 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit, visible: Boolean = t
         if (state.isEditing || type == null) null else { { viewModel.onTypeChange(type) } }
     }
     // Editing only: the loaded trade's fields, to tell whether leaving would drop changes.
-    val fields = listOf(state.type, state.amount, state.selectedCategory?.id, state.selectedAccountId, state.selectedToAccountId, state.occurredAt, state.note)
+    val fields = listOf(state.type, state.amount, state.selectedCategory?.id, state.selectedAccountId, state.selectedToAccountId, state.occurredAt, state.note, state.effectiveToBudget?.id)
     var initialFields by remember { mutableStateOf<List<Any?>?>(null) }
     LaunchedEffect(state.isLoading) { if (!state.isLoading && initialFields == null) initialFields = fields }
     val cancel = if (state.isEditing) rememberDiscardGuard(initialFields != null && fields != initialFields, onClose) else onClose
@@ -260,11 +260,13 @@ private fun TradeForm(
 
                 if (state.isTransfer) {
                     BudgetDropdown(
+                        label = stringResource(R.string.trade_from_budget_label),
                         budgets = state.budgetOptions,
                         selected = state.selectedCategory,
                         onSelect = viewModel::onBudgetSelected,
                     )
                     Spacer(Modifier.height(16.dp))
+                    if (state.selectedCategory != null) BudgetExemptRow(state, viewModel::onBudgetExemptChange)
 
                     AccountDropdown(
                         label = stringResource(R.string.trade_to_account_label),
@@ -273,9 +275,22 @@ private fun TradeForm(
                         onSelect = { viewModel.onToAccountSelected(it.id) },
                     )
                     Spacer(Modifier.height(16.dp))
-                }
+                    SavingExemptRow(state, viewModel::onSavingExemptChange)
 
-                ExemptRows(state, viewModel::onBudgetExemptChange, viewModel::onSavingExemptChange)
+                    if (state.showToBudget) {
+                        BudgetDropdown(
+                            label = stringResource(R.string.trade_to_budget_label),
+                            budgets = state.toBudgetOptions,
+                            selected = state.effectiveToBudget,
+                            onSelect = viewModel::onToBudgetSelected,
+                        )
+                        Spacer(Modifier.height(16.dp))
+                    }
+                } else if (state.type == CategoryKind.EXPENSE) {
+                    BudgetExemptRow(state, viewModel::onBudgetExemptChange)
+                } else {
+                    SavingExemptRow(state, viewModel::onSavingExemptChange)
+                }
 
                 DateTimeRow(
                     occurredAt = state.occurredAt,
@@ -376,29 +391,31 @@ private fun ExpenseIncomeToggle(type: Int, onTypeChange: (Int) -> Unit, enabled:
 }
 
 /**
- * The trade's "Budget exception" / "Saving exception" rows: the budget one on an expense, the saving
- * one on an income or a transfer. A row's switch is off and disabled where it can't matter (see
+ * The trade's "Budget exception" row (an expense, or a transfer's "From budget") and "Saving exception"
+ * row (an income or a transfer). A row's switch is off and disabled where it can't matter (see
  * [TradeUiState.showBudgetExempt]), and on and disabled for a subcategory or subaccount that is a
  * parent exception (see [TradeUiState.budgetExemptLocked]).
  */
 @Composable
-private fun ExemptRows(state: TradeUiState, onBudget: (Boolean) -> Unit, onSaving: (Boolean) -> Unit) {
-    if (state.type == CategoryKind.EXPENSE) {
-        SectionHeader(stringResource(R.string.trade_budget_exception), stringResource(R.string.trade_budget_exception_info)) {
-            SectionSwitch(
-                checked = state.effectiveBudgetExempt,
-                onCheckedChange = onBudget,
-                enabled = state.showBudgetExempt && !state.budgetExemptLocked,
-            )
-        }
-    } else {
-        SectionHeader(stringResource(R.string.trade_saving_exception), stringResource(R.string.trade_saving_exception_info)) {
-            SectionSwitch(
-                checked = state.effectiveSavingExempt,
-                onCheckedChange = onSaving,
-                enabled = state.showSavingExempt && !state.savingExemptLocked,
-            )
-        }
+private fun BudgetExemptRow(state: TradeUiState, onChange: (Boolean) -> Unit) {
+    SectionHeader(stringResource(R.string.trade_budget_exception), stringResource(R.string.trade_budget_exception_info)) {
+        SectionSwitch(
+            checked = state.effectiveBudgetExempt,
+            onCheckedChange = onChange,
+            enabled = state.showBudgetExempt && !state.budgetExemptLocked,
+        )
+    }
+    Spacer(Modifier.height(12.dp))
+}
+
+@Composable
+private fun SavingExemptRow(state: TradeUiState, onChange: (Boolean) -> Unit) {
+    SectionHeader(stringResource(R.string.trade_saving_exception), stringResource(R.string.trade_saving_exception_info)) {
+        SectionSwitch(
+            checked = state.effectiveSavingExempt,
+            onCheckedChange = onChange,
+            enabled = state.showSavingExempt && !state.savingExemptLocked,
+        )
     }
     Spacer(Modifier.height(12.dp))
 }
@@ -514,11 +531,12 @@ private fun AccountDropdown(
 }
 
 /**
- * A transfer's optional "From budget", styled like [AccountDropdown]: tapping it opens [BudgetSheet].
- * [selected] is the transfer's category; a budget removed since still shows by that category's name.
+ * A transfer's optional "From budget" / "To budget", styled like [AccountDropdown]: tapping it opens
+ * [BudgetSheet]. [selected] is the budget's category; a budget removed since still shows by its name.
  */
 @Composable
 private fun BudgetDropdown(
+    label: String,
     budgets: List<BudgetWithProgress>,
     selected: CategoryEntity?,
     onSelect: (Long?) -> Unit,
@@ -526,7 +544,7 @@ private fun BudgetDropdown(
     var open by remember { mutableStateOf(false) }
     val budget = budgets.find { it.categoryId == selected?.id }
     Column {
-        Text(stringResource(R.string.trade_from_budget_label), style = MaterialTheme.typography.labelLarge)
+        Text(label, style = MaterialTheme.typography.labelLarge)
         Row(
             modifier = Modifier
                 .fillMaxWidth()

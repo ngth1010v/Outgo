@@ -58,6 +58,7 @@
     <string name="trade_from_account_label">From account</string>
     <string name="trade_to_account_label">To account</string>
     <string name="trade_from_budget_label">From budget (optional)</string>
+    <string name="trade_to_budget_label">To budget (optional)</string>
     <string name="trade_no_budget">None</string>
     <string name="trade_note_hint">Note</string>
     <string name="trade_save">SAVE</string>

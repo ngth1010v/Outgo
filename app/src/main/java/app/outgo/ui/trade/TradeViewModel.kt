@@ -46,6 +46,8 @@ data class TradeUiState(
     /** As picked; saved only while its chip shows, see [showBudgetExempt] / [showSavingExempt]. */
     val budgetExempt: Boolean = false,
     val savingExempt: Boolean = false,
+    /** A transfer's "To budget" category, as picked; saved only while [showToBudget]. */
+    val toBudget: CategoryEntity? = null,
 ) {
     val isEditing: Boolean get() = editingTradeId != null
     val picker: CategoryPicker get() = pickers[type] ?: CategoryPicker(emptyList(), emptyList())
@@ -67,8 +69,8 @@ data class TradeUiState(
     val budgetOptions: List<BudgetWithProgress>
         get() = budgets.filter { it.enabled || it.categoryId == selectedCategory?.id }
 
-    /** The category whose budgets an expense counts in; a budget exception is for expenses only. */
-    val budgetCategory: CategoryEntity? get() = selectedCategory.takeIf { type == CategoryKind.EXPENSE }
+    /** The category whose budgets the trade counts in: an expense's, or a transfer's "From budget". */
+    val budgetCategory: CategoryEntity? get() = selectedCategory.takeIf { type == CategoryKind.EXPENSE || isTransfer }
 
     /** The account whose savings target the trade counts toward: an income's, or a transfer's "To". */
     val savingAccount: AccountEntity? get() = when (type) {
@@ -90,6 +92,20 @@ data class TradeUiState(
     /** The saving exception switch can be on when the account is a savings account (or it already is on). */
     val showSavingExempt: Boolean
         get() = savingAccount?.let { savingExempt || savingExemptLocked || it.accountType == AccountType.SAVINGS } ?: false
+
+    /**
+     * A transfer's "To budget" shows when what comes in doesn't count as savings: the "To" account
+     * isn't a savings account, or the transfer is a saving exception.
+     */
+    val showToBudget: Boolean
+        get() = isTransfer && selectedToAccount?.let { it.accountType != AccountType.SAVINGS || effectiveSavingExempt } == true
+
+    /** "To budget" choices: like [budgetOptions], minus the "From budget" (a budget can't top itself up). */
+    val toBudgetOptions: List<BudgetWithProgress>
+        get() = budgets.filter { (it.enabled || it.categoryId == toBudget?.id) && it.categoryId != selectedCategory?.id }
+
+    /** The "To budget" the transfer is saved with. */
+    val effectiveToBudget: CategoryEntity? get() = toBudget?.takeIf { showToBudget && it.id != selectedCategory?.id }
 
     /** What the switches show and the trade is saved with. */
     val effectiveBudgetExempt: Boolean get() = showBudgetExempt && (budgetExempt || budgetExemptLocked)
@@ -164,6 +180,7 @@ class TradeViewModel(
                 locked = trade.offsetMonth != null,
                 budgetExempt = trade.budgetExempt,
                 savingExempt = trade.savingExempt,
+                toBudget = trade.toCategoryId?.let { id -> categoryRepository.findById(id) },
             )
         }
     }
@@ -185,7 +202,7 @@ class TradeViewModel(
 
     fun onTypeChange(type: Int) {
         if (type == _state.value.type) return
-        _state.update { it.copy(type = type, selectedCategory = null, selectedParentCategory = null) }
+        _state.update { it.copy(type = type, selectedCategory = null, selectedParentCategory = null, toBudget = null) }
         if (type != TradeType.TRANSFER) {
             viewModelScope.launch { loadPicker(type) }
         }
@@ -211,6 +228,17 @@ class TradeViewModel(
         }
         viewModelScope.launch {
             categoryRepository.findById(categoryId)?.let { category -> _state.update { it.copy(selectedCategory = category) } }
+        }
+    }
+
+    /** A transfer's "To budget": the budget's category id, or null for none. */
+    fun onToBudgetSelected(categoryId: Long?) {
+        if (categoryId == null) {
+            _state.update { it.copy(toBudget = null) }
+            return
+        }
+        viewModelScope.launch {
+            categoryRepository.findById(categoryId)?.let { category -> _state.update { it.copy(toBudget = category) } }
         }
     }
 
@@ -265,6 +293,7 @@ class TradeViewModel(
             note = s.note,
             budgetExempt = s.effectiveBudgetExempt,
             savingExempt = s.effectiveSavingExempt,
+            toCategoryId = s.effectiveToBudget?.id,
         )
         viewModelScope.launch {
             _state.update { it.copy(isSaving = true) }
@@ -310,6 +339,7 @@ class TradeViewModel(
                 type = CategoryKind.EXPENSE,
                 budgetExempt = false,
                 savingExempt = false,
+                toBudget = null,
             )
         }
         viewModelScope.launch { loadPickers() }

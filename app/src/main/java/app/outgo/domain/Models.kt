@@ -11,6 +11,7 @@ data class TradeDraft(
     val note: String?,
     val budgetExempt: Boolean = false,
     val savingExempt: Boolean = false,
+    val toCategoryId: Long? = null, // on a TradeType.TRANSFER, the optional "To budget"'s category
 )
 
 /** The two rows of quick-pick categories shown on the Trade screen. */

@@ -54,6 +54,8 @@ data class BudgetWithProgress(
     val sortOrder: Int,
     val spent: Long,
     val prevSpent: Long,
+    /** That month's top-ups ("To budget" transfers), its subcategories' included; added to the limit. */
+    val funded: Long,
     val categoryName: String?,
     val categoryIconId: Long?,
     val categoryColor: Int?,
@@ -70,8 +72,8 @@ data class BudgetWithProgress(
     /** Offset carried in from earlier months (negative: overspend taken off). Filled by BudgetRepository. */
     val carry: Long,
 ) {
-    /** This month's limit after the carried offset. */
-    val effectiveLimit: Long get() = (limitAmount ?: 0L) + carry
+    /** This month's limit after the carried offset and the top-ups. */
+    val effectiveLimit: Long get() = (limitAmount ?: 0L) + carry + funded
     val displayName: String get() = if (name != null) name else categoryName.orEmpty()
     val displayIconId: Long? get() = iconId ?: categoryIconId
 }
