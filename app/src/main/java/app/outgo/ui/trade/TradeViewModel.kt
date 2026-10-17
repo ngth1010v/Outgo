@@ -69,8 +69,11 @@ data class TradeUiState(
     val budgetOptions: List<BudgetWithProgress>
         get() = budgets.filter { it.enabled || it.categoryId == selectedCategory?.id }
 
-    /** The category whose budgets the trade counts in: an expense's, or a transfer's "From budget". */
-    val budgetCategory: CategoryEntity? get() = selectedCategory.takeIf { type == CategoryKind.EXPENSE || isTransfer }
+    /**
+     * The category whose budgets an expense counts in. A budget exception is for expenses only: a
+     * transfer's "From budget" always counts, so a transfer is always saved with it off.
+     */
+    val budgetCategory: CategoryEntity? get() = selectedCategory.takeIf { type == CategoryKind.EXPENSE }
 
     /** The account whose savings target the trade counts toward: an income's, or a transfer's "To". */
     val savingAccount: AccountEntity? get() = when (type) {

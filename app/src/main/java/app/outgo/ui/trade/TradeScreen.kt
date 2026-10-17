@@ -266,7 +266,6 @@ private fun TradeForm(
                         onSelect = viewModel::onBudgetSelected,
                     )
                     Spacer(Modifier.height(16.dp))
-                    if (state.selectedCategory != null) BudgetExemptRow(state, viewModel::onBudgetExemptChange)
 
                     AccountDropdown(
                         label = stringResource(R.string.trade_to_account_label),
@@ -391,7 +390,7 @@ private fun ExpenseIncomeToggle(type: Int, onTypeChange: (Int) -> Unit, enabled:
 }
 
 /**
- * The trade's "Budget exception" row (an expense, or a transfer's "From budget") and "Saving exception"
+ * The trade's "Budget exception" row (an expense only) and "Saving exception"
  * row (an income or a transfer). A row's switch is off and disabled where it can't matter (see
  * [TradeUiState.showBudgetExempt]), and on and disabled for a subcategory or subaccount that is a
  * parent exception (see [TradeUiState.budgetExemptLocked]).

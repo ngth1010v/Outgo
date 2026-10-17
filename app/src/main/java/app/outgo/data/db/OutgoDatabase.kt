@@ -48,7 +48,7 @@ import app.outgo.domain.IconKind
         BudgetMonthEntity::class,
         SavingsMonthEntity::class,
     ],
-    version = 18,
+    version = 19,
     exportSchema = true,
 )
 abstract class OutgoDatabase : RoomDatabase() {
@@ -62,7 +62,7 @@ abstract class OutgoDatabase : RoomDatabase() {
 
     companion object {
         const val FILE_NAME = "outgo.sqlite"
-        const val SCHEMA_VERSION = 18
+        const val SCHEMA_VERSION = 19
 
         // "OUTO" packed into 4 bytes, stamped once via PRAGMA application_id so a
         // restore can reject a file that isn't an Outgo backup before touching real data.
@@ -256,11 +256,19 @@ abstract class OutgoDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_18_19 = object : Migration(18, 19) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Transfers no longer take a budget exception. trg_trade_au moves each one's amount
+                // back out of category_month_stat.exempt_total, so it counts in its "From budget" again.
+                db.execSQL("UPDATE trade SET budget_exempt = 0 WHERE type = 4 AND budget_exempt = 1")
+            }
+        }
+
         fun build(context: Context): OutgoDatabase =
             Room.databaseBuilder(context.applicationContext, OutgoDatabase::class.java, FILE_NAME)
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
                 .addCallback(OutgoCallback)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19)
                 .build()
     }
 }
