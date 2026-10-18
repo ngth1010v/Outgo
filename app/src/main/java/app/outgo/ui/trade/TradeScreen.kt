@@ -489,7 +489,7 @@ private fun CategoryPickerSection(
 private fun CategoryCell(category: CategoryEntity, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) =
     PickCell(category.name, category.iconId, category.color, selected, onClick, modifier, exception = category.isExempt)
 
-/** The account field: tapping it opens [AccountSheet]. A subaccount named unlike its parent shows as "parent / sub". */
+/** The account field: tapping it opens [AccountSheet]. Shows only the picked (sub)account's own name. */
 @Composable
 private fun AccountDropdown(
     accounts: List<AccountEntity>,
@@ -498,7 +498,6 @@ private fun AccountDropdown(
     label: String = stringResource(R.string.trade_account_label),
 ) {
     var open by remember { mutableStateOf(false) }
-    val parent = accounts.find { it.id == selectedAccount?.parentId }
     Column {
         Text(label, style = MaterialTheme.typography.labelLarge)
         Row(
@@ -514,8 +513,7 @@ private fun AccountDropdown(
                 if (selectedAccount?.isExempt == true) ExceptionBadge(24.dp)
             }
             Spacer(Modifier.width(8.dp))
-            val name = selectedAccount?.name ?: "—"
-            Text(if (parent == null || parent.name == name) name else "${parent.name} / $name", modifier = Modifier.weight(1f))
+            Text(selectedAccount?.name ?: "—", modifier = Modifier.weight(1f))
             Icon(painterResource(R.drawable.ph_caret_down), contentDescription = null)
         }
     }

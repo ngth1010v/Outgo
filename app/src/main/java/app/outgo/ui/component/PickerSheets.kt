@@ -51,6 +51,8 @@ import app.outgo.ui.LocalAppContainer
 fun PickCell(
     name: String, iconId: Long?, color: Int, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier,
     exception: Boolean = false,
+    /** Wrap a long name onto more lines instead of cutting it at one. */
+    wrap: Boolean = false,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -83,7 +85,7 @@ fun PickCell(
         Text(
             name,
             style = MaterialTheme.typography.labelSmall,
-            maxLines = 1,
+            maxLines = if (wrap) Int.MAX_VALUE else 1,
             textAlign = TextAlign.Center,
         )
     }
@@ -99,7 +101,7 @@ fun AccountSheet(accounts: List<AccountEntity>, selectedId: Long?, onSelect: (Ac
         id = { it.id },
         name = { it.name },
         selectedId = selectedId,
-        cell = { item, selected, onClick, modifier -> PickCell(item.name, item.iconId, item.color, selected, onClick, modifier, exception = item.isExempt) },
+        cell = { item, selected, onClick, modifier -> PickCell(item.name, item.iconId, item.color, selected, onClick, modifier, exception = item.isExempt, wrap = true) },
         onSelect = onSelect,
         onDismiss = onDismiss,
     )
@@ -139,7 +141,7 @@ fun BudgetSheet(
         id = { it.id },
         name = { it.name },
         selectedId = selectedId,
-        cell = { item, selected, onClick, modifier -> PickCell(item.name, item.iconId, item.color, selected, onClick, modifier) },
+        cell = { item, selected, onClick, modifier -> PickCell(item.name, item.iconId, item.color, selected, onClick, modifier, wrap = true) },
         onSelect = { onSelect(it.id) },
         onDismiss = onDismiss,
         header = {
