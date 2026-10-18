@@ -63,6 +63,11 @@
     <string name="trade_note_hint">Note</string>
     <string name="trade_save">SAVE</string>
     <string name="trade_saved">Saved</string>
+    <string name="trade_error_amount">Enter an amount</string>
+    <string name="trade_error_category">Choose a category</string>
+    <string name="trade_error_account">Choose an account</string>
+    <string name="trade_error_to_account">Choose the account to transfer to</string>
+    <string name="trade_error_self_transfer_budget">A transfer into the same account needs a From budget or a To budget</string>
     <string name="trade_undo">UNDO</string>
     <string name="trade_select_category_title">Select a category</string>
     <string name="trade_search_category_hint">Search categories</string>

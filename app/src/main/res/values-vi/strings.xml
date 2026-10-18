@@ -59,6 +59,11 @@
     <string name="trade_note_hint">Ghi chú</string>
     <string name="trade_save">LƯU</string>
     <string name="trade_saved">Đã lưu</string>
+    <string name="trade_error_amount">Nhập số tiền</string>
+    <string name="trade_error_category">Chọn một danh mục</string>
+    <string name="trade_error_account">Chọn một tài khoản</string>
+    <string name="trade_error_to_account">Chọn tài khoản nhận</string>
+    <string name="trade_error_self_transfer_budget">Chuyển vào cùng một tài khoản cần chọn Từ ngân sách hoặc Vào ngân sách</string>
     <string name="trade_undo">HOÀN TÁC</string>
     <string name="trade_select_category_title">Chọn danh mục</string>
     <string name="trade_search_category_hint">Tìm danh mục</string>

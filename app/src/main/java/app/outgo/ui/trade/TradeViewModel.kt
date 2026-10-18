@@ -48,18 +48,28 @@ data class TradeUiState(
     val savingExempt: Boolean = false,
     /** A transfer's "To budget" category, as picked; saved only while [showToBudget]. */
     val toBudget: CategoryEntity? = null,
+    /** Set by a save tapped with [errors]: from then on the form marks them, live, until it resets. */
+    val showErrors: Boolean = false,
+    /** Counts saves tapped with [errors]; each new value shakes the save button once. */
+    val invalidSaveCount: Int = 0,
 ) {
     val isEditing: Boolean get() = editingTradeId != null
     val picker: CategoryPicker get() = pickers[type] ?: CategoryPicker(emptyList(), emptyList())
     val isTransfer: Boolean get() = type == TradeType.TRANSFER
-    val isValid: Boolean
-        get() = amount > 0 && selectedAccountId != null && if (isTransfer) {
-            selectedToAccountId != null &&
-                // Into the same account it only moves budget, so it needs a "From" or "To" budget.
-                (!isSelfTransfer || selectedCategory != null || effectiveToBudget != null)
-        } else {
-            selectedCategory != null
+    /** What keeps the trade from being saved. */
+    val errors: Set<TradeError>
+        get() = buildSet {
+            if (amount <= 0) add(TradeError.AMOUNT)
+            if (!isTransfer && selectedCategory == null) add(TradeError.CATEGORY)
+            if (selectedAccountId == null) add(TradeError.ACCOUNT)
+            if (isTransfer && selectedToAccountId == null) add(TradeError.TO_ACCOUNT)
+            // Into the same account it only moves budget, so it needs a "From" or "To" budget.
+            if (isSelfTransfer && selectedCategory == null && effectiveToBudget == null) add(TradeError.SELF_TRANSFER_BUDGET)
         }
+    val isValid: Boolean get() = errors.isEmpty()
+
+    /** [errors] as the form marks them: none until a save was tapped with some. */
+    val shownErrors: Set<TradeError> get() = if (showErrors) errors else emptySet()
     val selectedAccount: AccountEntity? get() = accounts.find { it.id == selectedAccountId }
     val selectedToAccount: AccountEntity? get() = accounts.find { it.id == selectedToAccountId }
 
@@ -123,6 +133,9 @@ data class TradeUiState(
     val effectiveBudgetExempt: Boolean get() = showBudgetExempt && (budgetExempt || budgetExemptLocked)
     val effectiveSavingExempt: Boolean get() = showSavingExempt && (savingExempt || savingExemptLocked)
 }
+
+/** A reason the trade can't be saved, marked on its field. */
+enum class TradeError { AMOUNT, CATEGORY, ACCOUNT, TO_ACCOUNT, SELF_TRANSFER_BUDGET }
 
 sealed interface TradeEvent {
     data class Saved(val tradeId: Long) : TradeEvent
@@ -214,7 +227,8 @@ class TradeViewModel(
 
     fun onTypeChange(type: Int) {
         if (type == _state.value.type) return
-        _state.update { it.copy(type = type, selectedCategory = null, selectedParentCategory = null, toBudget = null) }
+        // Another type is a fresh form: its errors wait for its own save.
+        _state.update { it.copy(type = type, selectedCategory = null, selectedParentCategory = null, toBudget = null, showErrors = false) }
         if (type != TradeType.TRANSFER) {
             viewModelScope.launch { loadPicker(type) }
         }
@@ -293,7 +307,11 @@ class TradeViewModel(
 
     fun save() {
         val s = _state.value
-        if (!s.isValid || s.isSaving || s.locked) return
+        if (s.isSaving || s.locked) return
+        if (!s.isValid) {
+            _state.update { it.copy(showErrors = true, invalidSaveCount = it.invalidSaveCount + 1) }
+            return
+        }
         val draft = TradeDraft(
             type = s.type,
             amount = s.amount,
@@ -352,6 +370,7 @@ class TradeViewModel(
                 budgetExempt = false,
                 savingExempt = false,
                 toBudget = null,
+                showErrors = false,
             )
         }
         viewModelScope.launch { loadPickers() }

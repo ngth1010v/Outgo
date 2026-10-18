@@ -2,7 +2,12 @@ package app.outgo.ui.trade
 
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.keyframes
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -126,6 +131,22 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit, visible: Boolean = t
     val cancel = if (state.isEditing) rememberDiscardGuard(initialFields != null && fields != initialFields, onClose) else onClose
     val savedLabel = stringResource(R.string.trade_saved)
     val undoLabel = stringResource(R.string.trade_undo)
+    // The save button's sideways shake, in dp, played once per save tapped with errors.
+    val saveShake = remember { Animatable(0f) }
+    LaunchedEffect(state.invalidSaveCount) {
+        if (state.invalidSaveCount == 0) return@LaunchedEffect
+        saveShake.snapTo(0f)
+        saveShake.animateTo(
+            0f,
+            keyframes {
+                durationMillis = 250
+                -5f at 40
+                5f at 90
+                -3f at 140
+                3f at 190
+            },
+        )
+    }
 
     LaunchedEffect(viewModel) {
         viewModel.events.collectLatest { event ->
@@ -155,21 +176,22 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit, visible: Boolean = t
             ExpenseIncomeToggle(type = state.type, onTypeChange = viewModel::onTypeChange, enabled = !state.isEditing)
             Box {
                 @Composable
-                fun form(shown: TradeUiState, modifier: Modifier) = TradeForm(
+                fun form(shown: TradeUiState, modifier: Modifier, shake: () -> Float = { 0f }) = TradeForm(
                     state = shown,
                     viewModel = viewModel,
                     onSeeAll = { showAllCategories = true },
                     onClose = cancel,
                     onDelete = { showDeleteConfirm = true },
+                    saveShake = shake,
                     modifier = modifier,
                 )
-                form(state, Modifier.swipeShift(typeSwipe))
+                form(state, Modifier.swipeShift(typeSwipe)) { saveShake.value }
                 // The neighbor types' forms, as the type switch would show them.
                 if (typeSwipe.moving) {
                     listOf(-1, 1).forEach { page ->
                         TRADE_TYPES.getOrNull(TRADE_TYPES.indexOf(state.type) + page)?.let { type ->
                             form(
-                                state.copy(type = type, selectedCategory = null, selectedParentCategory = null),
+                                state.copy(type = type, selectedCategory = null, selectedParentCategory = null, showErrors = false),
                                 Modifier.swipeNeighbor().swipeShift(typeSwipe, page),
                             )
                         }
@@ -213,8 +235,13 @@ private fun TradeForm(
     onSeeAll: () -> Unit,
     onClose: () -> Unit,
     onDelete: () -> Unit,
+    saveShake: () -> Float,
     modifier: Modifier = Modifier,
 ) {
+    val errors = state.shownErrors
+    @Composable
+    fun errorFor(error: TradeError, message: Int): String? = if (error in errors) stringResource(message) else null
+    val selfTransferBudgetError = errorFor(TradeError.SELF_TRANSFER_BUDGET, R.string.trade_error_self_transfer_budget)
     Column(modifier) {
         Spacer(Modifier.height(16.dp))
 
@@ -228,9 +255,11 @@ private fun TradeForm(
                     isTransfer = state.isTransfer,
                     modifier = Modifier.padding(vertical = 8.dp),
                 )
+                ErrorText(errorFor(TradeError.AMOUNT, R.string.trade_error_amount), centered = true)
 
                 if (!state.isTransfer) {
                     SelectedCategoryChip(state.selectedParentCategory, state.selectedCategory)
+                    ErrorText(errorFor(TradeError.CATEGORY, R.string.trade_error_category), centered = true)
                     Spacer(Modifier.height(8.dp))
 
                     CategoryPickerSection(
@@ -255,15 +284,20 @@ private fun TradeForm(
                     accounts = state.accounts,
                     selectedAccount = state.selectedAccount,
                     onSelect = { viewModel.onAccountSelected(it.id) },
+                    error = errorFor(TradeError.ACCOUNT, R.string.trade_error_account),
                 )
                 Spacer(Modifier.height(16.dp))
 
                 if (state.isTransfer) {
+                    // A self-transfer missing both budgets marks both; the message goes under "To budget"
+                    // when it shows (it always does on a self-transfer), else here.
                     BudgetDropdown(
                         label = stringResource(R.string.trade_from_budget_label),
                         budgets = state.budgetOptions,
                         selected = state.selectedCategory,
                         onSelect = viewModel::onBudgetSelected,
+                        isError = selfTransferBudgetError != null,
+                        error = selfTransferBudgetError.takeUnless { state.showToBudget },
                     )
                     Spacer(Modifier.height(16.dp))
 
@@ -272,6 +306,7 @@ private fun TradeForm(
                         accounts = state.accounts,
                         selectedAccount = state.selectedToAccount,
                         onSelect = { viewModel.onToAccountSelected(it.id) },
+                        error = errorFor(TradeError.TO_ACCOUNT, R.string.trade_error_to_account),
                     )
                     Spacer(Modifier.height(16.dp))
                     SavingExemptRow(state, viewModel::onSavingExemptChange)
@@ -282,6 +317,8 @@ private fun TradeForm(
                             budgets = state.toBudgetOptions,
                             selected = state.effectiveToBudget,
                             onSelect = viewModel::onToBudgetSelected,
+                            isError = selfTransferBudgetError != null,
+                            error = selfTransferBudgetError,
                         )
                         Spacer(Modifier.height(16.dp))
                     }
@@ -355,10 +392,14 @@ private fun TradeForm(
             Spacer(Modifier.height(16.dp))
         }
 
+        // Always tappable: a save with errors marks them and shakes the button instead.
         androidx.compose.material3.Button(
             onClick = viewModel::save,
-            enabled = state.isValid && !state.isSaving,
-            modifier = Modifier.fillMaxWidth().height(52.dp),
+            enabled = !state.isSaving,
+            modifier = Modifier
+                .offset { IntOffset(saveShake().dp.roundToPx(), 0) }
+                .fillMaxWidth()
+                .height(52.dp),
         ) {
             Text(stringResource(R.string.trade_save), fontWeight = FontWeight.Bold)
         }
@@ -489,13 +530,35 @@ private fun CategoryPickerSection(
 private fun CategoryCell(category: CategoryEntity, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) =
     PickCell(category.name, category.iconId, category.color, selected, onClick, modifier, exception = category.isExempt)
 
-/** The account field: tapping it opens [AccountSheet]. Shows only the picked (sub)account's own name. */
+/** A field's red error message under it; nothing when [message] is null. */
+@Composable
+private fun ErrorText(message: String?, centered: Boolean = false) {
+    if (message == null) return
+    Text(
+        message,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.error,
+        textAlign = if (centered) TextAlign.Center else TextAlign.Start,
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp, start = if (centered) 0.dp else 4.dp),
+    )
+}
+
+/** A dropdown field's border: red while it has an error. */
+@Composable
+private fun fieldBorderColor(isError: Boolean) =
+    if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline
+
+/**
+ * The account field: tapping it opens [AccountSheet]. Shows only the picked (sub)account's own name.
+ * An [error] turns the border red and shows under the field.
+ */
 @Composable
 private fun AccountDropdown(
     accounts: List<AccountEntity>,
     selectedAccount: AccountEntity?,
     onSelect: (AccountEntity) -> Unit,
     label: String = stringResource(R.string.trade_account_label),
+    error: String? = null,
 ) {
     var open by remember { mutableStateOf(false) }
     Column {
@@ -503,7 +566,7 @@ private fun AccountDropdown(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
+                .border(1.dp, fieldBorderColor(error != null), RoundedCornerShape(8.dp))
                 .clickable { open = true }
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -516,6 +579,7 @@ private fun AccountDropdown(
             Text(selectedAccount?.name ?: "—", modifier = Modifier.weight(1f))
             Icon(painterResource(R.drawable.ph_caret_down), contentDescription = null)
         }
+        ErrorText(error)
     }
     if (open) {
         AccountSheet(
@@ -530,6 +594,7 @@ private fun AccountDropdown(
 /**
  * A transfer's optional "From budget" / "To budget", styled like [AccountDropdown]: tapping it opens
  * [BudgetSheet]. [selected] is the budget's category; a budget removed since still shows by its name.
+ * [isError] turns the border red; [error], if any, shows under the field.
  */
 @Composable
 private fun BudgetDropdown(
@@ -537,6 +602,8 @@ private fun BudgetDropdown(
     budgets: List<BudgetWithProgress>,
     selected: CategoryEntity?,
     onSelect: (Long?) -> Unit,
+    isError: Boolean = false,
+    error: String? = null,
 ) {
     var open by remember { mutableStateOf(false) }
     val budget = budgets.find { it.categoryId == selected?.id }
@@ -545,7 +612,7 @@ private fun BudgetDropdown(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
+                .border(1.dp, fieldBorderColor(isError), RoundedCornerShape(8.dp))
                 .clickable { open = true }
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -561,6 +628,7 @@ private fun BudgetDropdown(
             )
             Icon(painterResource(R.drawable.ph_caret_down), contentDescription = null)
         }
+        ErrorText(error)
     }
     if (open) {
         BudgetSheet(
