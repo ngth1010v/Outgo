@@ -54,12 +54,17 @@ data class TradeUiState(
     val isTransfer: Boolean get() = type == TradeType.TRANSFER
     val isValid: Boolean
         get() = amount > 0 && selectedAccountId != null && if (isTransfer) {
-            selectedToAccountId != null && selectedToAccountId != selectedAccountId
+            selectedToAccountId != null &&
+                // Into the same account it only moves budget, so it needs a "From" or "To" budget.
+                (!isSelfTransfer || selectedCategory != null || effectiveToBudget != null)
         } else {
             selectedCategory != null
         }
     val selectedAccount: AccountEntity? get() = accounts.find { it.id == selectedAccountId }
     val selectedToAccount: AccountEntity? get() = accounts.find { it.id == selectedToAccountId }
+
+    /** A transfer into its own "From" account: no balance moves, only budget (see [isValid]). */
+    val isSelfTransfer: Boolean get() = isTransfer && selectedToAccountId != null && selectedToAccountId == selectedAccountId
 
     /**
      * A transfer's "From budget" choices: the enabled budgets, plus the one an edited transfer
@@ -85,8 +90,12 @@ data class TradeUiState(
     /** A parent budget exception subcategory: its expenses are always budget exceptions. */
     val budgetExemptLocked: Boolean get() = budgetCategory?.isExempt == true
 
-    /** A parent saving exception subaccount: what comes into it is always a saving exception. */
-    val savingExemptLocked: Boolean get() = savingAccount?.isExempt == true
+    /**
+     * Always a saving exception: what comes into a parent saving exception subaccount, and a savings
+     * account's transfer to itself (which only moves budget, and needs the exception for "To budget").
+     */
+    val savingExemptLocked: Boolean
+        get() = savingAccount?.let { it.isExempt || (isSelfTransfer && it.accountType == AccountType.SAVINGS) } == true
 
     /** The budget exception switch can be on when the category or its parent has a budget (or it already is on). */
     val showBudgetExempt: Boolean
