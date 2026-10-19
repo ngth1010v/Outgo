@@ -215,6 +215,20 @@ class TradeRepository(private val tradeDao: TradeDao) {
         )
     }
 
+    /** A page of the History tab's list after [before] (null: the first); see TradeDao.historyPage. */
+    suspend fun historyPage(query: HistoryQuery, before: TradeEntity?, limit: Int = 50): List<TradeEntity> =
+        withContext(Dispatchers.IO) {
+            tradeDao.historyPage(
+                query.types, before?.occurredAt ?: Long.MAX_VALUE, before?.id ?: Long.MAX_VALUE,
+                query.accountId, query.eitherAccount, query.toAccountId, query.categoryId, query.parentId, query.automatic,
+                query.fromMillis, query.toMillis,
+                query.noteContains?.takeIf { it.isNotBlank() }?.let { "%" + likeEscape(it.trim()) + "%" },
+                query.minAmount, query.maxAmount, limit,
+            )
+        }
+
+    private fun likeEscape(text: String) = text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
     suspend fun firstPageForAccount(accountId: Long, limit: Int = 50): List<TradeEntity> =
         withContext(Dispatchers.IO) { tradeDao.firstPageForAccount(accountId, limit) }
 
@@ -280,3 +294,19 @@ class TradeRepository(private val tradeDao: TradeDao) {
         return daily.map { running += it; running }
     }
 }
+
+/** What the History tab's list shows; see TradeDao.historyPage. Null fields match everything. */
+data class HistoryQuery(
+    val types: List<Int>,
+    val accountId: Long? = null,
+    val eitherAccount: Boolean = false,
+    val toAccountId: Long? = null,
+    val categoryId: Long? = null,
+    val parentId: Long? = null,
+    val automatic: Boolean? = null,
+    val fromMillis: Long? = null,
+    val toMillis: Long? = null,
+    val noteContains: String? = null,
+    val minAmount: Long? = null,
+    val maxAmount: Long? = null,
+)

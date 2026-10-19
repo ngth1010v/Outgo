@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import app.outgo.data.backup.BackupManager
 import app.outgo.data.repo.SettingRepository
 import app.outgo.util.Money
+import app.outgo.util.NumberStyle
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -24,6 +25,13 @@ class SettingViewModel(
     /** Currency symbol appended to every amount. */
     val currency: StateFlow<String> = settingRepository.observeCurrency()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Money.symbol)
+
+    val numberStyle: StateFlow<NumberStyle> = settingRepository.observeNumberStyle()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Money.style)
+
+    fun setNumberStyle(style: NumberStyle) {
+        viewModelScope.launch { settingRepository.setNumberStyle(style) }
+    }
 
     fun setCurrency(symbol: String) {
         viewModelScope.launch { settingRepository.setCurrency(symbol) }

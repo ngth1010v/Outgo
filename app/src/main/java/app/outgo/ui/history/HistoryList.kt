@@ -45,25 +45,39 @@ import app.outgo.util.formatTime
 
 /** Day-grouped history list, shared by the History screen and the Home screen's inline section. */
 sealed interface HistoryListItem {
+    /** [type] is the day's one trade type, or [MIXED]: then [total] is what came in minus what went out. */
     data class Header(val dayLabel: String, val total: Long, val type: Int) : HistoryListItem
     data class Row(val trade: TradeEntity) : HistoryListItem
+
+    companion object {
+        const val MIXED = -1
+    }
 }
 
 internal fun buildHistoryItems(trades: List<TradeEntity>): List<HistoryListItem> {
     val out = mutableListOf<HistoryListItem>()
-    var headerIndex = -1
-    var lastDay: String? = null
-    for (trade in trades) {
-        val day = formatDayHeader(trade.occurredAt)
-        if (day != lastDay) {
-            headerIndex = out.size
-            out += HistoryListItem.Header(day, 0L, trade.type)
-            lastDay = day
+    val days = trades.map { formatDayHeader(it.occurredAt) }
+    var start = 0
+    while (start < trades.size) {
+        var end = start
+        while (end < trades.size && days[end] == days[start]) end++
+        val day = trades.subList(start, end)
+        val type = day.first().type
+        out += if (day.all { it.type == type }) {
+            HistoryListItem.Header(days[start], day.sumOf { it.amount }, type)
+        } else {
+            // Transfers only move money between accounts: they leave the day's net alone.
+            val net = day.sumOf {
+                when {
+                    it.type == TradeType.TRANSFER -> 0L
+                    TradeType.isCredit(it.type) -> it.amount
+                    else -> -it.amount
+                }
+            }
+            HistoryListItem.Header(days[start], net, HistoryListItem.MIXED)
         }
-        // The day total is only known once the day is fully consumed, so accumulate into the header in place.
-        val header = out[headerIndex] as HistoryListItem.Header
-        out[headerIndex] = header.copy(total = header.total + trade.amount)
-        out += HistoryListItem.Row(trade)
+        day.forEach { out += HistoryListItem.Row(it) }
+        start = end
     }
     return out
 }
@@ -132,10 +146,13 @@ internal fun HistoryItem(
             Text(
                 text = "(" + when (item.type) {
                     TradeType.TRANSFER -> Money.format(item.total)
+                    HistoryListItem.MIXED -> Money.formatSigned(item.total)
                     else -> (if (TradeType.isCredit(item.type)) "+" else "-") + Money.format(item.total)
                 } + ")",
                 style = labelStyle.copy(fontSize = labelStyle.fontSize * 0.8f, lineHeight = labelStyle.lineHeight * 0.8f),
                 color = when {
+                    item.type == HistoryListItem.MIXED ->
+                        if (item.total >= 0) app.outgo.ui.theme.IncomeGreen else app.outgo.ui.theme.ExpenseRed
                     item.type == TradeType.TRANSFER -> app.outgo.ui.theme.TransferBlue
                     TradeType.isCredit(item.type) -> app.outgo.ui.theme.IncomeGreen
                     else -> app.outgo.ui.theme.ExpenseRed

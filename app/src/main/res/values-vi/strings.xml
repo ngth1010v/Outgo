@@ -32,6 +32,7 @@
     <string name="history_filter">Bộ lọc</string>
     <string name="history_filter_none">Không lọc</string>
     <string name="history_filter_any">Tất cả</string>
+    <string name="history_filter_type">Loại</string>
     <string name="history_filter_account">Tài khoản</string>
     <string name="history_filter_category">Danh mục</string>
     <string name="history_filter_subcategory">Danh mục con</string>
@@ -42,6 +43,13 @@
     <string name="history_filter_budget">Ngân sách</string>
     <string name="history_filter_to">Đến tài khoản</string>
     <string name="history_filter_clear">Xóa bộ lọc</string>
+    <string name="history_filter_from_date">Từ ngày</string>
+    <string name="history_filter_to_date">Đến ngày</string>
+    <string name="history_filter_note">Ghi chú có chứa</string>
+    <string name="history_filter_min">Số tiền từ</string>
+    <string name="history_filter_max">Số tiền đến</string>
+    <string name="history_filter_since">Từ %1$s</string>
+    <string name="history_filter_until">Đến %1$s</string>
     <string name="nav_setting">Cài đặt</string>
 
     <string name="trade_expense">Chi</string>
@@ -59,6 +67,7 @@
     <string name="trade_note_hint">Ghi chú</string>
     <string name="trade_save">LƯU</string>
     <string name="trade_saved">Đã lưu</string>
+    <string name="trade_edit_title">Sửa giao dịch</string>
     <string name="trade_error_amount">Nhập số tiền</string>
     <string name="trade_error_category">Chọn một danh mục</string>
     <string name="trade_error_account">Chọn một tài khoản</string>
@@ -147,11 +156,11 @@
     <string name="category_section_general">Chung</string>
     <string name="category_section_budget">Ngân sách tháng</string>
     <string name="category_general_info">Hình thức và tên của danh mục.\n\n• Chọn icon: hình hiển thị trong danh sách, màn hình Thêm và biểu đồ.\n• Tên danh mục: tên hiển thị ở mọi nơi có danh mục này.\n• Màu sắc: màu của biểu tượng, thanh tiến độ và phần biểu đồ.</string>
-    <string name="category_budget_info">Hạn mức chi tiêu hằng tháng cho danh mục này. Chi tiêu ở các danh mục con cũng được tính. Mỗi tháng có cài đặt riêng: chọn tháng cạnh tiêu đề, mọi thay đổi được lưu ngay cho tháng đó. Tháng sau chưa có cài đặt riêng sẽ dùng cài đặt của tháng gần nhất trước nó; thay đổi một tháng đã qua chỉ ảnh hưởng tháng đó. Công tắc tắt ngân sách cho tháng đó mà không mất cài đặt.\n\n• Tổng các danh mục con (chỉ danh mục cha): hạn mức là tổng hạn mức của các danh mục con trong tháng đó, và tự cập nhật khi chúng thay đổi. Khi bật, không thể nhập hạn mức, phần vượt/chưa chi hết được ẩn và không áp dụng; chúng được giữ lại để dùng khi tắt.\n• Hạn mức mỗi tháng: số tiền bạn dự định chi trong tháng đó.\n• Vượt hạn mức: trừ vào: khi một tháng chi vượt, phần vượt bị trừ vào hạn mức tháng sau của ngân sách bạn chọn (ngân sách này hoặc ngân sách khác).\n• Chưa chi hết: cộng vào: khi một tháng chi chưa hết, phần dư được cộng vào hạn mức tháng sau của ngân sách bạn chọn. Nếu chọn Tài khoản, số tiền được chuyển thật: một giao dịch chuyển Từ tài khoản này Đến tài khoản khác, thực hiện lần đầu bạn mở ứng dụng vào tháng sau.</string>
+    <string name="category_budget_info">Hạn mức chi tiêu hằng tháng cho danh mục này. Chi tiêu ở các danh mục con cũng được tính. Mỗi tháng có cài đặt riêng: chọn tháng cạnh tiêu đề, thay đổi của từng tháng được lưu cùng lúc khi bấm Lưu. Tháng sau chưa có cài đặt riêng sẽ dùng cài đặt của tháng gần nhất trước nó; thay đổi một tháng đã qua chỉ ảnh hưởng tháng đó. Công tắc tắt ngân sách cho tháng đó mà không mất cài đặt.\n\n• Tổng các danh mục con (chỉ danh mục cha): hạn mức là tổng hạn mức của các danh mục con trong tháng đó, và tự cập nhật khi chúng thay đổi. Khi bật, không thể nhập hạn mức, phần vượt/chưa chi hết được ẩn và không áp dụng; chúng được giữ lại để dùng khi tắt.\n• Hạn mức mỗi tháng: số tiền bạn dự định chi trong tháng đó.\n• Vượt hạn mức: trừ vào: khi một tháng chi vượt, phần vượt bị trừ vào hạn mức tháng sau của ngân sách bạn chọn (ngân sách này hoặc ngân sách khác).\n• Chưa chi hết: cộng vào: khi một tháng chi chưa hết, phần dư được cộng vào hạn mức tháng sau của ngân sách bạn chọn. Nếu chọn Tài khoản, số tiền được chuyển thật: một giao dịch chuyển Từ tài khoản này Đến tài khoản khác, thực hiện lần đầu bạn mở ứng dụng vào tháng sau.</string>
     <string name="category_parent_budget_exception">Ngoại lệ ngân sách danh mục cha</string>
     <string name="category_parent_budget_exception_info">Chi tiêu ở danh mục con này không được tính vào ngân sách của danh mục cha, ở mọi tháng (kể cả các tháng đã qua). Ngân sách riêng của danh mục con này vẫn tính, và các biểu đồ danh mục trong Phân tích không thay đổi.</string>
     <string name="balance_general_info">Thông tin cơ bản của tài khoản.\n\n• Chọn icon: hình hiển thị trong danh sách và trên giao dịch.\n• Thường / Tiết kiệm: tài khoản tiết kiệm giữ tiền để dành. Số dư của nó tách khỏi số tiền bạn có thể tiêu, và có thể đặt mục tiêu hằng tháng.\n• Tên tài khoản: tên hiển thị ở mọi nơi có tài khoản này.\n• Số dư hiện tại: số tiền đang có trong tài khoản. Khi đổi, ứng dụng ghi một điều chỉnh cho phần chênh lệch để lịch sử luôn đúng.\n• Màu sắc: màu của biểu tượng và đường biểu đồ.</string>
-    <string name="balance_savings_info">Mục tiêu hằng tháng cho số tiền cần bỏ vào tài khoản này. Chỉ tài khoản tiết kiệm mới có.\n\nMỗi tháng có mục tiêu riêng: chọn tháng cạnh tiêu đề, mọi thay đổi được lưu ngay cho tháng đó. Tháng sau chưa có mục tiêu riêng sẽ dùng mục tiêu của tháng gần nhất trước nó; thay đổi một tháng đã qua chỉ ảnh hưởng tháng đó.\n\n• Mục tiêu tiết kiệm hàng tháng: số tiền cần thêm trong tháng đó. Thu nhập và tiền chuyển vào tài khoản đều được tính.\n• Tổng các tài khoản con (chỉ tài khoản cha): mục tiêu là tổng mục tiêu của các tài khoản con trong tháng đó, và tự cập nhật khi chúng thay đổi. Khi bật, không thể nhập mục tiêu; số tiền bạn đã đặt được giữ lại để dùng khi tắt.</string>
+    <string name="balance_savings_info">Mục tiêu hằng tháng cho số tiền cần bỏ vào tài khoản này. Chỉ tài khoản tiết kiệm mới có.\n\nMỗi tháng có mục tiêu riêng: chọn tháng cạnh tiêu đề, thay đổi của từng tháng được lưu cùng lúc khi bấm Lưu. Tháng sau chưa có mục tiêu riêng sẽ dùng mục tiêu của tháng gần nhất trước nó; thay đổi một tháng đã qua chỉ ảnh hưởng tháng đó.\n\n• Mục tiêu tiết kiệm hàng tháng: số tiền cần thêm trong tháng đó. Thu nhập và tiền chuyển vào tài khoản đều được tính.\n• Tổng các tài khoản con (chỉ tài khoản cha): mục tiêu là tổng mục tiêu của các tài khoản con trong tháng đó, và tự cập nhật khi chúng thay đổi. Khi bật, không thể nhập mục tiêu; số tiền bạn đã đặt được giữ lại để dùng khi tắt.</string>
     <string name="balance_parent_saving_exception">Ngoại lệ tiết kiệm tài khoản cha</string>
     <string name="balance_parent_saving_exception_info">Tiền vào tài khoản con này (thu nhập, và chuyển khoản từ bên ngoài vào) không được tính vào mục tiêu tiết kiệm hằng tháng của tài khoản cha, ở mọi tháng (kể cả các tháng đã qua). Số dư vẫn bao gồm nó, và mục tiêu tiết kiệm riêng của tài khoản con này vẫn tính.</string>
     <string name="balance_privacy">Quyền riêng tư</string>
@@ -207,6 +216,7 @@
     <string name="setting_section_general">Chung</string>
     <string name="setting_language">Ngôn ngữ</string>
     <string name="setting_currency">Tiền tệ</string>
+    <string name="setting_number_format">Định dạng số</string>
     <string name="setting_currency_custom">Ký hiệu tự chọn</string>
     <string name="setting_currency_custom_hint">Chọn một mục ở trên, hoặc tự nhập ký hiệu rồi lưu.</string>
     <string name="currency_region_usd">Hoa Kỳ</string>

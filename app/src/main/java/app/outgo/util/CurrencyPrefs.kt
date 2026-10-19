@@ -11,6 +11,7 @@ import android.content.Context
  */
 object CurrencyPrefs {
     private const val KEY_CURRENCY = "currency"
+    private const val KEY_NUMBER_STYLE = "number_style"
 
     fun get(context: Context): String = context
         .getSharedPreferences(LocalePrefs.PREFS_NAME, Context.MODE_PRIVATE)
@@ -21,5 +22,15 @@ object CurrencyPrefs {
     fun set(context: Context, symbol: String) {
         context.getSharedPreferences(LocalePrefs.PREFS_NAME, Context.MODE_PRIVATE)
             .edit().putString(KEY_CURRENCY, symbol).apply()
+    }
+
+    /** Mirror of the number style, for the same first-frame reason as the symbol. */
+    fun getNumberStyle(context: Context): NumberStyle = NumberStyle.fromKey(
+        context.getSharedPreferences(LocalePrefs.PREFS_NAME, Context.MODE_PRIVATE).getString(KEY_NUMBER_STYLE, null),
+    )
+
+    fun setNumberStyle(context: Context, style: NumberStyle) {
+        context.getSharedPreferences(LocalePrefs.PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString(KEY_NUMBER_STYLE, style.key).apply()
     }
 }

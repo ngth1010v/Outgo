@@ -1,5 +1,6 @@
 package app.outgo.ui.home
 
+import app.outgo.util.Money
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
@@ -267,19 +268,20 @@ private fun pow10(power: Int): Long {
     return out
 }
 
-/** "950", "2.5M", "-12M" — never more than 5 characters, always a '.' decimal point, no currency. */
+/** "950", "2.5M", "-12M" from a stored amount (hundredths) — never more than 5 characters, no currency. */
 internal fun compactAmount(value: Long, units: Triple<String, String, String>): String {
     if (value < 0) return "-" + compactAmount(-value, units)
+    val whole = value.toDouble() / Money.SCALE
     val (divisor, suffix) = when {
-        value >= 1_000_000_000L -> 1_000_000_000.0 to units.third
-        value >= 1_000_000L -> 1_000_000.0 to units.second
-        value >= 1_000L -> 1_000.0 to units.first
+        whole >= 1_000_000_000.0 -> 1_000_000_000.0 to units.third
+        whole >= 1_000_000.0 -> 1_000_000.0 to units.second
+        whole >= 1_000.0 -> 1_000.0 to units.first
         else -> 1.0 to ""
     }
-    val scaled = value / divisor
+    val scaled = whole / divisor
     // One decimal only while it still fits: "2.5M" is fine, "12.5M" would round to "13M".
-    val number = if (scaled < 10.0 && scaled % 1.0 != 0.0) {
-        String.format(java.util.Locale.US, "%.1f", scaled)
+    val number = if (scaled < 10.0 && Math.round(scaled * 10) % 10 != 0L) {
+        String.format(java.util.Locale.US, "%.1f", scaled).replace('.', Money.style.decimal)
     } else {
         Math.round(scaled).toString()
     }

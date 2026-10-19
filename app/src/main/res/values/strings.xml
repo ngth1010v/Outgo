@@ -35,6 +35,7 @@
     <string name="history_filter">Filter</string>
     <string name="history_filter_none">No filter</string>
     <string name="history_filter_any">All</string>
+    <string name="history_filter_type">Type</string>
     <string name="history_filter_account">Account</string>
     <string name="history_filter_category">Category</string>
     <string name="history_filter_subcategory">Subcategory</string>
@@ -45,6 +46,13 @@
     <string name="history_filter_budget">Budget</string>
     <string name="history_filter_to">To account</string>
     <string name="history_filter_clear">Clear filter</string>
+    <string name="history_filter_from_date">From date</string>
+    <string name="history_filter_to_date">To date</string>
+    <string name="history_filter_note">Note contains</string>
+    <string name="history_filter_min">Min amount</string>
+    <string name="history_filter_max">Max amount</string>
+    <string name="history_filter_since">From %1$s</string>
+    <string name="history_filter_until">To %1$s</string>
     <string name="nav_setting">Settings</string>
 
     <!-- Trade screen -->
@@ -63,6 +71,7 @@
     <string name="trade_note_hint">Note</string>
     <string name="trade_save">SAVE</string>
     <string name="trade_saved">Saved</string>
+    <string name="trade_edit_title">Edit transaction</string>
     <string name="trade_error_amount">Enter an amount</string>
     <string name="trade_error_category">Choose a category</string>
     <string name="trade_error_account">Choose an account</string>
@@ -154,11 +163,11 @@
     <string name="category_section_general">General</string>
     <string name="category_section_budget">Monthly budget</string>
     <string name="category_general_info">How the category looks and what it is called.\n\n• Choose icon: the picture shown in lists, on the Add screen and in charts.\n• Category name: the name shown everywhere the category appears.\n• Color: tints its icon, progress bars and chart slices.</string>
-    <string name="category_budget_info">A monthly spending limit for this category. Spending in its sub-categories counts too. Each month has its own settings: pick the month next to the title, and every change is saved for that month right away. A later month with no settings of its own uses the last month before it; a change to a past month changes only that month. The switch turns the budget off for that month without losing its settings.\n\n• Sum of subcategories (a parent category only): the limit is its subcategories\' monthly limits that month added up, and follows them when they change. While on, the limit can\'t be typed and the over/under settings are hidden and not used; they are kept for when it is turned off.\n• Monthly budget limit: how much you plan to spend that month.\n• Over limit: take from: when a month goes over the limit, the overspend is taken off next month\'s limit of the budget you pick (this one or another).\n• Under limit: add to: when a month ends under the limit, the unspent amount is added to next month\'s limit of the budget you pick. With Account, it is moved as real money instead: a transfer From one account To another, made the first time you open the app next month.</string>
+    <string name="category_budget_info">A monthly spending limit for this category. Spending in its sub-categories counts too. Each month has its own settings: pick the month next to the title, and your changes to each month are saved together when you tap Save. A later month with no settings of its own uses the last month before it; a change to a past month changes only that month. The switch turns the budget off for that month without losing its settings.\n\n• Sum of subcategories (a parent category only): the limit is its subcategories\' monthly limits that month added up, and follows them when they change. While on, the limit can\'t be typed and the over/under settings are hidden and not used; they are kept for when it is turned off.\n• Monthly budget limit: how much you plan to spend that month.\n• Over limit: take from: when a month goes over the limit, the overspend is taken off next month\'s limit of the budget you pick (this one or another).\n• Under limit: add to: when a month ends under the limit, the unspent amount is added to next month\'s limit of the budget you pick. With Account, it is moved as real money instead: a transfer From one account To another, made the first time you open the app next month.</string>
     <string name="category_parent_budget_exception">Parent budget exception</string>
     <string name="category_parent_budget_exception_info">Spending in this sub-category is not counted in its parent category\'s budget, in every month (past months too). This sub-category\'s own budget still counts it, and the Analysis category charts are unchanged.</string>
     <string name="balance_general_info">The account\'s basic details.\n\n• Choose icon: the picture shown in lists and on trades.\n• Normal / Savings: a savings account holds money set aside. Its balance is kept apart from the money you can spend, and it can have a monthly target.\n• Account name: the name shown everywhere the account appears.\n• Current balance: the money in the account now. Changing it records an adjustment for the difference, so your history stays correct.\n• Color: tints its icon and chart lines.</string>
-    <string name="balance_savings_info">A monthly goal for how much to put into this account. Only savings accounts can have one.\n\nEach month has its own target: pick the month next to the title, and every change is saved for that month right away. A later month with no target of its own uses the last month before it; a change to a past month changes only that month.\n\n• Monthly savings target: the amount to add that month. Income and transfers into the account count toward it.\n• Sum of subaccounts (a parent account only): the target is its subaccounts\' targets that month added up, and follows them when they change. While on, the target can\'t be typed; your own amount is kept for when it is turned off.</string>
+    <string name="balance_savings_info">A monthly goal for how much to put into this account. Only savings accounts can have one.\n\nEach month has its own target: pick the month next to the title, and your changes to each month are saved together when you tap Save. A later month with no target of its own uses the last month before it; a change to a past month changes only that month.\n\n• Monthly savings target: the amount to add that month. Income and transfers into the account count toward it.\n• Sum of subaccounts (a parent account only): the target is its subaccounts\' targets that month added up, and follows them when they change. While on, the target can\'t be typed; your own amount is kept for when it is turned off.</string>
     <string name="balance_parent_saving_exception">Parent saving exception</string>
     <string name="balance_parent_saving_exception_info">Money coming into this subaccount (income, and transfers from outside it) is not counted toward its parent account\'s monthly savings target, in every month (past months too). Balances still include it, and this subaccount\'s own savings target still counts it.</string>
     <string name="balance_privacy">Privacy</string>
@@ -216,6 +225,7 @@
     <string name="setting_section_general">General</string>
     <string name="setting_language">Language</string>
     <string name="setting_currency">Currency</string>
+    <string name="setting_number_format">Number format</string>
     <string name="setting_currency_custom">Custom symbol</string>
     <string name="setting_currency_custom_hint">Pick one above, or type your own symbol and save.</string>
     <string name="currency_region_usd">United States</string>

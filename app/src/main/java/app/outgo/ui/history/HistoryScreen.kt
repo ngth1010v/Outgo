@@ -121,147 +121,86 @@ fun HistoryScreen(
 }
 
 /**
- * The History tab: Expense / Income / Transfer, swiped like the Category tab's types. Each type
- * keeps its own ViewModel and scroll position; [visible] re-reads the lists when the tab shows again.
+ * The History tab: every expense, income and transfer in one list, newest first, narrowed by the
+ * filter (type, account, category, dates, note, amount). [visible] re-reads the list when the tab
+ * shows again.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistoryTabScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
     val container = LocalAppContainer.current
-    var historyType by rememberSaveable { mutableStateOf(HistoryType.EXPENSE) }
-    // All three exist and load, so a swipe draws the neighbor type's rows at once.
-    val viewModels = HistoryType.entries.associateWith { type ->
-        viewModel<HistoryViewModel>(
-            key = "tab-history-${type.arg}",
-            factory = viewModelFactory {
-                initializer {
-                    HistoryViewModel(container.tradeRepository, container.accountRepository, container.categoryRepository, type)
-                }
-            },
-        )
-    }
+    val viewModel = viewModel<HistoryViewModel>(
+        key = "tab-history",
+        factory = viewModelFactory {
+            initializer {
+                HistoryViewModel(container.tradeRepository, container.accountRepository, container.categoryRepository, null)
+            }
+        },
+    )
     // The list is a one-shot fetch, not a Flow: re-read it whenever the tab is shown again (it
     // stays composed while hidden), e.g. after adding or editing a trade.
-    viewModels.values.forEach { vm -> LaunchedEffect(vm, visible) { vm.refresh() } }
-    val listStates = HistoryType.entries.associateWith { rememberLazyListState() }
+    LaunchedEffect(viewModel, visible) { viewModel.refresh() }
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val listState = rememberLazyListState()
     val pendingTransfers by remember { container.tradeRepository.pendingCount }.collectAsStateWithLifecycle(0)
     // The Transfer filter's budget choices.
     val budgets by remember { container.budgetRepository.observeWithProgress(MonthKey.current()) }
         .collectAsStateWithLifecycle(emptyList())
-    var filterSheetFor by rememberSaveable { mutableStateOf<HistoryType?>(null) }
+    var showFilter by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val transferVm = viewModels.getValue(HistoryType.TRANSFER)
     val onRetry: (TradeEntity) -> Unit = { trade ->
         scope.launch {
             if (container.tradeRepository.settle(trade.id)) {
-                transferVm.refresh()
+                viewModel.refresh()
             } else {
-                val from = transferVm.state.value.accountsById[trade.accountId]?.name.orEmpty()
+                val from = viewModel.state.value.accountsById[trade.accountId]?.name.orEmpty()
                 Toast.makeText(context, context.getString(R.string.history_retry_not_enough, from), Toast.LENGTH_SHORT).show()
             }
         }
     }
-    // Expense <-> Income <-> Transfer; past either end the tab level takes the swipe.
-    val typeSwipe = rememberSwipeLevel { next, _ ->
-        HistoryType.entries.getOrNull(historyType.ordinal + if (next) 1 else -1)?.let { { historyType = it } }
-    }
+    LoadMoreOnScrollEnd(listState, state.canLoadMore, viewModel::loadMore)
+    // A new filter shows its list from the top.
+    LaunchedEffect(state.filter) { listState.scrollToItem(0) }
 
     Scaffold(topBar = { CenterAlignedTopAppBar(title = { Text(stringResource(R.string.nav_history)) }) }) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).swipeStep(typeSwipe)) {
-            SingleChoiceSegmentedButtonRow(
-                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 4.dp, end = 16.dp),
-            ) {
-                HistoryType.entries.forEachIndexed { index, type ->
-                    OutgoSegmentedButton(
-                        selected = type == historyType,
-                        onClick = { historyType = type },
-                        shape = SegmentedButtonDefaults.itemShape(index, HistoryType.entries.size),
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                stringResource(
-                                    when (type) {
-                                        HistoryType.EXPENSE -> R.string.trade_expense
-                                        HistoryType.INCOME -> R.string.trade_income
-                                        HistoryType.TRANSFER -> R.string.trade_transfer
-                                    },
-                                ),
-                            )
-                            if (type == HistoryType.TRANSFER && pendingTransfers > 0) {
-                                PendingBadge(pendingTransfers, Modifier.padding(start = 6.dp))
-                            }
-                        }
-                    }
-                }
-            }
-            // Fixed under the type buttons, like them: the shown type's filter.
-            val shownState by viewModels.getValue(historyType).state.collectAsStateWithLifecycle()
+        Column(Modifier.fillMaxSize().padding(padding)) {
             HistoryFilterRow(
-                historyType, shownState.filter, shownState.accountsById, shownState.categoriesById, budgets,
-                onOpen = { filterSheetFor = historyType },
+                state.filter, state.accountsById, state.categoriesById, budgets,
+                onOpen = { showFilter = true },
                 modifier = Modifier.padding(start = 16.dp, top = 4.dp, end = 8.dp),
             )
-            Box(Modifier.weight(1f)) {
-                listOf(0, -1, 1).forEach { page ->
-                    if (page != 0 && !typeSwipe.moving) return@forEach
-                    val type = HistoryType.entries.getOrNull(historyType.ordinal + page) ?: return@forEach
-                    key(type) {
-                        HistoryTypeList(
-                            viewModel = viewModels.getValue(type),
-                            listState = listStates.getValue(type),
-                            pendingTransfers = if (type == HistoryType.TRANSFER) pendingTransfers else 0,
-                            onOpenTrade = onOpenTrade,
-                            onRetry = onRetry,
-                            modifier = Modifier.swipeShift(typeSwipe, page),
-                        )
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.weight(1f).fillMaxSize().padding(horizontal = 16.dp),
+                contentPadding = PaddingValues(bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                // Unfinished transfers are a transfer matter: not shown while another type is picked.
+                if (pendingTransfers > 0 && (state.filter.type == null || state.filter.isTransfer)) {
+                    item { PendingBanner(pendingTransfers) }
+                }
+                if (state.items.isEmpty()) {
+                    if (!state.isLoading) {
+                        item {
+                            Text(
+                                stringResource(R.string.history_empty),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
+                } else {
+                    historyItems(state.items, state.categoriesById, state.accountsById, onOpenTrade, onRetry = onRetry)
                 }
             }
         }
     }
-    filterSheetFor?.let { type ->
-        val vm = viewModels.getValue(type)
-        val state by vm.state.collectAsStateWithLifecycle()
+    if (showFilter) {
         HistoryFilterSheet(
-            type, state.filter, state.accountsById, state.categoriesById, budgets,
-            onChange = vm::setFilter,
-            onDismiss = { filterSheetFor = null },
+            state.filter, state.accountsById, state.categoriesById, budgets,
+            onChange = viewModel::setFilter,
+            onDismiss = { showFilter = false },
         )
-    }
-}
-
-@Composable
-private fun HistoryTypeList(
-    viewModel: HistoryViewModel,
-    listState: LazyListState,
-    /** Shows the unfinished-transfers banner atop the rows when above 0. */
-    pendingTransfers: Int,
-    onOpenTrade: (Long) -> Unit,
-    onRetry: ((TradeEntity) -> Unit)?,
-    modifier: Modifier,
-) {
-    val state by viewModel.state.collectAsStateWithLifecycle()
-    LoadMoreOnScrollEnd(listState, state.canLoadMore, viewModel::loadMore)
-    LazyColumn(
-        state = listState,
-        modifier = modifier.fillMaxSize().padding(horizontal = 16.dp),
-        contentPadding = PaddingValues(bottom = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        if (pendingTransfers > 0) item { PendingBanner(pendingTransfers) }
-        if (state.items.isEmpty()) {
-            if (!state.isLoading) {
-                item {
-                    Text(
-                        stringResource(R.string.history_empty),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        } else {
-            historyItems(state.items, state.categoriesById, state.accountsById, onOpenTrade, onRetry = onRetry)
-        }
     }
 }

@@ -39,16 +39,15 @@ private val CloseButtonSize = 44.dp
  * The full-screen editor shared by the category and account editors: a title, the fields, then
  * Cancel / Save / Delete at the bottom, and a round cancel button fixed at the top right that
  * stays put while the fields scroll under it. [onDelete] null hides Delete (creating, not editing).
- * While [dirty], leaving by Cancel or the system Back asks first; see [rememberDiscardGuard].
- * [onSave] null: an editor that saves as it goes (editing an existing item), so Cancel becomes
- * Close and there is no Save.
+ * Nothing is written until Save; while [dirty], leaving by Cancel or the system Back asks first
+ * (see [rememberDiscardGuard]), so Cancel always means "leave without saving".
  */
 @Composable
 fun EditorScaffold(
     title: String,
     onCancel: () -> Unit,
     dirty: Boolean,
-    onSave: (() -> Unit)?,
+    onSave: () -> Unit,
     saveEnabled: Boolean,
     onDelete: (() -> Unit)?,
     content: @Composable ColumnScope.() -> Unit,
@@ -75,13 +74,11 @@ fun EditorScaffold(
 
                 Spacer(Modifier.height(16.dp))
                 OutlinedButton(onClick = cancel, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(if (onSave != null) R.string.common_cancel else R.string.common_close))
+                    Text(stringResource(R.string.common_cancel))
                 }
-                if (onSave != null) {
-                    Spacer(Modifier.height(8.dp))
-                    Button(onClick = onSave, enabled = saveEnabled, modifier = Modifier.fillMaxWidth()) {
-                        Text(stringResource(R.string.common_save))
-                    }
+                Spacer(Modifier.height(8.dp))
+                Button(onClick = onSave, enabled = saveEnabled, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.common_save))
                 }
                 if (onDelete != null) {
                     Spacer(Modifier.height(8.dp))

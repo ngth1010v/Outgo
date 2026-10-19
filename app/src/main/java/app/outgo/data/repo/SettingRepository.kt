@@ -7,6 +7,7 @@ import app.outgo.data.db.entity.SettingKeys
 import app.outgo.util.CurrencyPrefs
 import app.outgo.util.LocalePrefs
 import app.outgo.util.Money
+import app.outgo.util.NumberStyle
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -24,6 +25,14 @@ class SettingRepository(private val context: Context, private val settingDao: Se
         settingDao.set(SettingEntity(SettingKeys.CURRENCY, symbol))
         // Mirrored so the next cold start paints the right symbol in its first frame.
         CurrencyPrefs.set(context, symbol)
+    }
+
+    /** Thousands/decimal separators; [NumberStyle.DEFAULT] while there is no row. */
+    fun observeNumberStyle(): Flow<NumberStyle> = settingDao.observe(SettingKeys.NUMBER_STYLE).map(NumberStyle::fromKey)
+
+    suspend fun setNumberStyle(style: NumberStyle) {
+        settingDao.set(SettingEntity(SettingKeys.NUMBER_STYLE, style.key))
+        CurrencyPrefs.setNumberStyle(context, style)
     }
 
     suspend fun setLocale(languageTag: String) {

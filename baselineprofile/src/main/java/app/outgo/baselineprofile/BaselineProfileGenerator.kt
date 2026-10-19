@@ -55,11 +55,14 @@ internal fun MacrobenchmarkScope.animationJourney() {
         tap(By.desc(tab))
     }
 
-    // History: type tabs and a scroll through the list.
+    // History: the filter sheet and a scroll through the list.
     tap(By.desc("History"))
-    tap(By.text("Income"))
-    tap(By.text("Transfer"))
-    tap(By.text("Expense"))
+    tap(By.desc("Filter"))
+    if (device.wait(Until.hasObject(By.text("Clear filter")), TIMEOUT)) {
+        device.pressBack()
+        device.waitForIdle()
+        Thread.sleep(700)
+    }
     device.findObject(By.scrollable(true))?.let {
         it.fling(Direction.DOWN)
         device.waitForIdle()

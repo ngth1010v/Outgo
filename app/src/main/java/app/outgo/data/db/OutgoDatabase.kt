@@ -48,7 +48,7 @@ import app.outgo.domain.IconKind
         BudgetMonthEntity::class,
         SavingsMonthEntity::class,
     ],
-    version = 20,
+    version = OutgoDatabase.SCHEMA_VERSION,
     exportSchema = true,
 )
 abstract class OutgoDatabase : RoomDatabase() {
@@ -62,7 +62,8 @@ abstract class OutgoDatabase : RoomDatabase() {
 
     companion object {
         const val FILE_NAME = "outgo.sqlite"
-        const val SCHEMA_VERSION = 19
+        /** Room's version; a backup newer than this is refused on restore. */
+        const val SCHEMA_VERSION = 21
 
         // "OUTO" packed into 4 bytes, stamped once via PRAGMA application_id so a
         // restore can reject a file that isn't an Outgo backup before touching real data.
@@ -272,11 +273,30 @@ abstract class OutgoDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_20_21 = object : Migration(20, 21) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Money moves from whole currency units to hundredths, so amounts can have decimals.
+                // The triggers go first: scaling trade.amount through trg_trade_au would add every
+                // trade to its account and stats a second time.
+                db.execSQL("DROP TRIGGER IF EXISTS trg_trade_ai")
+                db.execSQL("DROP TRIGGER IF EXISTS trg_trade_ad")
+                db.execSQL("DROP TRIGGER IF EXISTS trg_trade_au")
+                val s = app.outgo.util.Money.SCALE
+                db.execSQL("UPDATE account SET balance = balance * $s, savings_target = savings_target * $s")
+                db.execSQL("UPDATE trade SET amount = amount * $s, pending_amount = pending_amount * $s")
+                db.execSQL("UPDATE category_month_stat SET total = total * $s, exempt_total = exempt_total * $s")
+                db.execSQL("UPDATE budget SET limit_amount = limit_amount * $s, target_amount = target_amount * $s")
+                db.execSQL("UPDATE budget_month SET limit_amount = limit_amount * $s")
+                db.execSQL("UPDATE savings_month SET target = target * $s")
+                createTradeTriggers(db)
+            }
+        }
+
         fun build(context: Context): OutgoDatabase =
             Room.databaseBuilder(context.applicationContext, OutgoDatabase::class.java, FILE_NAME)
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
                 .addCallback(OutgoCallback)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21)
                 .build()
     }
 }

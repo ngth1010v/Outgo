@@ -1,5 +1,6 @@
 package app.outgo.ui.category
 
+import app.outgo.ui.component.MoneyTextField
 import app.outgo.util.MonthKey
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.Switch
@@ -55,6 +56,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
@@ -90,8 +92,6 @@ import app.outgo.ui.component.ExceptionBadge
 import app.outgo.ui.component.IconView
 import app.outgo.ui.component.MonthPicker
 import app.outgo.ui.component.SwitchField
-import app.outgo.ui.component.onBlur
-import app.outgo.ui.component.rememberAutoSave
 import app.outgo.ui.component.TreeList
 import app.outgo.ui.component.budgetRemainingColor
 import app.outgo.ui.component.budgetRemainingText
@@ -285,9 +285,6 @@ private fun CategoryRow(
     }
 }
 
-/** The General section's inputs, saved together. */
-private data class CategoryGeneral(val name: String, val description: String, val iconId: Long?, val color: Int)
-
 @Composable
 private fun EditCategoryScreen(
     target: EditTarget,
@@ -327,34 +324,36 @@ private fun EditCategoryScreen(
         }
     }
 
-    // Editing saves as it goes: General as one, the Budget section as the shown month's settings.
-    val generalSave = existing?.let {
-        rememberAutoSave(CategoryGeneral(name, description, iconId, color)) { g ->
-            g.name.isNotBlank().also { ok -> if (ok) viewModel.update(it, g.name, g.iconId, g.color, g.description.trim().ifEmpty { null }) }
-        }
-    }
-    val budgetSave = existing?.takeIf { effectiveType == CategoryKind.EXPENSE }?.let {
-        rememberAutoSave(form) { f ->
-            f.complete.also { ok -> if (ok) viewModel.setBudgetMonth(it.id, month, f.toSetting()) }
-        }
-    }
+    // Editing saves on Save only. Each month's budget as read, and as changed since: Save writes
+    // every changed month, so moving between months keeps what was typed.
+    val hasBudget = existing != null && effectiveType == CategoryKind.EXPENSE
+    val loadedForms = remember { mutableStateMapOf<Int, BudgetForm>() }
+    val editedForms = remember { mutableStateMapOf<Int, BudgetForm>() }
     fun showMonth(m: Int) {
-        if (budgetSave == null || existing == null) {
+        if (!hasBudget || existing == null) {
             month = m
             return
         }
         // The month being left keeps its pending change.
-        budgetSave.flush()
+        if (loadedForms[month] != null) editedForms[month] = form
         month = m
+        editedForms[m]?.let {
+            form = it
+            return
+        }
         scope.launch {
             val loaded = BudgetForm.of(viewModel.budgetAt(existing.id, m))
-            budgetSave.reset(loaded)
-            form = loaded
+            loadedForms[m] = loaded
+            if (month == m) form = loaded
         }
     }
+    // Every month whose budget differs from what was read, the shown one included.
+    fun changedForms(): Map<Int, BudgetForm> =
+        (editedForms + (loadedForms[month]?.let { mapOf(month to form) } ?: emptyMap()))
+            .filter { (m, f) -> loadedForms[m] != null && f != loadedForms[m] }
 
     // The row only knows the month's limit in effect (a sum while summing): read this month's in full.
-    LaunchedEffect(Unit) { if (budgetSave != null) showMonth(month) }
+    LaunchedEffect(Unit) { if (hasBudget) showMonth(month) }
     LaunchedEffect(month, form.sumChildren) {
         if (existing != null && form.sumChildren) childSum = viewModel.childLimitSum(existing.id, month)
     }
@@ -365,15 +364,22 @@ private fun EditCategoryScreen(
         else -> stringResource(R.string.category_create_parent_title)
     }
 
-    // Creating: compared against the values the editor opened with, for the discard check.
-    val fields = listOf(name, description, iconId, color, month, form, exempt)
+    // Compared against the values the editor opened with, for the discard check. Editing, the
+    // month shown is not a change; the Budget section counts through changedForms.
+    val fields = listOf(name, description, iconId, color, exempt) + if (existing == null) listOf(month, form) else emptyList()
     val initialFields = remember { fields }
+    val changed = changedForms()
     EditorScaffold(
         title = title,
         onCancel = onDismiss,
-        dirty = existing == null && fields != initialFields,
+        dirty = fields != initialFields || changed.isNotEmpty(),
         onSave = if (existing != null) {
-            null
+            {
+                viewModel.update(existing, name.trim(), iconId, color, description.trim().ifEmpty { null })
+                if (exempt != existing.parentBudgetExempt) viewModel.setParentBudgetExempt(existing.id, exempt)
+                changed.forEach { (m, f) -> viewModel.setBudgetMonth(existing.id, m, f.toSetting()) }
+                onDismiss()
+            }
         } else {
             {
                 val setting = form.toSetting().takeIf { form.enabled && effectiveType == CategoryKind.EXPENSE }
@@ -385,7 +391,7 @@ private fun EditCategoryScreen(
                 onDismiss()
             }
         },
-        saveEnabled = name.isNotBlank() && (effectiveType != CategoryKind.EXPENSE || form.complete),
+        saveEnabled = name.isNotBlank() && (effectiveType != CategoryKind.EXPENSE || form.complete) && changed.values.all { it.complete },
         onDelete = if (existing != null) { { showDeleteConfirm = true } } else null,
     ) {
         SectionHeader(stringResource(R.string.category_section_general), stringResource(R.string.category_general_info))
@@ -400,8 +406,7 @@ private fun EditCategoryScreen(
             label = { Text(stringResource(R.string.category_name_hint)) },
             singleLine = true,
             isError = existing != null && name.isBlank(),
-            // Editing: a blank name goes back to the saved one when the field is left.
-            modifier = Modifier.fillMaxWidth().onBlur { if (name.isBlank()) generalSave?.let { name = it.saved.name } },
+            modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(
@@ -417,7 +422,7 @@ private fun EditCategoryScreen(
         Spacer(Modifier.height(8.dp))
         ColorPickerGrid(selected = color, onSelect = { color = it })
 
-        // A spending sub-category can stay out of its parent's budget; editing saves the switch at once.
+        // A spending sub-category can stay out of its parent's budget.
         val isChild = existing?.let { !it.isParent } ?: (target is EditTarget.NewChild)
         if (effectiveType == CategoryKind.EXPENSE && isChild) {
             Spacer(Modifier.height(24.dp))
@@ -425,10 +430,7 @@ private fun EditCategoryScreen(
                 stringResource(R.string.category_parent_budget_exception),
                 stringResource(R.string.category_parent_budget_exception_info),
             ) {
-                SectionSwitch(checked = exempt, onCheckedChange = {
-                    exempt = it
-                    existing?.let { c -> viewModel.setParentBudgetExempt(c.id, it) }
-                })
+                SectionSwitch(checked = exempt, onCheckedChange = { exempt = it })
             }
         }
 
@@ -465,20 +467,13 @@ private fun EditCategoryScreen(
                         )
                     }
                     // Summing: the limit shows the sum, and nothing else in the section can be set.
-                    OutlinedTextField(
-                        value = if (form.sumChildren) childSum.toString() else form.limitText,
-                        onValueChange = { form = form.copy(limitText = it.filter { c -> c.isDigit() }) },
-                        label = { Text(stringResource(R.string.category_budget_limit)) },
+                    MoneyTextField(
+                        text = if (form.sumChildren) Money.groupThousands(childSum) else form.limitText,
+                        onTextChange = { form = form.copy(limitText = it) },
+                        label = stringResource(R.string.category_budget_limit),
                         enabled = !form.sumChildren,
-                        singleLine = true,
-                        isError = existing != null && !form.sumChildren && (form.limitText.toLongOrNull() ?: 0L) <= 0,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        // Editing: an invalid limit goes back to the saved one when the field is left,
-                        // and the whole section too if that month had none (it was off).
-                        modifier = Modifier.fillMaxWidth().onBlur {
-                            val saved = budgetSave?.saved ?: return@onBlur
-                            if (!form.complete) form = form.copy(limitText = saved.limitText).takeIf { it.complete } ?: saved
-                        },
+                        isError = existing != null && !form.sumChildren && Money.parseInput(form.limitText) <= 0,
+                        modifier = Modifier.fillMaxWidth(),
                     )
 
                     if (!form.sumChildren) {
@@ -535,8 +530,6 @@ private fun EditCategoryScreen(
             title = stringResource(R.string.category_delete_confirm_title),
             message = message,
             onConfirm = {
-                generalSave?.stop()
-                budgetSave?.stop()
                 viewModel.deleteOrArchive(existing)
                 showDeleteConfirm = false
                 onDismiss()
@@ -615,12 +608,12 @@ private data class BudgetForm(
 ) {
     /** On needs a limit (unless summed), and an account offset two different accounts. */
     val complete: Boolean
-        get() = !enabled || sumChildren || ((limitText.toLongOrNull() ?: 0L) > 0 &&
+        get() = !enabled || sumChildren || (Money.parseInput(limitText) > 0 &&
             (underMode != UnderMode.ACCOUNT || (fromAccount != null && toAccount != null && fromAccount != toAccount)))
 
     fun toSetting() = BudgetSetting(
         enabled = enabled,
-        limit = limitText.toLongOrNull() ?: 0L,
+        limit = Money.parseInput(limitText),
         overTarget = overTarget.takeIf { overOn },
         underTarget = underTarget.takeIf { underMode == UnderMode.BUDGET },
         underFromAccount = fromAccount.takeIf { underMode == UnderMode.ACCOUNT },
@@ -631,7 +624,7 @@ private data class BudgetForm(
     companion object {
         fun of(s: BudgetSetting?) = BudgetForm(
             enabled = s?.enabled ?: false,
-            limitText = s?.limit?.takeIf { it > 0 }?.toString().orEmpty(),
+            limitText = Money.inputText(s?.limit ?: 0L),
             overOn = s?.overTarget != null,
             overTarget = s?.overTarget ?: BudgetOffset.SELF,
             underMode = when {

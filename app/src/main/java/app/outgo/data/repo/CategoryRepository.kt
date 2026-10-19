@@ -28,16 +28,17 @@ class CategoryRepository(
      * sort order, never randomly.
      */
     suspend fun getPicker(type: Int): CategoryPicker = withContext(Dispatchers.IO) {
+        // A category in the Recent row is left out of the Most used one, so the two rows offer
+        // ten different picks: Most used reads enough rows to still have five after that.
         val recent = categoryDao.mostRecent(type, 5)
-        val top = categoryDao.mostUsed(type, 5)
+        val recentIds = recent.map { it.id }.toSet()
+        val top = categoryDao.mostUsed(type, 5 + recent.size).filter { it.id !in recentIds }.take(5)
         if (recent.size >= 5 && top.size >= 5) return@withContext CategoryPicker(recent, top)
 
         val allChildren = categoryDao.allChildrenOnce(type)
-        val recentIds = recent.map { it.id }.toSet()
-        val topIds = top.map { it.id }.toSet()
-
         val recentFilled = recent + allChildren.filter { it.id !in recentIds }.take(5 - recent.size)
-        val topFilled = top + allChildren.filter { it.id !in topIds }.take(5 - top.size)
+        val shownIds = recentFilled.map { it.id }.toSet() + top.map { it.id }
+        val topFilled = top + allChildren.filter { it.id !in shownIds }.take(5 - top.size)
         CategoryPicker(recentFilled, topFilled)
     }
 

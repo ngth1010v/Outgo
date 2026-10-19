@@ -1,5 +1,8 @@
 package app.outgo.ui.trade
 
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.focus.FocusRequester
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import androidx.compose.animation.core.Animatable
@@ -131,6 +134,16 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit, visible: Boolean = t
         }
     }
     val state by viewModel.state.collectAsStateWithLifecycle()
+    // A new trade starts at its amount: focused, keyboard up, each time the tab is shown. After the
+    // first frame, so the keyboard never holds up the cold start's first paint.
+    val amountFocus = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(visible) {
+        if (!visible || editingTradeId != null) return@LaunchedEffect
+        withFrameNanos { }
+        runCatching { amountFocus.requestFocus() }
+        keyboard?.show()
+    }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var showAllCategories by remember { mutableStateOf(false) }
@@ -187,21 +200,30 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit, visible: Boolean = t
                 .padding(padding)
                 .imePadding()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 16.dp, top = 36.dp, end = 16.dp, bottom = 16.dp),
+                .padding(start = 16.dp, top = if (state.isEditing) 16.dp else 36.dp, end = 16.dp, bottom = 16.dp),
         ) {
+            if (state.isEditing) {
+                Text(
+                    stringResource(R.string.trade_edit_title),
+                    style = MaterialTheme.typography.titleLarge,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                )
+            }
             ExpenseIncomeToggle(type = state.type, onTypeChange = viewModel::onTypeChange, enabled = !state.isEditing)
             Box {
                 @Composable
-                fun form(shown: TradeUiState, modifier: Modifier, shake: () -> Float = { 0f }) = TradeForm(
+                fun form(shown: TradeUiState, modifier: Modifier, shake: () -> Float = { 0f }, focus: FocusRequester? = null) = TradeForm(
                     state = shown,
                     viewModel = viewModel,
+                    amountFocus = focus,
                     onSeeAll = { showAllCategories = true },
                     onClose = cancel,
                     onDelete = { showDeleteConfirm = true },
                     saveShake = shake,
                     modifier = modifier,
                 )
-                form(state, Modifier.swipeShift(typeSwipe)) { saveShake.value }
+                form(state, Modifier.swipeShift(typeSwipe), { saveShake.value }, amountFocus)
                 // The neighbor types' forms, as the type switch would show them.
                 if (typeSwipe.moving) {
                     listOf(-1, 1).forEach { page ->
@@ -251,6 +273,8 @@ private val TRADE_TYPES = listOf(CategoryKind.EXPENSE, CategoryKind.INCOME, Trad
 private fun TradeForm(
     state: TradeUiState,
     viewModel: TradeViewModel,
+    /** The shown form's amount field; null on the neighbor forms a type swipe draws. */
+    amountFocus: FocusRequester?,
     onSeeAll: () -> Unit,
     onClose: () -> Unit,
     onDelete: () -> Unit,
@@ -273,6 +297,7 @@ private fun TradeForm(
                     isIncome = state.type == CategoryKind.INCOME,
                     isTransfer = state.isTransfer,
                     modifier = Modifier.padding(vertical = 8.dp),
+                    focusRequester = amountFocus ?: remember { FocusRequester() },
                 )
                 ErrorText(errorFor(TradeError.AMOUNT, R.string.trade_error_amount), centered = true)
 

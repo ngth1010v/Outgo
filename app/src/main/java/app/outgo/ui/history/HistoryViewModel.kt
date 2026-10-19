@@ -1,5 +1,7 @@
 package app.outgo.ui.history
 
+import kotlinx.coroutines.flow.combine
+import app.outgo.data.repo.HistoryQuery
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.outgo.data.db.entity.AccountEntity
@@ -21,19 +23,50 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * The History tab's filter for one type; null fields match everything. Expense/Income use
- * [accountId], [categoryId] (a parent) and [subCategoryId] (one of its children). Transfer uses
- * [accountId] (source), [budgetId] (the budget's category), [toAccountId] and [automatic].
+ * The History tab's filter; null fields match everything. [type] narrows the list to one
+ * [TradeType]. Expense/Income use [accountId], [categoryId] (a parent) and [subCategoryId] (one of
+ * its children); every type at once matches [accountId] as either side of a transfer too. Transfer
+ * uses [accountId] (source), [budgetId] (the budget's category), [toAccountId] and [automatic].
+ * [fromDay] and [toDay] are the starts of the first and last day shown (both included).
  */
 data class HistoryFilter(
+    val type: Int? = null,
     val accountId: Long? = null,
     val categoryId: Long? = null,
     val subCategoryId: Long? = null,
     val budgetId: Long? = null,
     val toAccountId: Long? = null,
     val automatic: Boolean? = null,
+    val fromDay: Long? = null,
+    val toDay: Long? = null,
+    val note: String = "",
+    val minAmount: Long? = null,
+    val maxAmount: Long? = null,
 ) {
     val isEmpty: Boolean get() = this == HistoryFilter()
+    val isTransfer: Boolean get() = type == TradeType.TRANSFER
+
+    fun toQuery() = HistoryQuery(
+        types = type?.let { listOf(it) } ?: listOf(TradeType.EXPENSE, TradeType.INCOME, TradeType.TRANSFER),
+        accountId = accountId,
+        eitherAccount = type == null,
+        toAccountId = toAccountId.takeIf { isTransfer },
+        categoryId = subCategoryId ?: budgetId.takeIf { isTransfer },
+        parentId = categoryId.takeIf { subCategoryId == null && type != null && !isTransfer },
+        automatic = automatic.takeIf { isTransfer },
+        fromMillis = fromDay,
+        toMillis = toDay?.let(::nextDayStart),
+        noteContains = note.takeIf { it.isNotBlank() },
+        minAmount = minAmount,
+        maxAmount = maxAmount,
+    )
+}
+
+/** Start of the day after the one [dayStart] falls in, in local time. */
+private fun nextDayStart(dayStart: Long): Long {
+    val zone = java.time.ZoneId.systemDefault()
+    return java.time.Instant.ofEpochMilli(dayStart).atZone(zone).toLocalDate().plusDays(1)
+        .atStartOfDay(zone).toInstant().toEpochMilli()
 }
 
 data class HistoryUiState(
@@ -55,7 +88,8 @@ class HistoryViewModel(
     private val tradeRepository: TradeRepository,
     accountRepository: AccountRepository,
     categoryRepository: CategoryRepository,
-    historyType: HistoryType,
+    /** One type's history (opened from Home or Analysis), or null for the History tab's list of all. */
+    historyType: HistoryType?,
     /** Start of a single day to show, or null for the whole (paged) history. */
     private val dayStartMillis: Long? = null,
 ) : ViewModel() {
@@ -64,8 +98,8 @@ class HistoryViewModel(
         HistoryType.EXPENSE -> TradeType.EXPENSE
         HistoryType.INCOME -> TradeType.INCOME
         HistoryType.TRANSFER -> TradeType.TRANSFER
+        null -> null
     }
-    private val categoryKind = if (historyType == HistoryType.INCOME) CategoryKind.INCOME else CategoryKind.EXPENSE
 
     private val _state = MutableStateFlow(HistoryUiState())
     val state: StateFlow<HistoryUiState> = _state.asStateFlow()
@@ -77,7 +111,15 @@ class HistoryViewModel(
             }
         }
         viewModelScope.launch {
-            categoryRepository.observeAllOfType(categoryKind).collect { list ->
+            val categories = when (historyType) {
+                HistoryType.INCOME -> categoryRepository.observeAllOfType(CategoryKind.INCOME)
+                null -> combine(
+                    categoryRepository.observeAllOfType(CategoryKind.EXPENSE),
+                    categoryRepository.observeAllOfType(CategoryKind.INCOME),
+                ) { expense, income -> expense + income }
+                else -> categoryRepository.observeAllOfType(CategoryKind.EXPENSE)
+            }
+            categories.collect { list ->
                 _state.update { it.copy(categoriesById = list.associateBy { c -> c.id }) }
             }
         }
@@ -97,6 +139,7 @@ class HistoryViewModel(
 
     /** A page after [before] (null: the first), through the filtered query when a filter is set. */
     private suspend fun page(filter: HistoryFilter, before: TradeEntity?): List<TradeEntity> = when {
+        tradeType == null -> tradeRepository.historyPage(filter.toQuery(), before, PAGE_SIZE)
         !filter.isEmpty -> tradeRepository.filteredPage(
             tradeType, before,
             accountId = filter.accountId,
@@ -119,7 +162,7 @@ class HistoryViewModel(
             val first = if (dayStartMillis == null) {
                 page(_state.value.filter, null)
             } else {
-                tradeRepository.pageInRange(tradeType, dayStartMillis, dayStartMillis + DAY_MILLIS)
+                tradeRepository.pageInRange(tradeType ?: TradeType.EXPENSE, dayStartMillis, dayStartMillis + DAY_MILLIS)
             }
             val items = withContext(Dispatchers.Default) { buildHistoryItems(first) }
             _state.update {

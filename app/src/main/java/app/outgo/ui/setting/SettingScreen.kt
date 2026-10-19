@@ -41,6 +41,7 @@ import app.outgo.data.backup.RestoreException
 import app.outgo.ui.LocalAppContainer
 import app.outgo.ui.component.ConfirmDialog
 import app.outgo.util.LocalePrefs
+import app.outgo.util.NumberStyle
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
@@ -64,8 +65,10 @@ fun SettingScreen() {
     var pendingRestore by remember { mutableStateOf<File?>(null) }
     var showLanguagePicker by remember { mutableStateOf(false) }
     var showCurrencyPicker by remember { mutableStateOf(false) }
+    var showNumberStylePicker by remember { mutableStateOf(false) }
     val locale by viewModel.locale.collectAsStateWithLifecycle()
     val currency by viewModel.currency.collectAsStateWithLifecycle()
+    val numberStyle by viewModel.numberStyle.collectAsStateWithLifecycle()
 
     val exportSuccessTemplate = stringResource(R.string.backup_export_success)
     val exportError = stringResource(R.string.backup_export_failed)
@@ -110,6 +113,11 @@ fun SettingScreen() {
                 title = stringResource(R.string.setting_currency),
                 subtitle = currency,
                 onClick = { showCurrencyPicker = true },
+            )
+            SettingRow(
+                title = stringResource(R.string.setting_number_format),
+                subtitle = numberStyleSample(numberStyle),
+                onClick = { showNumberStylePicker = true },
             )
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
@@ -166,6 +174,20 @@ fun SettingScreen() {
         )
     }
 
+    if (showNumberStylePicker) {
+        OptionSheet(
+            title = stringResource(R.string.setting_number_format),
+            options = NumberStyle.entries,
+            selected = numberStyle,
+            label = { numberStyleSample(it) },
+            onSelect = { style ->
+                showNumberStylePicker = false
+                viewModel.setNumberStyle(style)
+            },
+            onDismiss = { showNumberStylePicker = false },
+        )
+    }
+
     if (showLanguagePicker) {
         LanguagePickerSheet(
             selected = locale,
@@ -194,23 +216,39 @@ private fun languageLabel(tag: String): String = when (tag) {
     else -> stringResource(R.string.setting_language_system)
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** "1,234.56" written in [style], whatever the current one is. */
+private fun numberStyleSample(style: NumberStyle): String = "1${style.grouping}234${style.decimal}56"
+
 @Composable
 private fun LanguagePickerSheet(selected: String, onSelect: (String) -> Unit, onDismiss: () -> Unit) {
+    OptionSheet(stringResource(R.string.setting_language), LanguageOptions, selected, { languageLabel(it) }, onSelect, onDismiss)
+}
+
+/** A bottom sheet of radio rows; picking one calls [onSelect]. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun <T> OptionSheet(
+    title: String,
+    options: List<T>,
+    selected: T,
+    label: @Composable (T) -> String,
+    onSelect: (T) -> Unit,
+    onDismiss: () -> Unit,
+) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
-            Text(stringResource(R.string.setting_language), style = MaterialTheme.typography.titleMedium)
+            Text(title, style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(12.dp))
-            LanguageOptions.forEach { tag ->
+            options.forEach { option ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onSelect(tag) }
+                        .clickable { onSelect(option) }
                         .padding(vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    RadioButton(selected = tag == selected, onClick = { onSelect(tag) })
-                    Text(languageLabel(tag), modifier = Modifier.padding(start = 8.dp))
+                    RadioButton(selected = option == selected, onClick = { onSelect(option) })
+                    Text(label(option), modifier = Modifier.padding(start = 8.dp))
                 }
             }
         }

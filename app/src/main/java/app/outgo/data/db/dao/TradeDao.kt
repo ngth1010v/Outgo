@@ -73,6 +73,49 @@ interface TradeDao {
         limit: Int,
     ): List<TradeEntity>
 
+    /**
+     * The History tab's list: every type in [types], newest first, after the (occurred_at, id)
+     * cursor. Each null filter matches everything. [accountId] matches the "From" account, and with
+     * [eitherAccount] the "To" one too. [toMillis] is exclusive; [notePattern] is a LIKE pattern
+     * with '\' as its escape character.
+     */
+    @Query(
+        """
+        SELECT * FROM trade
+        WHERE type IN (:types) AND (occurred_at, id) < (:beforeOccurredAt, :beforeId)
+            AND (:accountId IS NULL OR account_id = :accountId OR (:eitherAccount AND to_account_id = :accountId))
+            AND (:toAccountId IS NULL OR to_account_id = :toAccountId)
+            AND (:categoryId IS NULL OR COALESCE(category_id, offset_category_id) = :categoryId)
+            AND (:parentId IS NULL OR category_id = :parentId
+                OR category_id IN (SELECT id FROM category WHERE parent_id = :parentId))
+            AND (:automatic IS NULL OR (offset_month IS NOT NULL) = :automatic)
+            AND (:fromMillis IS NULL OR occurred_at >= :fromMillis)
+            AND (:toMillis IS NULL OR occurred_at < :toMillis)
+            AND (:notePattern IS NULL OR note LIKE :notePattern ESCAPE '\')
+            AND (:minAmount IS NULL OR amount >= :minAmount)
+            AND (:maxAmount IS NULL OR amount <= :maxAmount)
+        ORDER BY occurred_at DESC, id DESC
+        LIMIT :limit
+        """,
+    )
+    suspend fun historyPage(
+        types: List<Int>,
+        beforeOccurredAt: Long,
+        beforeId: Long,
+        accountId: Long?,
+        eitherAccount: Boolean,
+        toAccountId: Long?,
+        categoryId: Long?,
+        parentId: Long?,
+        automatic: Boolean?,
+        fromMillis: Long?,
+        toMillis: Long?,
+        notePattern: String?,
+        minAmount: Long?,
+        maxAmount: Long?,
+        limit: Int,
+    ): List<TradeEntity>
+
     /** One day of one type, for History opened from the Analysis heatmap. A day never pages. */
     @Query(
         """

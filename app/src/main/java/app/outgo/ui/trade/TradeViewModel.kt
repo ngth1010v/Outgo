@@ -237,7 +237,8 @@ class TradeViewModel(
     }
 
     fun onAmountChange(amount: Long) {
-        _state.update { it.copy(amount = amount.coerceAtMost(999_999_999_999L)) }
+        // 999,999,999,999 (amounts are in hundredths).
+        _state.update { it.copy(amount = amount.coerceAtMost(99_999_999_999_900L)) }
     }
 
     fun onCategorySelected(category: CategoryEntity) {
@@ -344,6 +345,7 @@ class TradeViewModel(
                     _events.emit(TradeEvent.SavedAndClose)
                 } else {
                     val id = tradeRepository.insert(draft)
+                    lastSaved = id to s
                     resetForm()
                     _events.emit(TradeEvent.Saved(id))
                 }
@@ -364,27 +366,46 @@ class TradeViewModel(
         }
     }
 
+    /** The trade saved last and the form as it was when saved, for [undo]. */
+    private var lastSaved: Pair<Long, TradeUiState>? = null
+
+    /** Deletes a trade just saved and puts what it was saved with back into the form, to fix and save again. */
     fun undo(tradeId: Long) {
-        viewModelScope.launch { tradeRepository.delete(tradeId) }
+        val saved = lastSaved?.takeIf { it.first == tradeId }?.second
+        lastSaved = null
+        if (saved != null) {
+            _state.update {
+                it.copy(
+                    type = saved.type,
+                    amount = saved.amount,
+                    selectedCategory = saved.selectedCategory,
+                    selectedParentCategory = saved.selectedParentCategory,
+                    selectedAccountId = saved.selectedAccountId,
+                    selectedToAccountId = saved.selectedToAccountId,
+                    occurredAt = saved.occurredAt,
+                    occurredAtPicked = saved.occurredAtPicked,
+                    note = saved.note,
+                    budgetExempt = saved.budgetExempt,
+                    savingExempt = saved.savingExempt,
+                    toBudget = saved.toBudget,
+                    showErrors = false,
+                )
+            }
+        }
+        viewModelScope.launch {
+            tradeRepository.delete(tradeId)
+            // Its category's use count and last use went back with it.
+            loadPickers()
+        }
     }
 
+    /**
+     * After a save: only the amount and note clear. The type, category, accounts and a picked
+     * date/time stay for the next entry (e.g. several of yesterday's); the view model lives as long
+     * as the process, so a fresh start of the app begins from a blank form.
+     */
     private fun resetForm() {
-        _state.update {
-            it.copy(
-                amount = 0,
-                selectedCategory = null,
-                selectedParentCategory = null,
-                selectedToAccountId = null,
-                occurredAt = System.currentTimeMillis(),
-                occurredAtPicked = false,
-                note = "",
-                type = CategoryKind.EXPENSE,
-                budgetExempt = false,
-                savingExempt = false,
-                toBudget = null,
-                showErrors = false,
-            )
-        }
+        _state.update { it.copy(amount = 0, note = "", showErrors = false) }
         viewModelScope.launch { loadPickers() }
     }
 }

@@ -1,5 +1,6 @@
 package app.outgo.ui.balance
 
+import app.outgo.ui.component.MoneyTextField
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -32,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -71,8 +73,6 @@ import app.outgo.ui.component.ExceptionBadge
 import app.outgo.ui.component.IconView
 import app.outgo.ui.component.MonthPicker
 import app.outgo.ui.component.SwitchField
-import app.outgo.ui.component.onBlur
-import app.outgo.ui.component.rememberAutoSave
 import app.outgo.ui.component.TreeList
 import app.outgo.ui.component.savingsProgressColor
 import app.outgo.ui.component.savingsProgressText
@@ -225,22 +225,19 @@ fun AccountEditScreen(accountId: Long?, parentId: Long?, onClose: () -> Unit) {
     EditAccountScreen(row, parent, normalChildren, onClose, viewModel)
 }
 
-/** The General section's inputs, saved together. */
-private data class AccountGeneral(val type: Int, val name: String, val description: String, val balanceText: String, val iconId: Long?, val color: Int)
-
 /**
  * The Savings section's inputs for one month, as typed (the target is still text). [sumChildren]:
  * the target is the subaccounts' summed, [targetText] is kept but not used.
  */
 private data class SavingsForm(val enabled: Boolean, val targetText: String, val sumChildren: Boolean = false) {
     /** On needs a target, unless summed. */
-    val complete: Boolean get() = !enabled || sumChildren || (targetText.toLongOrNull() ?: 0L) > 0
+    val complete: Boolean get() = !enabled || sumChildren || Money.parseInput(targetText) > 0
 
-    fun toSetting() = SavingsSetting(enabled, targetText.toLongOrNull() ?: 0L, sumChildren)
+    fun toSetting() = SavingsSetting(enabled, Money.parseInput(targetText), sumChildren)
 
     companion object {
         fun of(s: SavingsSetting?) =
-            SavingsForm(s?.enabled ?: false, s?.target?.takeIf { it > 0 }?.toString().orEmpty(), s?.sumChildren ?: false)
+            SavingsForm(s?.enabled ?: false, Money.inputText(s?.target ?: 0L), s?.sumChildren ?: false)
     }
 }
 
@@ -265,13 +262,9 @@ private fun EditAccountScreen(
     var exempt by remember { mutableStateOf(account?.parentSavingExempt ?: false) }
     // This account's own privacy settings; the parent's, when they cover it, show instead and lock the inputs.
     var privacy by remember { mutableStateOf(account?.ownPrivacy ?: AccountPrivacy()) }
-    fun changePrivacy(p: AccountPrivacy) {
-        privacy = p
-        account?.let { viewModel.setPrivacy(it.id, p) }
-    }
     var name by remember { mutableStateOf(account?.name.orEmpty()) }
     var description by remember { mutableStateOf(account?.description.orEmpty()) }
-    var balanceText by remember { mutableStateOf(row?.totalBalance?.takeIf { it != 0L }?.toString().orEmpty()) }
+    var balanceText by remember { mutableStateOf(Money.inputText(row?.totalBalance ?: 0L)) }
     // The Savings section shows (and saves) one month's target; it opens on this month's.
     var month by remember { mutableIntStateOf(MonthKey.current()) }
     var form by remember { mutableStateOf(SavingsForm.of(row?.monthlyTarget?.let { SavingsSetting(true, it) })) }
@@ -291,42 +284,44 @@ private fun EditAccountScreen(
         if (account != null && editingParent) childCount = viewModel.childCount(account.id)
     }
 
-    // Editing saves as it goes: General as one, the Savings section as the shown month's target.
-    val generalSave = account?.let { edited ->
-        rememberAutoSave(AccountGeneral(accountType, name, description, balanceText, iconId, color)) {
-            name.isNotBlank().also { ok ->
-                if (ok) viewModel.update(edited.id, name, iconId, color, (balanceText.toLongOrNull() ?: 0L).takeIf { !editingParent }, accountType, description.trim().ifEmpty { null })
-            }
-        }
-    }
-    val savingsSave = account?.let {
-        rememberAutoSave(form) { f ->
-            f.complete.also { ok -> if (ok) viewModel.setSavingsMonth(it.id, month, f.toSetting()) }
-        }
-    }
+    // Editing saves on Save only. Each month's target as read, and as changed since: Save writes
+    // every changed month, so moving between months keeps what was typed.
+    val loadedForms = remember { mutableStateMapOf<Int, SavingsForm>() }
+    val editedForms = remember { mutableStateMapOf<Int, SavingsForm>() }
     fun showMonth(m: Int) {
-        if (savingsSave == null || account == null) {
+        if (account == null) {
             month = m
             return
         }
         // The month being left keeps its pending change.
-        savingsSave.flush()
+        if (loadedForms[month] != null) editedForms[month] = form
         month = m
+        editedForms[m]?.let {
+            form = it
+            return
+        }
         scope.launch {
             val loaded = SavingsForm.of(viewModel.savingsAt(account.id, m))
-            savingsSave.reset(loaded)
-            form = loaded
+            loadedForms[m] = loaded
+            if (month == m) form = loaded
         }
     }
+    // Every month whose target differs from what was read, the shown one included.
+    fun changedForms(): Map<Int, SavingsForm> =
+        (editedForms + (loadedForms[month]?.let { mapOf(month to form) } ?: emptyMap()))
+            .filter { (m, f) -> loadedForms[m] != null && f != loadedForms[m] }
     // The row only knows a target that is on: read this month's in full (an off one keeps its amount).
     LaunchedEffect(Unit) { if (account != null) showMonth(month) }
     LaunchedEffect(month, form.sumChildren) {
         if (account != null && form.sumChildren) childSum = viewModel.childTargetSum(account.id, month)
     }
 
-    // Creating: compared against the values the editor opened with, for the discard check.
-    val fields = listOf(accountType, name, description, balanceText, month, form, iconId, color, exempt, privacy)
+    // Compared against the values the editor opened with, for the discard check. Editing, the
+    // month shown is not a change; the Savings section counts through changedForms.
+    val fields = listOf(accountType, name, description, Money.parseInput(balanceText), iconId, color, exempt, privacy) +
+        if (account == null) listOf(month, form) else emptyList()
     val initialFields = remember { fields }
+    val changed = changedForms()
     val savingsShown = accountType == AccountType.SAVINGS && form.enabled
     EditorScaffold(
         title = when {
@@ -335,18 +330,24 @@ private fun EditAccountScreen(
             else -> stringResource(R.string.balance_create_title)
         },
         onCancel = onDismiss,
-        dirty = account == null && fields != initialFields,
+        dirty = fields != initialFields || changed.isNotEmpty(),
         onSave = if (account != null) {
-            null
+            {
+                viewModel.update(account.id, name.trim(), iconId, color, Money.parseInput(balanceText).takeIf { !editingParent }, accountType, description.trim().ifEmpty { null })
+                if (exempt != account.parentSavingExempt) viewModel.setParentSavingExempt(account.id, exempt)
+                if (privacy != account.ownPrivacy) viewModel.setPrivacy(account.id, privacy)
+                changed.forEach { (m, f) -> viewModel.setSavingsMonth(account.id, m, f.toSetting()) }
+                onDismiss()
+            }
         } else {
             {
                 val savings = form.toSetting().takeIf { savingsShown }
-                viewModel.create(name, iconId, color, balanceText.toLongOrNull() ?: 0L, accountType, savings, month, description.trim().ifEmpty { null }, parent?.id, exempt, privacy)
+                viewModel.create(name.trim(), iconId, color, Money.parseInput(balanceText), accountType, savings, month, description.trim().ifEmpty { null }, parent?.id, exempt, privacy)
                 onDismiss()
             }
         },
-        // A savings target that is on needs an amount.
-        saveEnabled = name.isNotBlank() && (!savingsShown || form.complete),
+        // A savings target that is on needs an amount, in every month changed.
+        saveEnabled = name.isNotBlank() && (!savingsShown || form.complete) && changed.values.all { it.complete },
         onDelete = if (account != null) { { showDeleteConfirm = true } } else null,
     ) {
         SectionHeader(stringResource(R.string.category_section_general), stringResource(R.string.balance_general_info))
@@ -387,8 +388,7 @@ private fun EditAccountScreen(
             label = { Text(stringResource(R.string.balance_name_hint)) },
             singleLine = true,
             isError = account != null && name.isBlank(),
-            // Editing: a blank name goes back to the saved one when the field is left.
-            modifier = Modifier.fillMaxWidth().onBlur { if (name.isBlank() && generalSave != null) name = generalSave.saved.name },
+            modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(
@@ -400,14 +400,12 @@ private fun EditAccountScreen(
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = balanceText,
-            onValueChange = { balanceText = it.filter { c -> c.isDigit() } },
-            label = { Text(stringResource(R.string.balance_current_balance_hint)) },
+        MoneyTextField(
+            text = balanceText,
+            onTextChange = { balanceText = it },
+            label = stringResource(R.string.balance_current_balance_hint),
             enabled = !editingParent,
             supportingText = if (editingParent) { { Text(stringResource(R.string.balance_parent_balance_note)) } } else null,
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(12.dp))
@@ -415,17 +413,14 @@ private fun EditAccountScreen(
         Spacer(Modifier.height(8.dp))
         ColorPickerGrid(selected = color, onSelect = { color = it })
 
-        // A savings parent's subaccount can stay out of its savings progress; editing saves the switch at once.
+        // A savings parent's subaccount can stay out of its savings progress.
         if (parent?.accountType == AccountType.SAVINGS) {
             Spacer(Modifier.height(24.dp))
             SectionHeader(
                 stringResource(R.string.balance_parent_saving_exception),
                 stringResource(R.string.balance_parent_saving_exception_info),
             ) {
-                SectionSwitch(checked = exempt, onCheckedChange = {
-                    exempt = it
-                    account?.let { a -> viewModel.setParentSavingExempt(a.id, it) }
-                })
+                SectionSwitch(checked = exempt, onCheckedChange = { exempt = it })
             }
         }
 
@@ -452,25 +447,18 @@ private fun EditAccountScreen(
                 Spacer(Modifier.height(8.dp))
             }
             // Summing: the target shows the sum and can't be typed.
-            OutlinedTextField(
-                value = if (form.sumChildren) childSum.toString() else form.targetText,
-                onValueChange = { form = form.copy(targetText = it.filter { c -> c.isDigit() }) },
-                label = { Text(stringResource(R.string.balance_target_hint)) },
+            MoneyTextField(
+                text = if (form.sumChildren) Money.groupThousands(childSum) else form.targetText,
+                onTextChange = { form = form.copy(targetText = it) },
+                label = stringResource(R.string.balance_target_hint),
                 enabled = !form.sumChildren,
-                singleLine = true,
                 isError = account != null && !form.complete,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                // Editing: an invalid target goes back to the saved one when the field is left,
-                // and the switch too if that month had none (it was off).
-                modifier = Modifier.fillMaxWidth().onBlur {
-                    val saved = savingsSave?.saved ?: return@onBlur
-                    if (!form.complete) form = form.copy(targetText = saved.targetText).takeIf { it.complete } ?: saved
-                },
+                modifier = Modifier.fillMaxWidth(),
             )
         }
 
         Spacer(Modifier.height(24.dp))
-        PrivacySection(privacy, parent, accountType == AccountType.SAVINGS, ::changePrivacy)
+        PrivacySection(privacy, parent, accountType == AccountType.SAVINGS) { privacy = it }
     }
 
     if (showConvertConfirm) {
@@ -498,8 +486,6 @@ private fun EditAccountScreen(
                 else -> stringResource(R.string.balance_delete_confirm_message)
             },
             onConfirm = {
-                generalSave?.stop()
-                savingsSave?.stop()
                 viewModel.deleteOrArchive(account)
                 showDeleteConfirm = false
                 onDismiss()
