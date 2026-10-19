@@ -82,7 +82,15 @@ data class CategoryChartsUi(val daysInMonth: Int, val daily: List<BalanceLine>, 
 
 /** One account's balance at the end of each month of [BalanceTrendUi.months]. */
 @Immutable
-data class BalanceLine(val accountId: Long, val name: String, val color: Int, val values: List<Long>, val dashed: Boolean = false)
+data class BalanceLine(
+    val accountId: Long,
+    val name: String,
+    val color: Int,
+    val values: List<Long>,
+    val dashed: Boolean = false,
+    /** Shown in the legend, tinted with [color]; without one the legend falls back to a colour block. */
+    val iconId: Long? = null,
+)
 
 @Immutable
 data class BalanceTrendUi(val months: List<Int>, val lines: List<BalanceLine>)

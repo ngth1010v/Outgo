@@ -120,7 +120,7 @@ fun buildBalanceTrend(
             running
         }
         val account = accounts[id]
-        if (values.all { it == 0L }) null else BalanceLine(id, account?.first.orEmpty(), account?.third ?: OTHER_COLOR, values)
+        if (values.all { it == 0L }) null else BalanceLine(id, account?.first.orEmpty(), account?.third ?: OTHER_COLOR, values, iconId = account?.second)
     }
     return BalanceTrendUi(trend, lines)
 }
@@ -158,7 +158,7 @@ fun buildDailyBalance(
             running
         }
         val account = accounts[id]
-        if (values.all { it == 0L }) null else BalanceLine(id, account?.first.orEmpty(), account?.third ?: OTHER_COLOR, values)
+        if (values.all { it == 0L }) null else BalanceLine(id, account?.first.orEmpty(), account?.third ?: OTHER_COLOR, values, iconId = account?.second)
     }
     return DailyBalanceUi(daysInMonth, lines)
 }
@@ -240,7 +240,7 @@ fun sumLines(lines: List<BalanceLine>, groups: List<Pair<AccountNode, List<Long>
     return groups.map { (node, leaves) ->
         val values = LongArray(length)
         leaves.forEach { id -> byId[id]?.values?.forEachIndexed { i, v -> if (i < length) values[i] += v } }
-        BalanceLine(node.id, node.name, node.color, values.asList())
+        BalanceLine(node.id, node.name, node.color, values.asList(), iconId = node.iconId)
     }
 }
 

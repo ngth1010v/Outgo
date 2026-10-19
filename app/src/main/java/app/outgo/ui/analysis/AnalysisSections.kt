@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -372,7 +373,7 @@ private fun DailyLines(
 }
 
 /**
- * A colour block and name per line, on a single row that scrolls sideways when there are more
+ * A small icon in the line's colour (a colour block for a line without an icon) and name per line, on a single row that scrolls sideways when there are more
  * accounts than fit — wrapping would make the card's height depend on the account count.
  * With [onFocus], tapping a name hands its line's id over and tapping between names hands null;
  * while [focusedId] names a line, the other names fade.
@@ -392,14 +393,26 @@ internal fun AccountLegend(lines: List<BalanceLine>, focusedId: Long? = null, on
                 val item = if (onFocus == null) {
                     Modifier
                 } else {
-                    Modifier.clip(RoundedCornerShape(4.dp)).clickable { onFocus(line.accountId) }.padding(horizontal = 2.dp, vertical = 2.dp)
+                    Modifier.clip(RoundedCornerShape(4.dp)).clickable { onFocus(line.accountId) }.padding(horizontal = 2.dp)
                 }
                 Row(
                     modifier = item.alpha(alpha),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Box(Modifier.size(10.dp).background(Color(line.color), RoundedCornerShape(2.dp)))
+                    if (line.iconId != null) {
+                        // Takes a text line's height so the fixed-height card doesn't clip; the
+                        // glyph has a transparent margin, so it is drawn larger, past that slot.
+                        IconView(
+                            iconId = line.iconId,
+                            modifier = Modifier.size(16.dp).wrapContentSize(unbounded = true),
+                            size = 18.dp,
+                            color = line.color,
+                            circle = false,
+                        )
+                    } else {
+                        Box(Modifier.size(10.dp).background(Color(line.color), RoundedCornerShape(2.dp)))
+                    }
                     Text(
                         line.name,
                         style = MaterialTheme.typography.bodySmall,

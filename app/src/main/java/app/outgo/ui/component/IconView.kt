@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -38,9 +39,10 @@ import app.outgo.ui.LocalAppContainer
  * a lightened ("blanker") tint of the same color, instead of the neutral
  * default. Built-in icons are monochrome silhouettes, so a flat tint reads
  * correctly; imported icons fall back untouched via the null branch.
+ * Without [circle] only the glyph is drawn, filling [size] (e.g. a chart legend).
  */
 @Composable
-fun IconView(iconId: Long?, modifier: Modifier = Modifier, size: Dp = 28.dp, color: Int? = null) {
+fun IconView(iconId: Long?, modifier: Modifier = Modifier, size: Dp = 28.dp, color: Int? = null, circle: Boolean = true) {
     val container = LocalAppContainer.current
     // Seeded from the cache so an already-decoded icon paints in the first frame, instead of a
     // placeholder frame then a swap in the middle of a screen's slide-in.
@@ -56,7 +58,7 @@ fun IconView(iconId: Long?, modifier: Modifier = Modifier, size: Dp = 28.dp, col
     Box(
         modifier = modifier
             .size(size)
-            .background(background, CircleShape),
+            .then(if (circle) Modifier.background(background, CircleShape) else Modifier),
         contentAlignment = Alignment.Center,
     ) {
         val current = bitmap
@@ -65,7 +67,7 @@ fun IconView(iconId: Long?, modifier: Modifier = Modifier, size: Dp = 28.dp, col
                 bitmap = current,
                 contentDescription = null,
                 colorFilter = tint?.let { ColorFilter.tint(it) },
-                modifier = Modifier.padding(size * 0.16f),
+                modifier = if (circle) Modifier.padding(size * 0.16f) else Modifier.fillMaxSize(),
             )
         } else {
             Icon(
