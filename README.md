@@ -162,7 +162,7 @@ apksigner verify --verbose app\build\outputs\apk\release\app-release.apk
 ## Under the hood
 
 - **Kotlin, Jetpack Compose and Material 3.** A single-activity app with no DI framework and no image-loading library.
-- **One SQLite file (Room).** Money is stored as `Long` in the smallest currency unit, never as floating point. SQL triggers maintain balances, monthly category totals and category usage counts.
+- **One SQLite file (Room).** Money is stored as `Long` in hundredths of the currency unit (schema 21+), never as floating point. SQL triggers maintain balances, monthly category totals and category usage counts.
 - **Fast cold start.** The first frame draws before the database opens. A committed **Baseline Profile** AOT-compiles the startup path and every animated transition.
 
 See [architecture.md](architecture.md) for the full design (in Vietnamese): data model, triggers, screens, backup format and performance budget.

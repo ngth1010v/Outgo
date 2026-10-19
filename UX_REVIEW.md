@@ -6,34 +6,13 @@
 
 Mức độ: 🔴 lỗi đã tái hiện · 🟠 mâu thuẫn workflow · 🟡 mâu thuẫn UI/hiển thị · 🔵 Analysis · ⚪ thiếu tính năng
 
-## 🔴 Lỗi (đã tái hiện được)
-
-1. **Giờ mặc định ở màn Add bị "đóng băng".** Giờ chỉ được lấy lúc mở màn hình và sau mỗi lần lưu. Lúc test, đồng hồ máy là 18:58 mà form vẫn ghi 18:54. Nếu app chạy nền vài tiếng hay qua ngày hôm sau, giao dịch sẽ bị lưu sai giờ hoặc sai ngày. Nguyên nhân: `occurredAt` trong `TradeViewModel.kt:33`; khi quay lại tab, code chỉ gọi `refreshPickers()`, không cập nhật lại thời gian.
-2. **Tab Categories luôn mở ra khi đã cuộn xuống giữa danh sách** (sau khi mở lại app). Mấy mục đầu như Ăn uống, Di chuyển bị khuất, phải tự kéo lên.
-3. **Phím ✓ trên bàn phím số ở ô nhập tiền không làm gì cả.** `AmountField` không có `ImeAction`/`keyboardActions`, nên bàn phím nằm đó che nút SAVE; phải bấm Back rồi mới bấm Save được.
-
 ## 🟠 Mâu thuẫn trong workflow
 
-4. **Có 3 kiểu lưu khác nhau:**
-   - Sửa giao dịch: phải bấm Save, có hỏi trước khi bỏ thay đổi.
-   - Sửa tài khoản / danh mục: tự lưu, nhưng nút ‹ có nhãn "Cancel" và bên dưới vẫn có nút "Close". Người dùng tưởng là huỷ, thực ra đã lưu rồi.
-   - Tạo mới: phải bấm Save.
+Mục 1–8, 10, 11 đã xử lý (xem bảng Trạng thái cuối file). Còn lại:
 
-   Nên chọn một kiểu, hoặc ít nhất đổi nhãn cho đúng.
-5. **Không nhập được số lẻ, trong khi tiền tệ mặc định là `$` và có cho chọn 20 loại tiền.** `Money.parseDigits` chỉ lấy chữ số, nên "4.50" thành 450. Hoặc hỗ trợ phần thập phân, hoặc chỉ cho chọn tiền không có số lẻ (VND, JPY…) và để VND làm mặc định.
-6. **Luồng nhập nhanh vẫn còn chậm** (dù đây là yêu cầu quan trọng nhất — mở app là vào thẳng Add):
-   - Ô tiền không tự focus khi mở.
-   - Vùng bấm của ô tiền rất hẹp: bấm vào ký hiệu `$` không ăn.
-   - Khi bàn phím hiện thì che mất nút Save.
-   - Sau khi lưu, ngày bị đặt lại về hôm nay, nên nhập bù nhiều khoản của hôm qua phải chọn lại ngày từng lần.
-7. **Hai hàng "Recent" và "Most used" trùng nhau.** Trong 10 ô, Cà phê và Ăn ngoài xuất hiện 2 lần, chọn thì cả hai ô cùng sáng. Nên lọc trùng để có thêm lựa chọn khác.
-8. **"Undo" sau khi lưu chỉ xoá giao dịch, không trả dữ liệu vào form.** Bấm Undo vì nhập sai một chỗ thì phải nhập lại từ đầu.
-9. **Màn sửa giao dịch trông y hệt màn thêm mới:**
-   - Không có tiêu đề.
+9. **Màn sửa giao dịch** (đã có tiêu đề "Sửa giao dịch"):
    - Nút Save nằm dưới cùng, sau Cancel và Delete, phải cuộn mới thấy.
    - Không đổi được loại Chi ↔ Thu.
-10. **Bấm vào tài khoản hay danh mục là vào thẳng form sửa.** Không có màn xem lịch sử giao dịch của riêng tài khoản / danh mục đó.
-11. **History tách riêng Expense / Income / Transfer.** Không xem được tất cả giao dịch theo thời gian. Bộ lọc chỉ có Account và Category: không có khoảng ngày, không tìm theo ghi chú (ví dụ "Highlands").
 
 ## 🟡 Mâu thuẫn trong UI / hiển thị
 
@@ -44,7 +23,6 @@ Mức độ: 🔴 lỗi đã tái hiện · 🟠 mâu thuẫn workflow · 🟡 m
 16. **Định dạng số không thống nhất:**
    - Ô tiền ghi `45,000$`, chỗ khác ghi `45,000 $`.
    - Ngân sách ghi `3,406,000 / 7,500,000`, tiết kiệm ghi `800,000/2,000,000`.
-   - Ô số dư / hạn mức trong form sửa ghi `7500000`, không có dấu phân cách.
 17. **Tiêu đề màn hình không đồng nhất.** Accounts, Categories, History, Settings có tiêu đề; Home, Add, Analysis thì không. Thanh điều hướng 7 tab chỉ có icon, không có chữ.
 18. **Thẻ tiết kiệm có hai con số hướng dẫn cạnh nhau:** "92,307 $/day" và "425,806 $ need to save today" — không rõ nên làm theo số nào.
 19. **Vài chỗ lệch nhỏ:**
@@ -67,7 +45,7 @@ Mức độ: 🔴 lỗi đã tái hiện · 🟠 mâu thuẫn workflow · 🟡 m
 
 ## Thứ tự đề xuất
 
-1, 3, 2 (lỗi rõ, sửa nhanh) → 4, 5, 6 (ảnh hưởng trực tiếp luồng nhập chi tiêu) → phần còn lại.
+Còn lại: 9 → 12–19 (UI) → 20–23 (Analysis) → 24–25.
 
 ## Trạng thái
 
@@ -76,4 +54,16 @@ Mức độ: 🔴 lỗi đã tái hiện · 🟠 mâu thuẫn workflow · 🟡 m
 | 1 | ✅ đã sửa — giờ theo đồng hồ (làm mới mỗi 30 giây và khi quay lại màn hình) cho tới khi người dùng tự chọn ngày/giờ; lúc lưu dùng giờ hiện tại nếu chưa chọn. `TradeViewModel.refreshTime()`, `TradeScreen.kt` |
 | 2 | ✅ đã sửa — nút "+" cuối danh sách đổi key khi danh sách đang rỗng, nên không còn bị "neo" xuống cuối khi dữ liệu tải xong (áp dụng cho cả Accounts). `TreeList.kt` |
 | 3 | ✅ đã sửa — ô số tiền có `ImeAction.Done`, bấm ✓ thì ẩn bàn phím. `AmountField.kt` |
-| 4–25 | chưa làm |
+| 4 | ✅ đã sửa — sửa tài khoản / danh mục không tự lưu nữa: có nút Save, Cancel và nút ‹ là huỷ thật (có thay đổi thì hỏi trước). Thay đổi ở nhiều tháng (ngân sách / mục tiêu tiết kiệm) được giữ khi chuyển tháng và lưu cùng lúc. Cả app chỉ còn một kiểu lưu. `EditorScaffold.kt`, `BalanceScreen.kt`, `CategoryScreen.kt` (bỏ `AutoSave.kt`) |
+| 5 | ✅ đã sửa — nhập được 2 số lẻ. Tiền lưu theo đơn vị 1/100 (migration 20→21 nhân mọi số tiền cũ ×100); số lẻ chỉ hiện khi khác 0 (`45,000` vẫn là `45,000`, `4.5` hiện `4.50`). Settings có thêm "Định dạng số": `1,234.56` hoặc `1.234,56`. Gõ `.` hay `,` đều được hiểu là dấu thập phân. `Money.kt`, `MoneyTextField.kt`, `OutgoDatabase.kt` |
+| 6 | ✅ đã sửa — bấm chỗ nào trên hàng số tiền (cả ký hiệu `$`) cũng focus; mở tab Add là ô tiền tự focus và hiện bàn phím; sau khi lưu chỉ xoá số tiền và ghi chú, giữ loại / danh mục / tài khoản / ngày giờ đã chọn (tắt hẳn app mở lại thì form trống). `AmountField.kt`, `TradeScreen.kt`, `TradeViewModel.resetForm()` |
+| 7 | ✅ đã sửa — danh mục đã có ở hàng Recent thì không lặp lại ở hàng Most used (hàng dưới lấy thêm mục khác cho đủ 5). `CategoryRepository.getPicker()` |
+| 8 | ✅ đã sửa — Undo sau khi tạo giao dịch xoá giao dịch và trả toàn bộ dữ liệu (số tiền, ghi chú, danh mục, tài khoản, ngày giờ…) về form để sửa rồi lưu lại. `TradeViewModel.undo()` |
+| 9 | 🟡 một phần — đã thêm tiêu đề "Sửa giao dịch"; hai ý còn lại giữ nguyên theo yêu cầu |
+| 10 | — giữ nguyên (đã chấp nhận cách hiện tại) |
+| 11 | ✅ đã sửa — tab History là một danh sách chung Chi / Thu / Chuyển khoản theo thời gian (ngày có nhiều loại thì tổng là thu − chi). Bộ lọc có thêm: loại giao dịch, từ ngày / đến ngày, ghi chú có chứa, khoảng số tiền. `HistoryScreen.kt`, `HistoryFilterUi.kt`, `TradeDao.historyPage` |
+| 12–25 | chưa làm |
+
+Ghi chú khi test lần này:
+- Khi ô tiền tự focus, bàn phím che thanh điều hướng dưới: muốn chuyển tab thì bấm ✓ hoặc Back để ẩn bàn phím trước.
+- Đã sửa thêm một lỗi gặp khi làm mục 5: khôi phục backup tạo từ bản 4.8.0 (schema 20) bị báo "cần bản mới hơn" vì `SCHEMA_VERSION` vẫn là 19. Giờ hằng số này là version của Room luôn.

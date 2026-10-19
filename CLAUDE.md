@@ -78,7 +78,8 @@ single-file copy (`VACUUM INTO`, see `data/backup/BackupManager.kt` and architec
 `SharedPreferences` is used only as a startup mirror of theme/locale (so the first frame can paint
 correctly without opening the DB) — never as a source of truth for user data.
 
-Money is stored as `Long` in the smallest currency unit (no floating point). Time is stored as both
+Money is stored as `Long` in hundredths of the currency unit (schema 21+, `Money.SCALE`; no floating point). Format with
+`Money.format`/`groupThousands` and take input through `MoneyTextField`/`Money.cleanInput`+`parseInput`, never `toLong()`. Time is stored as both
 `occurred_at` (epoch ms UTC) and `month_key` (int `yyyyMM`, local time) so monthly queries can use an
 indexed integer instead of date functions.
 
