@@ -7,23 +7,17 @@ import app.outgo.R
 import app.outgo.domain.CategoryKind
 
 /**
- * The user-arranged chart lists. The month pages share one ordered list of [ChartCard]s and the
- * year pages another, each saved as one `setting` row so it travels with backups. Category and
- * account charts sit in the same list. A card knows its chart, its own Expense/Income/All choice
- * and, for the per-account charts, which account it follows.
+ * The user-arranged chart list. The month pages share one ordered list of [ChartCard]s, saved as one
+ * `setting` row so it travels with backups. A card knows its chart, its own Expense/Income/All
+ * choice and, for the account and category charts, which parent it follows and what it hides.
  */
 
 /** [icon] must be unique among the charts one [LayoutSlot] offers. */
 enum class ChartType(
     @DrawableRes val icon: Int,
     val hasMode: Boolean = true,
-    val hasAccount: Boolean = false,
-    /** The account chip also offers "All"; a null account means all of them instead of the first. */
-    val allAccounts: Boolean = false,
     /** A chart whose value axis can be pinned to reach 0; see [ChartCard.zero]. */
     val hasZero: Boolean = false,
-    /** Picks any number of budgets or savings accounts ([ChartCard.ids]) and its own month ([ChartCard.month]). */
-    val hasPicks: Boolean = false,
     /** Picks one parent account ([ChartCard.accountId]) and draws its subaccounts. */
     val hasParent: Boolean = false,
     /** Each account (category) it draws can be switched off ([ChartCard.hidden]). */
@@ -62,37 +56,9 @@ enum class ChartType(
     INCOME_CATEGORY_MONTHS(R.drawable.ph_money_wavy, hasMode = false, hasToggles = true, categoryKind = CategoryKind.INCOME),
     INCOME_SUBCATEGORY_MONTHS(R.drawable.ph_currency_circle_dollar, hasMode = false, hasParent = true, hasToggles = true, categoryKind = CategoryKind.INCOME),
 
-    // Categories, month
+    // Other
+    /** Month totals, the change since last month, the daily average and the month's transfers. */
     SUMMARY(R.drawable.ph_receipt),
-    /** Donut and breakdown list in one card. */
-    DONUT(R.drawable.ph_chart_pie_slice),
-    PACE(R.drawable.ph_chart_line_up, hasZero = true),
-    TREND(R.drawable.ph_chart_bar, hasZero = true),
-    MOVERS(R.drawable.ph_arrows_down_up),
-    HEATMAP(R.drawable.ph_calendar_dots, hasMode = false),
-    WEEKDAY(R.drawable.ph_chart_bar_horizontal, hasMode = false, hasZero = true),
-    BUCKETS(R.drawable.ph_coins, hasMode = false),
-    LARGEST(R.drawable.ph_sort_descending),
-
-    // Categories, year
-    YEAR_SUMMARY(R.drawable.ph_receipt),
-    YEAR_BARS(R.drawable.ph_chart_bar, hasZero = true),
-    YOY(R.drawable.ph_chart_line, hasZero = true),
-
-    // Accounts
-    ACCOUNT_DONUT(R.drawable.ph_chart_donut),
-    NET_FLOW(R.drawable.ph_trend_up, hasMode = false),
-    BALANCE_TREND(R.drawable.ph_wallet, hasMode = false, hasZero = true),
-    /** Month pages only: a year has no single month to draw day by day. */
-    DAILY_BALANCE(R.drawable.ph_chart_line, hasMode = false, hasAccount = true, allAccounts = true, hasZero = true),
-    TRANSFERS(R.drawable.ph_arrows_left_right, hasMode = false),
-    ACCOUNT_LARGEST(R.drawable.ph_ranking, hasAccount = true),
-
-    // Budgets and savings, month pages only
-    /** Running spend of each picked budget, day by day. */
-    BUDGET_DAILY(R.drawable.ph_trend_down, hasMode = false, hasPicks = true),
-    /** Running balance change of each picked savings account since the month began. */
-    SAVING_DAILY(R.drawable.ph_wallet_fill, hasMode = false, hasPicks = true),
 }
 
 /**
@@ -105,6 +71,7 @@ data class ChartGroup(@StringRes val title: Int, val charts: List<ChartType>, va
  * One saved list. [charts] is the first-run layout; [groups] is what the "+" sheet offers, and
  * holds the same charts. [legacy] are the rows of the older per-tab lists (Categories, then
  * Accounts) with their own first-run layouts, which a list never saved in this form is built from.
+ * The year page has no list of its own yet ("Coming soon"), so its old rows are no longer read.
  */
 enum class LayoutSlot(
     val settingKey: String,
@@ -114,7 +81,7 @@ enum class LayoutSlot(
 ) {
     MONTH(
         "analysis_layout_month",
-        MonthBalanceCharts + MonthCategoryGroupCharts + MonthCategoryCharts + MonthAccountCharts + listOf(ChartType.BUDGET_DAILY, ChartType.SAVING_DAILY),
+        MonthBalanceCharts + MonthCategoryGroupCharts + ChartType.SUMMARY,
         listOf(
             ChartGroup(
                 R.string.analysis_group_accounts,
@@ -149,47 +116,24 @@ enum class LayoutSlot(
                     ),
                 ),
             ),
-            // ponytail: every chart from before the Accounts group, parked here until each finds its own group.
-            ChartGroup(
-                R.string.analysis_group_other,
-                listOf(
-                    ChartType.SUMMARY, ChartType.DONUT, ChartType.ACCOUNT_DONUT, ChartType.NET_FLOW,
-                    ChartType.TREND, ChartType.PACE, ChartType.HEATMAP, ChartType.WEEKDAY,
-                    ChartType.BALANCE_TREND, ChartType.DAILY_BALANCE, ChartType.BUDGET_DAILY, ChartType.SAVING_DAILY,
-                    ChartType.MOVERS, ChartType.BUCKETS, ChartType.LARGEST, ChartType.TRANSFERS, ChartType.ACCOUNT_LARGEST,
-                ),
-            ),
+            ChartGroup(R.string.analysis_group_other, listOf(ChartType.SUMMARY)),
         ),
         listOf(
-            "analysis_layout_month_categories" to MonthCategoryCharts,
-            "analysis_layout_month_accounts" to MonthAccountCharts,
-        ),
-    ),
-    YEAR(
-        "analysis_layout_year",
-        YearCategoryCharts + YearAccountCharts,
-        listOf(
-            ChartGroup(
-                R.string.analysis_group_overview,
-                listOf(ChartType.YEAR_SUMMARY, ChartType.DONUT, ChartType.ACCOUNT_DONUT, ChartType.NET_FLOW),
-            ),
-            ChartGroup(R.string.analysis_group_over_time, listOf(ChartType.YEAR_BARS, ChartType.YOY, ChartType.BALANCE_TREND)),
-            ChartGroup(R.string.analysis_group_details, listOf(ChartType.LARGEST, ChartType.TRANSFERS, ChartType.ACCOUNT_LARGEST)),
-        ),
-        listOf(
-            "analysis_layout_year_categories" to YearCategoryCharts,
-            "analysis_layout_year_accounts" to YearAccountCharts,
+            "analysis_layout_month_categories" to listOf(ChartType.SUMMARY),
+            "analysis_layout_month_accounts" to emptyList(),
         ),
     ),
     ;
 
-    /** Every chart this list may hold, so a card of the other kind (hand-edited backup) is dropped. */
-    val offered: Set<ChartType> get() = groups.flatMapTo(HashSet()) { it.charts }
-
-    companion object {
-        fun of(page: AnalysisPage): LayoutSlot = if (page is AnalysisPage.Month) MONTH else YEAR
-    }
+    /**
+     * Every chart this list may hold, sub-groups included, so a removed chart (or one from a
+     * hand-edited backup) is dropped when the list is read.
+     */
+    val offered: Set<ChartType> get() = groups.flatMapTo(HashSet()) { it.allCharts() }
 }
+
+/** This group's charts and those of its sub-groups, at any depth. */
+fun ChartGroup.allCharts(): List<ChartType> = charts + sub.flatMap { it.allCharts() }
 
 /** The Accounts group, in its first-run order; added on top of an older saved list once, see [MONTH_BALANCE_ADDED_KEY]. */
 val MonthBalanceCharts
@@ -216,26 +160,6 @@ val MonthCategoryGroupCharts
 /** Set once [MonthCategoryGroupCharts] were put into the saved month list (or a fresh one started with them). */
 const val MONTH_CATEGORY_ADDED_KEY = "analysis_layout_month_category_added"
 
-private val MonthCategoryCharts
-    get() = listOf(
-        ChartType.SUMMARY, ChartType.DONUT, ChartType.PACE, ChartType.TREND, ChartType.MOVERS,
-        ChartType.HEATMAP, ChartType.WEEKDAY, ChartType.BUCKETS, ChartType.LARGEST,
-    )
-
-private val MonthAccountCharts
-    get() = listOf(
-        ChartType.ACCOUNT_DONUT, ChartType.NET_FLOW, ChartType.BALANCE_TREND, ChartType.DAILY_BALANCE,
-        ChartType.TRANSFERS, ChartType.ACCOUNT_LARGEST,
-    )
-
-private val YearCategoryCharts
-    get() = listOf(ChartType.YEAR_SUMMARY, ChartType.YEAR_BARS, ChartType.DONUT, ChartType.YOY, ChartType.LARGEST)
-
-private val YearAccountCharts
-    get() = listOf(
-        ChartType.ACCOUNT_DONUT, ChartType.NET_FLOW, ChartType.BALANCE_TREND, ChartType.TRANSFERS, ChartType.ACCOUNT_LARGEST,
-    )
-
 /** [id] only lives for the session: it keys the lazy list, it is not saved. */
 @Immutable
 data class ChartCard(
@@ -243,27 +167,24 @@ data class ChartCard(
     val type: ChartType,
     val mode: AnalysisMode = AnalysisMode.ALL,
     /**
-     * Only for [ChartType.hasAccount]; null follows the first account. A [ChartType.hasParent] chart
-     * keeps its parent account, or for a [ChartType.categoryKind] its parent category, here.
+     * Only for [ChartType.hasParent]: the parent account, or for a [ChartType.categoryKind] the
+     * parent category; null follows the first one.
      */
     val accountId: Long? = null,
     /** Only for [ChartType.hasZero]: the value axis always takes in 0, instead of fitting the data. */
     val zero: Boolean = false,
-    /** Only for [ChartType.hasPicks]: the budgets' category ids or the savings account ids; empty means all. */
-    val ids: List<Long> = emptyList(),
-    /** Only for [ChartType.hasPicks]: a fixed `yyyyMM`; null follows the page's month. */
-    val month: Int? = null,
     /** Only for [ChartType.hasToggles]: the accounts (categories) switched off, so one added later shows. */
     val hidden: List<Long> = emptyList(),
 )
 
 /**
  * `TYPE.MODE.accountId.zero.ids.month.hidden` per card, `;`-separated; zero is `0` when on, empty when
- * off, ids and hidden are `,`-separated. Older versions read the first parts and ignore the rest.
+ * off, hidden is `,`-separated. ids and month belonged to the removed budget and savings charts and
+ * are always written empty, so hidden keeps its place. Older versions read the first parts and
+ * ignore the rest.
  */
 fun encodeLayout(cards: List<ChartCard>): String = cards.joinToString(";") {
-    "${it.type.name}.${it.mode.name}.${it.accountId ?: ""}.${if (it.zero) "0" else ""}.${it.ids.joinToString(",")}.${it.month ?: ""}" +
-        ".${it.hidden.joinToString(",")}"
+    "${it.type.name}.${it.mode.name}.${it.accountId ?: ""}.${if (it.zero) "0" else ""}..." + it.hidden.joinToString(",")
 }
 
 /**
@@ -278,8 +199,6 @@ fun decodeLayout(value: String?, defaults: List<ChartType>, offered: Set<ChartTy
         val mode = AnalysisMode.entries.firstOrNull { it.name == parts.getOrNull(1) } ?: AnalysisMode.ALL
         ChartCard(
             0, type, mode, parts.getOrNull(2)?.toLongOrNull(), parts.getOrNull(3) == "0",
-            parts.getOrNull(4)?.split(',')?.mapNotNull { it.toLongOrNull() }.orEmpty(),
-            parts.getOrNull(5)?.toIntOrNull(),
             parts.getOrNull(6)?.split(',')?.mapNotNull { it.toLongOrNull() }.orEmpty(),
         )
     }

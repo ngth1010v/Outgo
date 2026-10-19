@@ -264,12 +264,6 @@ class TradeRepository(private val tradeDao: TradeDao) {
         runningDays(tradeDao.savingTradesForMonth(accountId, month).map { it.occurredAt to it.amount }, month)
     }
 
-    /** Running balance change since [monthKey] began for each of [accountIds], day 1 to today (or the month's end). */
-    suspend fun balanceChangeDays(accountIds: Collection<Long>, monthKey: Int): Map<Long, List<Long>> = withContext(Dispatchers.IO) {
-        val moves = tradeDao.accountMovesForMonth(monthKey).groupBy { it.accountId }
-        accountIds.associateWith { id -> runningDays(moves[id].orEmpty().map { it.occurredAt to it.delta }, monthKey) }
-    }
-
     /** (occurredAt, amount) pairs summed per day and run up; the live month stops at today. */
     private fun runningDays(amounts: List<Pair<Long, Long>>, monthKey: Int): List<Long> {
         val zone = ZoneId.systemDefault()

@@ -86,14 +86,14 @@ internal fun MacrobenchmarkScope.animationJourney() {
     device.waitForIdle()
     Thread.sleep(700)
 
-    // Analysis: the month list and the year list scrolled through, plus a step back a month (the
-    // neighbour page follows the scroll position) — that is what compiles the hand-drawn charts.
+    // Analysis: the month list scrolled through, plus a step back a month (the neighbour page
+    // follows the scroll position) — that is what compiles the hand-drawn charts. The year page is
+    // only a "Coming soon" note, so it is just visited.
     tap(By.desc("Analysis"))
     flingDownAndUp()
     tap(By.desc("Previous month"))
     flingDownAndUp()
     tap(By.text("Yearly analysis"))
-    flingDownAndUp()
     tap(By.text("Now"))
 }
 

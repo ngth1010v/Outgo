@@ -4,7 +4,6 @@ import app.outgo.data.db.dao.AccountBalance
 import app.outgo.data.db.dao.AccountFlow
 import app.outgo.data.db.dao.AccountMove
 import app.outgo.data.db.dao.FLOW_TRANSFER_IN
-import app.outgo.data.db.dao.TradeSlim
 import app.outgo.domain.TradeType
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -15,57 +14,44 @@ class AnalysisLayoutTest {
 
     @Test
     fun `never saved anywhere gives the old category then account defaults`() {
-        val cards = decodeSlot(LayoutSlot.YEAR) { null }.withIds(10)
-        assertEquals(LayoutSlot.YEAR.charts, cards.map { it.type })
+        val cards = decodeSlot(LayoutSlot.MONTH) { null }.withIds(10)
+        assertEquals(listOf(ChartType.SUMMARY), cards.map { it.type })
         assertEquals((10L until 10L + cards.size).toList(), cards.map { it.id })
     }
 
     @Test
-    fun `old category and account rows are joined into one list`() {
+    fun `old category and account rows are joined, removed charts dropped`() {
         val saved = mapOf(
-            "analysis_layout_month_categories" to "DONUT.EXPENSE..;LARGEST.ALL..",
+            "analysis_layout_month_categories" to "DONUT.EXPENSE..;SUMMARY.INCOME..",
             "analysis_layout_month_accounts" to "NET_FLOW.ALL..;DAILY_BALANCE.ALL.3.0",
         )
-        assertEquals(
-            listOf(
-                ChartCard(0, ChartType.DONUT, AnalysisMode.EXPENSE),
-                ChartCard(0, ChartType.LARGEST),
-                ChartCard(0, ChartType.NET_FLOW),
-                ChartCard(0, ChartType.DAILY_BALANCE, accountId = 3, zero = true),
-            ),
-            decodeSlot(LayoutSlot.MONTH) { saved[it] },
-        )
-        // Only one old row saved: the other falls back to its own defaults.
-        val onlyAccounts = decodeSlot(LayoutSlot.YEAR) { if (it == "analysis_layout_year_accounts") "TRANSFERS.ALL.." else null }
-        assertEquals(listOf(ChartType.YEAR_SUMMARY, ChartType.YEAR_BARS, ChartType.DONUT, ChartType.YOY, ChartType.LARGEST, ChartType.TRANSFERS), onlyAccounts.map { it.type })
-    }
-
-    @Test
-    fun `picked ids and month survive a round trip, old rows read without them`() {
-        val cards = listOf(
-            ChartCard(0, ChartType.BUDGET_DAILY, ids = listOf(4, 7), month = 202609),
-            ChartCard(0, ChartType.SAVING_DAILY),
-            ChartCard(0, ChartType.DAILY_BALANCE, accountId = 3, zero = true),
-        )
-        val offered = LayoutSlot.MONTH.offered
-        assertEquals(cards, decodeLayout(encodeLayout(cards), emptyList(), offered))
-        assertEquals(listOf(ChartCard(0, ChartType.PACE, zero = true)), decodeLayout("PACE.ALL..0", emptyList(), offered))
+        assertEquals(listOf(ChartCard(0, ChartType.SUMMARY, AnalysisMode.INCOME)), decodeSlot(LayoutSlot.MONTH) { saved[it] })
     }
 
     @Test
     fun `the merged row wins over the old ones`() {
-        val saved = mapOf("analysis_layout_month" to "HEATMAP.ALL..", "analysis_layout_month_categories" to "DONUT.ALL..")
-        assertEquals(listOf(ChartCard(0, ChartType.HEATMAP)), decodeSlot(LayoutSlot.MONTH) { saved[it] })
+        val saved = mapOf("analysis_layout_month" to "SUMMARY.EXPENSE..", "analysis_layout_month_categories" to "SUMMARY.INCOME..")
+        assertEquals(listOf(ChartCard(0, ChartType.SUMMARY, AnalysisMode.EXPENSE)), decodeSlot(LayoutSlot.MONTH) { saved[it] })
     }
 
     @Test
     fun `a list offers each chart once, with its own icon, and its defaults are all offered`() {
         LayoutSlot.entries.forEach { slot ->
-            val offered = slot.groups.flatMap { it.charts }
+            val offered = slot.groups.flatMap { it.allCharts() }
             assertEquals(slot.name, offered.size, offered.toSet().size)
             assertEquals(slot.name, offered.size, offered.map { it.icon }.toSet().size)
             assertEquals(slot.name, slot.charts.toSet(), offered.toSet())
+            assertEquals(slot.name, slot.offered, offered.toSet())
         }
+    }
+
+    @Test
+    fun `charts under a sub-header survive a restart`() {
+        // The Accounts and Categories charts sit in sub-groups of the "+" sheet; reading the saved
+        // row back must keep them (they used to be dropped on every app start).
+        val cards = (MonthBalanceCharts + MonthCategoryGroupCharts + ChartType.SUMMARY).map { ChartCard(0, it) }
+        val saved = mapOf("analysis_layout_month" to encodeLayout(cards))
+        assertEquals(cards, decodeSlot(LayoutSlot.MONTH) { saved[it] })
     }
 
     @Test
@@ -74,27 +60,30 @@ class AnalysisLayoutTest {
     }
 
     @Test
-    fun `round trip keeps order, mode, account and zero, skips unknown and not-offered charts`() {
+    fun `round trip keeps order, mode, parent, zero and hidden, skips unknown and removed charts`() {
         val cards = listOf(
-            ChartCard(0, ChartType.ACCOUNT_LARGEST, AnalysisMode.INCOME, 7),
-            ChartCard(0, ChartType.NET_FLOW),
-            ChartCard(0, ChartType.DONUT, AnalysisMode.ALL),
-            ChartCard(0, ChartType.BALANCE_TREND, zero = true),
+            ChartCard(0, ChartType.SUBACCOUNT_DAILY, accountId = 7, zero = true, hidden = listOf(3, 4)),
+            ChartCard(0, ChartType.SUMMARY, AnalysisMode.INCOME),
+            ChartCard(0, ChartType.EXPENSE_CATEGORY_SHARE, hidden = listOf(9)),
+            ChartCard(0, ChartType.INCOME_SUBCATEGORY_MONTHS, accountId = 2),
         )
         val offered = LayoutSlot.MONTH.offered
         val encoded = encodeLayout(cards)
         assertEquals(cards, decodeLayout(encoded, emptyList(), offered))
-        val withFuture = "FUTURE_CHART.ALL.;$encoded"
-        assertEquals(cards, decodeLayout(withFuture, emptyList(), offered))
-        // A month-only chart in the year list (hand-edited backup) is dropped.
-        assertEquals(emptyList<ChartCard>(), decodeLayout("DAILY_BALANCE.ALL..", emptyList(), LayoutSlot.YEAR.offered))
+        // A newer version's chart and a removed one are both skipped.
+        assertEquals(cards, decodeLayout("FUTURE_CHART.ALL.;PACE.ALL..0;$encoded", emptyList(), offered))
+        // Saved by the previous version, with budget picks in the ids and month parts: hidden still reads.
+        assertEquals(
+            listOf(ChartCard(0, ChartType.ACCOUNT_SHARE, hidden = listOf(5))),
+            decodeLayout("ACCOUNT_SHARE.ALL...4,7.202609.5", emptyList(), offered),
+        )
         // Saved before the zero option existed.
-        assertEquals(listOf(ChartCard(0, ChartType.NET_FLOW)), decodeLayout("NET_FLOW.ALL.", emptyList(), offered))
+        assertEquals(listOf(ChartCard(0, ChartType.SUMMARY)), decodeLayout("SUMMARY.ALL.", emptyList(), offered))
     }
 
     @Test
-    fun `accounts split kinds, sign net flow and build balances from the opening`() {
-        val accounts = mapOf(1L to Triple("Cash", null, 1), 2L to Triple("Bank", null, 2))
+    fun `balance trend runs each account from its opening, in the user's account order`() {
+        val accounts = mapOf(1L to Triple("Cash", null, 1), 2L to Triple("Bank", null, 2), 3L to Triple("Empty", null, 3))
         val flows = listOf(
             AccountFlow(202607, 1, TradeType.EXPENSE, 100),
             AccountFlow(202608, 1, TradeType.EXPENSE, 300),
@@ -103,33 +92,11 @@ class AnalysisLayoutTest {
             AccountFlow(202608, 2, TradeType.TRANSFER, 200),
             AccountFlow(202608, 1, FLOW_TRANSFER_IN, 200),
         )
-        val rows = listOf(
-            TradeSlim(1, TradeType.EXPENSE, 300, 0, null, null, accountId = 1),
-            TradeSlim(2, TradeType.INCOME, 1_000, 0, null, null, accountId = 2),
-        )
-        val ui = buildAccounts(
-            flows = flows,
-            opening = listOf(AccountBalance(1, 500)),
-            period = listOf(202608),
-            previous = listOf(202607),
-            trend = listOf(202607, 202608),
-            rows = rows,
-            accounts = accounts,
-            categories = emptyMap(),
-            otherName = "Other",
-        )
-        assertEquals(listOf(1L), ui.expense.rows.map { it.rootId })
-        assertEquals(200L, ui.expense.deltaAmount)
-        assertEquals(listOf(2L), ui.income.rows.map { it.rootId })
-        // Bank +1000 -200, Cash -300 +200.
-        assertEquals(listOf(2L to 800L, 1L to -100L), ui.netFlow.map { it.rootId to it.delta })
-        assertEquals(listOf(listOf(400L, 300L), listOf(0L, 800L)), ui.balance.lines.map { it.values })
-        // August's end-of-month balances, against July's end (Bank still at 0 then, so no slice).
-        assertEquals(listOf(2L to 800L, 1L to 300L), ui.balanceShare.rows.map { it.rootId to it.amount })
-        assertEquals(1_100L, ui.balanceShare.donut.total)
-        assertEquals(400L, ui.balanceShare.prevTotal)
-        assertEquals(listOf(1L), ui.largest.getValue(1).expense.map { it.tradeId })
-        assertEquals(listOf(2L), ui.largest.getValue(2).all.map { it.tradeId })
+        val ui = buildBalanceTrend(flows, listOf(AccountBalance(1, 500), AccountBalance(3, 0)), listOf(202607, 202608), accounts)
+        assertEquals(listOf(202607, 202608), ui.months)
+        // Cash 500 -100, then -300 +200; Bank +1000 -200. Account 3 sits at 0 and is left out.
+        assertEquals(listOf(1L, 2L), ui.lines.map { it.accountId })
+        assertEquals(listOf(listOf(400L, 300L), listOf(0L, 800L)), ui.lines.map { it.values })
     }
 
     @Test

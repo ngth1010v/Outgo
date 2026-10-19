@@ -52,11 +52,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -85,33 +85,30 @@ import app.outgo.ui.component.rememberReorderState
 import app.outgo.ui.theme.ExpenseRed
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
-import java.util.Locale
 
 /**
- * One flat pager: every year's months, then that year's summary page. Only three pages are ever
- * composed (`beyondViewportPageCount = 1`) and the ViewModel keeps the last five pages' results,
- * so swiping back to a page already seen renders straight from cache with no skeleton.
+ * One flat pager: every year's months, then that year's page (for now a "Coming soon" note). Only
+ * three pages are ever composed (`beyondViewportPageCount = 1`) and the ViewModel keeps the last
+ * five months' results, so swiping back to a page already seen renders straight from cache with no
+ * skeleton.
  *
- * Every month page shows the same chart list, and every year page another, each card at a height
- * that does not depend on the data (see [chartHeight]). The pages of one kind follow one scroll
- * position ([ScrollAnchor]): a swipe or a caret lands on the next month with the same chart in the
- * same place, and stepping over a year page keeps the months' position.
+ * Every month page shows the same chart list, each card at a height that does not depend on the
+ * data (see [chartHeight]). The month pages follow one scroll position ([ScrollAnchor]): a swipe or
+ * a caret lands on the next month with the same chart in the same place, and stepping over a year
+ * page keeps that position.
  */
 @Composable
-fun AnalysisScreen(onOpenTrade: (Long) -> Unit, onOpenDay: (Long) -> Unit) {
+fun AnalysisScreen() {
     val container = LocalAppContainer.current
-    val otherName = stringResource(R.string.analysis_other)
     val viewModel: AnalysisViewModel = viewModel(
         factory = viewModelFactory {
             initializer {
                 AnalysisViewModel(
                     container.statDao,
                     container.tradeRepository,
-                    container.budgetRepository,
                     container.categoryRepository,
                     container.accountRepository,
                     container.settingRepository,
-                    otherName,
                 )
             }
         },
@@ -124,7 +121,6 @@ fun AnalysisScreen(onOpenTrade: (Long) -> Unit, onOpenDay: (Long) -> Unit) {
         pageCount = { pages.size },
     )
     val monthAnchor = remember { ScrollAnchor() }
-    val yearAnchor = remember { ScrollAnchor() }
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
     val snackbar = remember { SnackbarHostState() }
@@ -153,11 +149,6 @@ fun AnalysisScreen(onOpenTrade: (Long) -> Unit, onOpenDay: (Long) -> Unit) {
         }
     }
 
-    val onSelectMonth: (Int) -> Unit = { month ->
-        val index = pages.indexOf(AnalysisPage.Month(month))
-        if (index >= 0) scope.launch { pagerState.animateScrollToPage(index) }
-    }
-
     Scaffold(
         topBar = {
             AnalysisHeader(
@@ -176,31 +167,13 @@ fun AnalysisScreen(onOpenTrade: (Long) -> Unit, onOpenDay: (Long) -> Unit) {
             // Must be a Bundle-storable type: a data class key crashes the lazy layout.
             key = { pages.getOrNull(it)?.key ?: -it },
         ) { index ->
-            val page = pages.getOrNull(index) ?: return@HorizontalPager
-            // By page rather than index: the index shifts when the list grows backwards.
-            val listState = rememberSyncedListState(if (page is AnalysisPage.Month) monthAnchor else yearAnchor) {
-                pages.getOrNull(pagerState.settledPage) == page
-            }
-            when (page) {
-                is AnalysisPage.Month -> MonthPage(
-                    page = page,
-                    listState = listState,
-                    state = state,
-                    viewModel = viewModel,
-                    onDeleted = onDeleted,
-                    onOpenTrade = onOpenTrade,
-                    onOpenDay = onOpenDay,
-                    onSelectMonth = onSelectMonth,
-                )
-                is AnalysisPage.Year -> YearPage(
-                    page = page,
-                    listState = listState,
-                    state = state,
-                    viewModel = viewModel,
-                    onDeleted = onDeleted,
-                    onOpenTrade = onOpenTrade,
-                    onSelectMonth = onSelectMonth,
-                )
+            when (val page = pages.getOrNull(index) ?: return@HorizontalPager) {
+                is AnalysisPage.Month -> {
+                    // By page rather than index: the index shifts when the list grows backwards.
+                    val listState = rememberSyncedListState(monthAnchor) { pages.getOrNull(pagerState.settledPage) == page }
+                    MonthPage(page, listState, state, viewModel, onDeleted)
+                }
+                is AnalysisPage.Year -> ComingSoonPage()
             }
         }
     }
@@ -209,10 +182,10 @@ fun AnalysisScreen(onOpenTrade: (Long) -> Unit, onOpenDay: (Long) -> Unit) {
 // ---------------------------------------------------------------- scroll sync
 
 /**
- * The one scroll position every page of a kind (month or year) shares. The settled page writes it
- * as it scrolls; every other composed page of that kind — the neighbours a swipe reveals, a page a
- * caret jumps to — reads it. The cards are the same list at the same heights on every page of a
- * kind, so the same item index and offset put the same chart at the same place.
+ * The one scroll position every month page shares. The settled page writes it as it scrolls; every
+ * other composed month page — the neighbours a swipe reveals, a page a caret jumps to — reads it.
+ * The cards are the same list at the same heights on every month page, so the same item index and
+ * offset put the same chart at the same place.
  */
 @Stable
 private class ScrollAnchor {
@@ -367,8 +340,6 @@ private fun ChartList(
     slot: LayoutSlot,
     cards: List<ChartCard>,
     state: AnalysisUiState,
-    /** The month page's own month, which a budget/savings card follows by default; null on a year page. */
-    pageMonth: Int?,
     listState: LazyListState,
     viewModel: AnalysisViewModel,
     onDeleted: (LayoutSlot, Int, ChartCard) -> Unit,
@@ -406,8 +377,8 @@ private fun ChartList(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             items(cards, key = { it.id }, contentType = { it.type }) { card ->
-                val action: (@Composable () -> Unit)? = if (card.type.hasMode || card.type.hasAccount || card.type.hasZero || card.type.hasPicks || card.type.hasParent || card.type.hasToggles) {
-                    { CardChips(card, state, pageMonth) { viewModel.updateCard(slot, it) } }
+                val action: (@Composable () -> Unit)? = if (card.type.hasMode || card.type.hasZero || card.type.hasParent || card.type.hasToggles) {
+                    { CardChips(card, state) { viewModel.updateCard(slot, it) } }
                 } else {
                     null
                 }
@@ -417,7 +388,7 @@ private fun ChartList(
                         .background(cardColor(), CardShape)
                         .padding(CardPadding)
                         // Fixed per chart and chip, never per data: every page lays out alike.
-                        .height(chartHeight(card.type, card.mode)),
+                        .height(chartHeight(card.type)),
                 ) {
                     CompositionLocalProvider(LocalSectionAction provides action) { chart(card) }
                 }
@@ -451,31 +422,8 @@ private fun ChartList(
 }
 
 @Composable
-private fun CardChips(card: ChartCard, state: AnalysisUiState, pageMonth: Int?, onChange: (ChartCard) -> Unit) {
-    val accounts = state.accounts
+private fun CardChips(card: ChartCard, state: AnalysisUiState, onChange: (ChartCard) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        if (card.type.hasPicks) {
-            val items = if (card.type == ChartType.BUDGET_DAILY) state.budgets else state.savings
-            val all = stringResource(R.string.analysis_accounts_all)
-            val label = when (card.ids.size) {
-                0 -> all
-                1 -> items.firstOrNull { it.first == card.ids[0] }?.second ?: "—"
-                else -> stringResource(R.string.analysis_picked_count, card.ids.size)
-            }
-            val picks: List<Pair<Long?, String>> = listOf(null to all) + items
-            ChoiceChip(label, picks, checked = { if (it == null) card.ids.isEmpty() else it in card.ids }) { id ->
-                // Unticking the last pick goes back to all.
-                val ids = when {
-                    id == null -> emptyList()
-                    id in card.ids -> card.ids - id
-                    else -> card.ids + id
-                }
-                onChange(card.copy(ids = ids))
-            }
-            val months: List<Pair<Int?, String>> = listOf(null to stringResource(R.string.analysis_month_follow)) +
-                state.pages.filterIsInstance<AnalysisPage.Month>().reversed().map { it.monthKey to monthNumber(it.monthKey) }
-            ChoiceChip((card.month ?: pageMonth)?.let(::monthNumber) ?: "—", months) { onChange(card.copy(month = it)) }
-        }
         val tree = treeOf(card.type, state)
         if (card.type.hasParent) {
             val parents = tree.map { it.id to it.name }
@@ -489,13 +437,6 @@ private fun CardChips(card: ChartCard, state: AnalysisUiState, pageMonth: Int?, 
             ChoiceChip(label, options, checked = { it !in card.hidden }) { id ->
                 onChange(card.copy(hidden = if (id in card.hidden) card.hidden - id else card.hidden + id))
             }
-        }
-        if (card.type.allAccounts) {
-            val options = listOf(null to stringResource(R.string.analysis_accounts_all)) + accounts
-            ChoiceChip(options.firstOrNull { it.first == card.accountId }?.second ?: "—", options) { onChange(card.copy(accountId = it)) }
-        } else if (card.type.hasAccount) {
-            val id = card.accountId ?: accounts.firstOrNull()?.first
-            ChoiceChip(accounts.firstOrNull { it.first == id }?.second ?: "—", accounts) { onChange(card.copy(accountId = it)) }
         }
         if (card.type.hasMode) {
             ChoiceChip(modeLabel(card.mode), AnalysisMode.entries.map { it to modeLabel(it) }) { onChange(card.copy(mode = it)) }
@@ -634,25 +575,6 @@ private fun shortChartName(type: ChartType): String {
 private fun chartName(type: ChartType): String = stringResource(
     when (type) {
         ChartType.SUMMARY -> R.string.analysis_summary_title
-        ChartType.DONUT -> R.string.analysis_by_category_all_title
-        ChartType.PACE -> R.string.analysis_chart_pace
-        ChartType.TREND -> R.string.analysis_trend_title
-        ChartType.MOVERS -> R.string.analysis_movers_title
-        ChartType.HEATMAP -> R.string.analysis_heatmap_title
-        ChartType.WEEKDAY -> R.string.analysis_weekday_title
-        ChartType.BUCKETS -> R.string.analysis_buckets_title
-        ChartType.LARGEST -> R.string.analysis_largest_all_title
-        ChartType.YEAR_SUMMARY -> R.string.analysis_year_summary_title
-        ChartType.YEAR_BARS -> R.string.analysis_year_bars_title
-        ChartType.YOY -> R.string.analysis_year_yoy_title
-        ChartType.ACCOUNT_DONUT -> R.string.analysis_by_account_all_title
-        ChartType.NET_FLOW -> R.string.analysis_net_flow_title
-        ChartType.BALANCE_TREND -> R.string.analysis_balance_title
-        ChartType.DAILY_BALANCE -> R.string.analysis_daily_balance_title
-        ChartType.TRANSFERS -> R.string.analysis_transfers_title
-        ChartType.ACCOUNT_LARGEST -> R.string.analysis_chart_account_largest
-        ChartType.BUDGET_DAILY -> R.string.analysis_budget_daily_title
-        ChartType.SAVING_DAILY -> R.string.analysis_saving_daily_title
         ChartType.ACCOUNT_DAILY -> R.string.analysis_account_daily_title
         ChartType.SUBACCOUNT_DAILY -> R.string.analysis_subaccount_daily_title
         ChartType.ACCOUNT_SHARE -> R.string.analysis_account_share_title
@@ -683,70 +605,26 @@ private fun MonthPage(
     state: AnalysisUiState,
     viewModel: AnalysisViewModel,
     onDeleted: (LayoutSlot, Int, ChartCard) -> Unit,
-    onOpenTrade: (Long) -> Unit,
-    onOpenDay: (Long) -> Unit,
-    onSelectMonth: (Int) -> Unit,
 ) {
     val month = page.monthKey
-    val stats = state.monthStats[month] ?: Stage.Loading
-    val trades = state.monthTrades[month] ?: Stage.Loading
-    val selection = remember(month) { AnalysisSelection() }
-    val accountSelection = remember(month) { AnalysisSelection() }
-    val animate = rememberIntroAnimation(page, stats, viewModel)
-    val accounts = remember(trades) { trades.map { it.accounts } }
-    val transfers = remember(trades) { trades.map { it.transfers } }
+    val summary = state.monthSummary[month] ?: Stage.Loading
+    val animate = rememberIntroAnimation(page, summary, viewModel)
 
     LoadTradesAfterFirstFrame(page, viewModel)
 
-    PageCharts(LayoutSlot.MONTH, month, listState, state, viewModel, onDeleted) { card ->
-        val mode = card.mode
-        val height = chartContentHeight(card.type, mode)
+    val cards = state.layouts[LayoutSlot.MONTH] ?: return
+    ChartList(LayoutSlot.MONTH, cards, state, listState, viewModel, onDeleted) { card ->
+        val height = chartContentHeight(card.type)
         when (card.type) {
-            ChartType.SUMMARY -> StageSection(stats, stringResource(R.string.analysis_summary_title), height) {
-                SummarySection(it.summary, mode, trades.dataOrNull?.transfers)
+            ChartType.SUMMARY -> StageSection(summary, stringResource(R.string.analysis_summary_title), height) {
+                SummarySection(it, card.mode, state.monthTransfers[month]?.dataOrNull)
             }
-            ChartType.DONUT -> StageSection(stats, categoryTitle(mode), height) {
-                DonutSection(it.expense, it.income, mode, selection, animate)
-            }
-            ChartType.PACE -> StageSection(trades, paceTitle(mode), height) {
-                PaceSection(it.pace, mode, card.zero, animate)
-            }
-            ChartType.TREND -> StageSection(stats, stringResource(R.string.analysis_trend_title), height) {
-                BarsSection(it.bars, mode, card.zero, stringResource(R.string.analysis_trend_title), onSelectMonth, animate)
-            }
-            ChartType.MOVERS -> StageSection(stats, stringResource(R.string.analysis_movers_title), height) {
-                MoversSection(it.movers, mode, animate)
-            }
-            ChartType.HEATMAP -> StageSection(trades, stringResource(R.string.analysis_heatmap_title), height) {
-                HeatmapSection(it.heatmap, onOpenDay)
-            }
-            ChartType.WEEKDAY -> StageSection(trades, stringResource(R.string.analysis_weekday_title), height) {
-                WeekdaySection(it.weekday, card.zero, animate)
-            }
-            ChartType.BUCKETS -> StageSection(trades, stringResource(R.string.analysis_buckets_title), height) {
-                BucketsSection(it.buckets, animate)
-            }
-            ChartType.LARGEST -> StageSection(trades, largestTitle(mode), height) {
-                LargestSection(it.largestOf(mode), mode, onOpenTrade)
-            }
-            ChartType.BUDGET_DAILY, ChartType.SAVING_DAILY -> {
-                val shown = card.month ?: month
-                LaunchedEffect(shown) {
-                    withFrameNanos { }
-                    viewModel.loadGoals(shown)
-                }
-                val budgets = card.type == ChartType.BUDGET_DAILY
-                val title = stringResource(if (budgets) R.string.analysis_budget_daily_title else R.string.analysis_saving_daily_title)
-                StageSection(state.goals[shown] ?: Stage.Loading, title, height) {
-                    GoalDaysSection(title, if (budgets) it.budgets else it.savings, card.ids, animate)
-                }
-            }
-            ChartType.ACCOUNT_DAILY, ChartType.SUBACCOUNT_DAILY, ChartType.ACCOUNT_SHARE, ChartType.SUBACCOUNT_SHARE,
-            ChartType.ACCOUNT_MONTHS, ChartType.SUBACCOUNT_MONTHS ->
+            in MonthBalanceCharts ->
                 BalanceCard(card, height, state.monthBalances[month] ?: Stage.Loading, state.accountTree, month, animate)
             in MonthCategoryGroupCharts ->
                 CategoryCard(card, height, state.monthCategories[month] ?: Stage.Loading, treeOf(card.type, state), month, animate)
-            else -> AccountChart(card, height, accounts, transfers, state.accounts, accountSelection, animate, onOpenTrade)
+            // Every chart a list can hold is one of the above; decodeLayout drops the rest.
+            else -> Unit
         }
     }
 }
@@ -756,7 +634,7 @@ private fun MonthPage(
  * subaccounts, without the ones the card switched off.
  */
 @Composable
-private fun BalanceCard(card: ChartCard, height: Dp, accounts: Stage<AccountsUi>, tree: List<AccountNode>, month: Int, animate: Boolean) {
+private fun BalanceCard(card: ChartCard, height: Dp, accounts: Stage<BalancesUi>, tree: List<AccountNode>, month: Int, animate: Boolean) {
     val sub = card.type.hasParent
     val title = chartName(card.type)
     val groups = remember(tree, card.accountId, sub, card.hidden) {
@@ -832,114 +710,28 @@ private fun CategoryCard(card: ChartCard, height: Dp, data: Stage<CategoryCharts
 
 // ------------------------------------------------------------------ year page
 
+/** The year page has no charts yet. */
 @Composable
-private fun YearPage(
-    page: AnalysisPage.Year,
-    listState: LazyListState,
-    state: AnalysisUiState,
-    viewModel: AnalysisViewModel,
-    onDeleted: (LayoutSlot, Int, ChartCard) -> Unit,
-    onOpenTrade: (Long) -> Unit,
-    onSelectMonth: (Int) -> Unit,
-) {
-    val stats = state.yearStats[page.year] ?: Stage.Loading
-    val trades = state.yearTrades[page.year] ?: Stage.Loading
-    val selection = remember(page) { AnalysisSelection() }
-    val accountSelection = remember(page) { AnalysisSelection() }
-    val animate = rememberIntroAnimation(page, stats, viewModel)
-    val accounts = remember(trades) { trades.map { it.accounts } }
-    val transfers = remember(trades) { trades.map { it.transfers } }
-
-    LoadTradesAfterFirstFrame(page, viewModel)
-
-    PageCharts(LayoutSlot.YEAR, null, listState, state, viewModel, onDeleted) { card ->
-        val mode = card.mode
-        val height = chartContentHeight(card.type, mode)
-        when (card.type) {
-            ChartType.YEAR_SUMMARY -> StageSection(stats, stringResource(R.string.analysis_year_summary_title), height) {
-                YearSummarySection(it.summary, mode, trades.dataOrNull?.transfers)
-            }
-            ChartType.YEAR_BARS -> StageSection(stats, stringResource(R.string.analysis_year_bars_title), height) {
-                BarsSection(it.bars, mode, card.zero, stringResource(R.string.analysis_year_bars_title), onSelectMonth, animate)
-            }
-            ChartType.DONUT -> StageSection(stats, categoryTitle(mode), height) {
-                DonutSection(it.expense, it.income, mode, selection, animate)
-            }
-            ChartType.YOY -> StageSection(stats, stringResource(R.string.analysis_year_yoy_title), height) {
-                YoySection(it.yoy, page.year, mode, card.zero, animate)
-            }
-            ChartType.LARGEST -> StageSection(trades, largestTitle(mode), height) {
-                LargestSection(it.largestOf(mode), mode, onOpenTrade)
-            }
-            else -> AccountChart(card, height, accounts, transfers, state.accounts, accountSelection, animate, onOpenTrade)
+private fun ComingSoonPage() {
+    Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                painter = painterResource(R.drawable.ph_calendar_dots),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(40.dp),
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(stringResource(R.string.analysis_coming_soon), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                stringResource(R.string.analysis_year_coming_soon),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
         }
     }
-}
-
-/** A page's chart list; nothing until the saved layouts are read, since the defaults would visibly reshuffle. */
-@Composable
-private fun PageCharts(
-    slot: LayoutSlot,
-    pageMonth: Int?,
-    listState: LazyListState,
-    state: AnalysisUiState,
-    viewModel: AnalysisViewModel,
-    onDeleted: (LayoutSlot, Int, ChartCard) -> Unit,
-    chart: @Composable (ChartCard) -> Unit,
-) {
-    val cards = state.layouts[slot] ?: return
-    ChartList(slot, cards, state, pageMonth, listState, viewModel, onDeleted, chart)
-}
-
-// --------------------------------------------------------------- account charts
-
-/** The account charts, the same on a month page and a year page. */
-@Composable
-private fun AccountChart(
-    card: ChartCard,
-    height: Dp,
-    accounts: Stage<AccountsUi>,
-    transfers: Stage<TransfersUi>,
-    accountList: List<Pair<Long, String>>,
-    selection: AnalysisSelection,
-    animate: Boolean,
-    onOpenTrade: (Long) -> Unit,
-) {
-    val mode = card.mode
-    when (card.type) {
-        ChartType.ACCOUNT_DONUT -> StageSection(accounts, accountTitle(mode), height) {
-            // All mode is one ring of end-of-period balances, drawn as a single-kind (income-coloured) donut.
-            if (mode == AnalysisMode.ALL) {
-                DonutSection(it.balanceShare, it.balanceShare, AnalysisMode.INCOME, selection, animate, title = accountTitle(mode), plainAmounts = true)
-            } else {
-                DonutSection(it.expense, it.income, mode, selection, animate, title = accountTitle(mode))
-            }
-        }
-        ChartType.NET_FLOW -> StageSection(accounts, stringResource(R.string.analysis_net_flow_title), height) {
-            NetFlowSection(it.netFlow, animate)
-        }
-        ChartType.BALANCE_TREND -> StageSection(accounts, stringResource(R.string.analysis_balance_title), height) {
-            BalanceTrendSection(it.balance, card.zero, animate)
-        }
-        ChartType.DAILY_BALANCE -> StageSection(accounts, stringResource(R.string.analysis_daily_balance_title), height) {
-            DailyBalanceSection(it.daily, card.accountId, card.zero, animate)
-        }
-        ChartType.TRANSFERS -> StageSection(transfers, stringResource(R.string.analysis_transfers_title), height) {
-            TransfersSection(it, animate)
-        }
-        ChartType.ACCOUNT_LARGEST -> StageSection(accounts, largestTitle(mode), height) {
-            val id = card.accountId ?: accountList.firstOrNull()?.first
-            LargestSection(it.largest[id]?.of(mode).orEmpty(), mode, onOpenTrade)
-        }
-        // A chart of the other page kind, e.g. from a hand-edited backup: nothing to draw.
-        else -> Unit
-    }
-}
-
-private fun <T, R> Stage<T>.map(transform: (T) -> R): Stage<R> = when (this) {
-    is Stage.Loading -> Stage.Loading
-    is Stage.Empty -> Stage.Empty
-    is Stage.Ready -> Stage.Ready(transform(data))
 }
 
 // ---------------------------------------------------------------------- shared
@@ -957,12 +749,9 @@ private fun LoadTradesAfterFirstFrame(page: AnalysisPage, viewModel: AnalysisVie
 @Composable
 private fun rememberIntroAnimation(page: AnalysisPage, stats: Stage<*>, viewModel: AnalysisViewModel): Boolean {
     var animate by remember(page) { mutableStateOf(false) }
-    val ready = stats is Stage.Ready
+    val ready = stats !is Stage.Loading
     LaunchedEffect(page, ready) {
         if (ready) animate = viewModel.consumeIntroAnimation(page)
     }
     return animate
 }
-
-/** `09/2026`: the budget/savings cards' month, as numbers. */
-private fun monthNumber(monthKey: Int): String = String.format(Locale.US, "%02d/%d", monthKey % 100, monthKey / 100)

@@ -5,11 +5,9 @@ import androidx.lifecycle.viewModelScope
 import app.outgo.data.db.dao.MonthCategoryTotal
 import app.outgo.data.db.dao.StatDao
 import app.outgo.data.repo.AccountRepository
-import app.outgo.data.repo.BudgetRepository
 import app.outgo.data.repo.CategoryRepository
 import app.outgo.data.repo.SettingRepository
 import app.outgo.data.repo.TradeRepository
-import app.outgo.domain.AccountType
 import app.outgo.domain.CategoryKind
 import app.outgo.domain.TradeType
 import app.outgo.util.MonthKey
@@ -42,44 +40,31 @@ private const val STOP_TIMEOUT_MS = 5_000L
 private val TRADE_TYPES = listOf(TradeType.EXPENSE, TradeType.INCOME)
 
 data class AnalysisUiState(
-    /** Oldest month with data … current month, plus one summary page per year. Oldest first. */
+    /** Oldest month with data … current month, plus one (coming soon) page per year. Oldest first. */
     val pages: List<AnalysisPage>,
     val selected: AnalysisPage,
-    val monthStats: Map<Int, Stage<StatsData>> = emptyMap(),
-    val monthTrades: Map<Int, Stage<TradesData>> = emptyMap(),
-    /**
-     * The month's account balances, from the same load as [monthTrades] but on their own: a month
-     * without a single trade still has balances to chart.
-     */
-    val monthBalances: Map<Int, Stage<AccountsUi>> = emptyMap(),
-    /** The month's Categories-group data, from the same load as [monthTrades]. */
+    val monthSummary: Map<Int, Stage<SummaryUi>> = emptyMap(),
+    /** The month's transfer total, for the summary's transfer line; from the raw-trade load. */
+    val monthTransfers: Map<Int, Stage<Long>> = emptyMap(),
+    /** The month's account balances, from the same load as [monthTransfers]. */
+    val monthBalances: Map<Int, Stage<BalancesUi>> = emptyMap(),
+    /** The month's Categories-group data, from the same load as [monthTransfers]. */
     val monthCategories: Map<Int, Stage<CategoryChartsUi>> = emptyMap(),
-    val yearStats: Map<Int, Stage<YearStatsData>> = emptyMap(),
-    val yearTrades: Map<Int, Stage<YearTradesData>> = emptyMap(),
     /** Empty until the saved layouts are read, which draws a page with no charts for that moment. */
     val layouts: Map<LayoutSlot, List<ChartCard>> = emptyMap(),
-    /** (id, name) in the user's order, for the per-account chart's picker. */
-    val accounts: List<Pair<Long, String>> = emptyList(),
     /** Active parent accounts with their active subaccounts, in the user's order. */
     val accountTree: List<AccountNode> = emptyList(),
     /** Active parent categories of each kind with their active subcategories, in the user's order. */
     val expenseTree: List<AccountNode> = emptyList(),
     val incomeTree: List<AccountNode> = emptyList(),
-    /** (category id, name) of each budget, and (id, name) of each savings account, for the picks chip. */
-    val budgets: List<Pair<Long, String>> = emptyList(),
-    val savings: List<Pair<Long, String>> = emptyList(),
-    /** By `yyyyMM`: a budget/savings card can show any month, not only its page's. */
-    val goals: Map<Int, Stage<GoalDaysUi>> = emptyMap(),
 )
 
 class AnalysisViewModel(
     private val statDao: StatDao,
     private val tradeRepository: TradeRepository,
-    budgetRepository: BudgetRepository,
     categoryRepository: CategoryRepository,
     accountRepository: AccountRepository,
     private val settingRepository: SettingRepository,
-    private val otherName: String,
 ) : ViewModel() {
 
     private val zone: ZoneId = ZoneId.systemDefault()
@@ -91,25 +76,14 @@ class AnalysisViewModel(
     )
     val state: StateFlow<AnalysisUiState> = _state.asStateFlow()
 
-    /** id -> (name, iconId, color); labels the largest-movement rows. */
-    private var categories: Map<Long, Triple<String, Long?, Int>> = emptyMap()
-
-    /** id -> (name, iconId, color); labels both ends of a transfer row. */
+    /** id -> (name, iconId, color), in the user's account order; names and colours the balance lines. */
     private var accounts: Map<Long, Triple<String, Long?, Int>> = emptyMap()
 
-    private val monthStatsCache = lru<Stage<StatsData>>()
-    private val monthTradesCache = lru<Stage<TradesData>>()
-    private val monthBalancesCache = lru<Stage<AccountsUi>>()
-    private val monthCategoriesCache = lru<Stage<CategoryChartsUi>>()
-    private val yearStatsCache = lru<Stage<YearStatsData>>()
-    private val yearTradesCache = lru<Stage<YearTradesData>>()
-    private val tradeJobs = HashMap<AnalysisPage, Job>()
-
-    /** (id, name, color) of each budget (by category id) and each savings account. */
-    private var budgetInfo: List<Triple<Long, String, Int>> = emptyList()
-    private var savingInfo: List<Triple<Long, String, Int>> = emptyList()
-    private val goalsCache = lru<Stage<GoalDaysUi>>()
-    private val goalJobs = HashMap<Int, Job>()
+    private val summaryCache = lru<Stage<SummaryUi>>()
+    private val transfersCache = lru<Stage<Long>>()
+    private val balancesCache = lru<Stage<BalancesUi>>()
+    private val categoriesCache = lru<Stage<CategoryChartsUi>>()
+    private val tradeJobs = HashMap<Int, Job>()
 
     /** Pages whose charts have already played their intro animation. */
     private val animated = HashSet<AnalysisPage>()
@@ -124,29 +98,18 @@ class AnalysisViewModel(
             val earliest = statDao.earliestMonth() ?: currentMonth
             _state.update { it.copy(pages = buildPages(earliest, currentMonth)) }
         }
-        // Both kinds: an income trade needs its category name in the largest-movements list.
         viewModelScope.launch {
             categoryRepository.observeAllOfType(CategoryKind.EXPENSE).collect { list ->
-                categories = categories + list.associate { it.id to Triple(it.name, it.iconId, it.color) }
-                val children = list.filter { !it.isParent }.groupBy { it.parentId }
-                val tree = list.filter { it.isParent }.map { parent ->
-                    AccountNode(
-                        parent.id, parent.name, parent.iconId, parent.color,
-                        children[parent.id].orEmpty().map { AccountNode(it.id, it.name, it.iconId, it.color) },
-                    )
+                val tree = treeOf(list.filter { it.isParent }, list.filter { !it.isParent }, link = { it.id to it.parentId }) {
+                    AccountNode(it.id, it.name, it.iconId, it.color)
                 }
                 _state.update { it.copy(expenseTree = tree) }
             }
         }
         viewModelScope.launch {
             categoryRepository.observeAllOfType(CategoryKind.INCOME).collect { list ->
-                categories = categories + list.associate { it.id to Triple(it.name, it.iconId, it.color) }
-                val children = list.filter { !it.isParent }.groupBy { it.parentId }
-                val tree = list.filter { it.isParent }.map { parent ->
-                    AccountNode(
-                        parent.id, parent.name, parent.iconId, parent.color,
-                        children[parent.id].orEmpty().map { AccountNode(it.id, it.name, it.iconId, it.color) },
-                    )
+                val tree = treeOf(list.filter { it.isParent }, list.filter { !it.isParent }, link = { it.id to it.parentId }) {
+                    AccountNode(it.id, it.name, it.iconId, it.color)
                 }
                 _state.update { it.copy(incomeTree = tree) }
             }
@@ -154,37 +117,12 @@ class AnalysisViewModel(
         viewModelScope.launch {
             accountRepository.observeAll().collect { list ->
                 accounts = list.associate { it.id to Triple(it.name, it.iconId, it.color) }
-                val savings = list.filter { !it.archived && !it.isParent && it.accountType == AccountType.SAVINGS }.map { Triple(it.id, it.name, it.color) }
                 val active = list.filter { !it.archived }
-                val children = active.filter { !it.isParent }.groupBy { it.parentId }
-                val tree = active.filter { it.isParent }.map { parent ->
-                    AccountNode(
-                        parent.id, parent.name, parent.iconId, parent.color,
-                        children[parent.id].orEmpty().map { AccountNode(it.id, it.name, it.iconId, it.color) },
-                    )
+                val tree = treeOf(active.filter { it.isParent }, active.filter { !it.isParent }, link = { it.id to it.parentId }) {
+                    AccountNode(it.id, it.name, it.iconId, it.color)
                 }
-                _state.update { state ->
-                    state.copy(
-                        accounts = active.filter { !it.isParent }.map { it.id to it.name },
-                        accountTree = tree,
-                        savings = savings.map { it.first to it.second },
-                    )
-                }
-                if (savings != savingInfo) {
-                    savingInfo = savings
-                    reloadGoals()
-                }
+                _state.update { it.copy(accountTree = tree) }
             }
-        }
-        viewModelScope.launch {
-            budgetRepository.observeWithProgress(currentMonth)
-                .map { list -> list.filter { it.enabled }.mapNotNull { b -> b.categoryId?.let { Triple(it, b.displayName, b.categoryColor ?: OTHER_COLOR) } } }
-                .distinctUntilChanged()
-                .collect { budgets ->
-                    budgetInfo = budgets
-                    _state.update { it.copy(budgets = budgets.map { b -> b.first to b.second }) }
-                    reloadGoals()
-                }
         }
         viewModelScope.launch {
             val decoded = LayoutSlot.entries.associateWith { slot -> decodeSlot(slot) { settingRepository.get(it) } }.toMutableMap()
@@ -209,33 +147,35 @@ class AnalysisViewModel(
             val layouts = decoded.mapValues { (_, cards) -> cards.withIds(nextCardId).also { nextCardId += it.size } }
             _state.update { it.copy(layouts = layouts) }
         }
-        viewModelScope.launch { observeStats() }
+        viewModelScope.launch { observeSummary() }
         viewModelScope.launch {
             // Trade rows are a one-shot fetch (see TradeDao), so a write elsewhere has to be
-            // pulled in by hand — and only for the pages still in the cache.
+            // pulled in by hand — and only for the months still in the cache.
             tradeRepository.changes.collect {
-                val cached = monthTradesCache.keys.map { AnalysisPage.Month(it) } +
-                    yearTradesCache.keys.map { AnalysisPage.Year(it) }
-                cached.forEach { page -> loadTrades(page, force = true) }
-                reloadGoals()
+                transfersCache.keys.toList().forEach { loadTrades(AnalysisPage.Month(it), force = true) }
             }
         }
     }
 
-    // ------------------------------------------------------------------- STATS
+    /** Parents in the user's order, each with its children; [link] gives a row's (id, parentId). */
+    private fun <T> treeOf(parents: List<T>, children: List<T>, link: (T) -> Pair<Long, Long?>, node: (T) -> AccountNode): List<AccountNode> {
+        val byParent = children.groupBy { link(it).second }
+        return parents.map { parent -> node(parent).copy(children = byParent[link(parent).first].orEmpty().map(node)) }
+    }
+
+    // ----------------------------------------------------------------- SUMMARY
 
     /**
-     * One observed range feeds the visible page and both its neighbours. A month page needs its
-     * own 6-month trend window plus the neighbours'; a year page needs last year for the
-     * year-over-year comparison, plus January of the next year for its right-hand neighbour.
+     * One observed range feeds the visible page and both its neighbours: each month page needs
+     * itself and the month before it. Year pages draw nothing yet.
      */
     @OptIn(ExperimentalCoroutinesApi::class)
-    private suspend fun observeStats() {
+    private suspend fun observeSummary() {
         // Same deal as SharingStarted.WhileSubscribed(5_000) elsewhere in the app: the query
         // stops 5s after the screen stops collecting (app backgrounded) and restarts on return.
         activeWhileSubscribed()
-            .flatMapLatest { active -> if (active) statsTotals() else emptyFlow() }
-            .collect { (page, totals) -> publishStats(page, totals) }
+            .flatMapLatest { active -> if (active) monthTotals() else emptyFlow() }
+            .collect { (months, totals) -> publishSummary(months, totals) }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -248,28 +188,15 @@ class AnalysisViewModel(
         }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    private fun statsTotals(): Flow<Pair<AnalysisPage, List<MonthCategoryTotal>>> =
+    private fun monthTotals(): Flow<Pair<List<Int>, List<MonthCategoryTotal>>> =
         selected.flatMapLatest { page ->
-            val range = statsRange(page)
-            statDao.observeMonthlyTotals(range.first, range.second).map { page to it }
+            val months = window(page).filterIsInstance<AnalysisPage.Month>().map { it.monthKey }
+            if (months.isEmpty()) {
+                emptyFlow()
+            } else {
+                statDao.observeMonthlyTotals(MonthKey.minus(months.min(), 1), months.max()).map { months to it }
+            }
         }
-
-    /**
-     * Wide enough for the visible page **and both neighbours**: December's neighbour is a year
-     * page, and a year summary built from half a year of rows would be quietly wrong rather than
-     * merely late.
-     */
-    private fun statsRange(page: AnalysisPage): Pair<Int, Int> {
-        val ranges = window(page).map { pageRange(it) }
-        return ranges.minOf { it.first } to ranges.maxOf { it.second }
-    }
-
-    private fun pageRange(page: AnalysisPage): Pair<Int, Int> = when (page) {
-        is AnalysisPage.Month ->
-            MonthKey.minus(page.monthKey, TREND_MONTH_COUNT.toLong()) to MonthKey.minus(page.monthKey, -1)
-        // Last year for the year-over-year comparison, plus January of the year after.
-        is AnalysisPage.Year -> (page.year - 1) * 100 + 1 to (page.year + 1) * 100 + 1
-    }
 
     /** The visible page and whichever neighbours exist — exactly what the pager composes. */
     private fun window(page: AnalysisPage): List<AnalysisPage> {
@@ -278,152 +205,68 @@ class AnalysisViewModel(
         return listOfNotNull(pages.getOrNull(index - 1), page, pages.getOrNull(index + 1))
     }
 
-    private suspend fun publishStats(page: AnalysisPage, totals: List<MonthCategoryTotal>) {
-        val window = window(page)
-        val computed = withContext(Dispatchers.Default) {
-            val months = window.filterIsInstance<AnalysisPage.Month>()
-                .associate { it.monthKey to buildStats(totals, it.monthKey, otherName, zone) }
-            val years = window.filterIsInstance<AnalysisPage.Year>()
-                .associate { it.year to buildYearStats(totals, it.year, otherName, zone) }
-            months to years
-        }
-        computed.first.forEach { (month, stage) -> monthStatsCache[month] = stage }
-        computed.second.forEach { (year, stage) -> yearStatsCache[year] = stage }
-        _state.update { it.copy(monthStats = monthStatsCache.toMap(), yearStats = yearStatsCache.toMap()) }
+    private suspend fun publishSummary(months: List<Int>, totals: List<MonthCategoryTotal>) {
+        val computed = withContext(Dispatchers.Default) { months.associateWith { buildSummary(totals, it, zone) } }
+        computed.forEach { (month, stage) -> summaryCache[month] = stage }
+        _state.update { it.copy(monthSummary = summaryCache.toMap()) }
     }
 
     // ------------------------------------------------------------------ TRADES
 
     /**
-     * Called once the page has drawn its first frame. Loading the raw-trade sections any earlier
-     * would compete with that frame for the main thread.
+     * Called once a month page has drawn its first frame. Loading the raw-trade charts any earlier
+     * would compete with that frame for the main thread. A year page has nothing to load.
      */
     fun loadTrades(page: AnalysisPage, force: Boolean = false) {
-        if (!force && (cachedTrades(page) != null || tradeJobs[page] != null)) return
-        tradeJobs.remove(page)?.cancel()
-        if (cachedTrades(page) == null) putTrades(page, Stage.Loading)
-        tradeJobs[page] = viewModelScope.launch {
-            when (page) {
-                is AnalysisPage.Month -> {
-                    // lastN(month, 3) already contains the previous month, so the pace line and
-                    // the 3-month weekday average share a single query.
-                    val months = MonthKey.lastN(page.monthKey, 3)
-                    val trend = MonthKey.lastN(page.monthKey, TREND_MONTH_COUNT)
-                    // Independent reads: run side by side (WAL lets them share the database).
-                    val rowsAsync = async { tradeRepository.amountsAndTimesForMonths(months, TRADE_TYPES) }
-                    val transfersAsync = async { tradeRepository.transferTotalsForMonths(listOf(page.monthKey)) }
-                    val flowsAsync = async { tradeRepository.accountFlows(trend.first(), page.monthKey) }
-                    val openingAsync = async { tradeRepository.balancesBefore(trend.first()) }
-                    val movesAsync = async { tradeRepository.accountMovesForMonth(page.monthKey) }
-                    val categoryTotalsAsync = async {
-                        statDao.categoryMonthTotals(MonthKey.minus(page.monthKey, BALANCE_MONTH_COUNT - 1L), page.monthKey)
-                    }
-                    val rows = rowsAsync.await()
-                    val transfers = transfersAsync.await()
-                    val flows = flowsAsync.await()
-                    val opening = openingAsync.await()
-                    val moves = movesAsync.await()
-                    val categoryTotals = categoryTotalsAsync.await()
-                    val (stage, balances) = withContext(Dispatchers.Default) {
-                        val current = rows.filter { monthKeyOf(it.occurredAt, zone) == page.monthKey }
-                        val previous = listOf(MonthKey.minus(page.monthKey, 1))
-                        val accountsUi = buildAccounts(
-                            flows, opening, listOf(page.monthKey), previous, trend, current, accounts, categories, otherName,
-                        ).copy(daily = buildDailyBalance(opening, flows, moves, page.monthKey, accounts, zone))
-                        // Lines that sit at 0 all along are dropped, so none left means no money anywhere.
-                        val balances = if (accountsUi.balance.lines.isEmpty() && accountsUi.daily.lines.isEmpty()) Stage.Empty else Stage.Ready(accountsUi)
-                        buildTrades(rows, rows, transfers, page.monthKey, categories, accounts, zone, accountsUi = accountsUi) to balances
-                    }
-                    monthTradesCache[page.monthKey] = stage
-                    monthBalancesCache[page.monthKey] = balances
-                    monthCategoriesCache[page.monthKey] = withContext(Dispatchers.Default) {
-                        val charts = buildCategoryCharts(rows, categoryTotals, page.monthKey, zone)
-                        if (charts.daily.isEmpty() && charts.monthly.isEmpty()) Stage.Empty else Stage.Ready(charts)
-                    }
-                }
-                is AnalysisPage.Year -> {
-                    val months = monthsOfYear(page.year)
-                    val counted = countedMonths(page.year, zone)
-                    val trend = months.take(counted)
-                    val previous = monthsOfYear(page.year - 1).take(counted)
-                    // Independent reads: run side by side (WAL lets them share the database).
-                    val rowsAsync = async { tradeRepository.amountsAndTimesForMonths(months, TRADE_TYPES) }
-                    val transfersAsync = async { tradeRepository.transferTotalsForMonths(months) }
-                    val flowsAsync = async { tradeRepository.accountFlows(previous.first(), trend.last()) }
-                    val openingAsync = async { tradeRepository.balancesBefore(trend.first()) }
-                    val rows = rowsAsync.await()
-                    val transfers = transfersAsync.await()
-                    val flows = flowsAsync.await()
-                    val opening = openingAsync.await()
-                    val stage = withContext(Dispatchers.Default) {
-                        val inYear = rows.filter { monthKeyOf(it.occurredAt, zone) in trend }
-                        val accountsUi = buildAccounts(
-                            flows, opening, trend, previous, trend, inYear, accounts, categories, otherName,
-                        )
-                        buildYearTrades(rows, transfers, page.year, categories, accounts, zone, accountsUi)
-                    }
-                    yearTradesCache[page.year] = stage
-                }
-            }
-            tradeJobs.remove(page)
+        val month = (page as? AnalysisPage.Month)?.monthKey ?: return
+        if (!force && (transfersCache[month] != null || tradeJobs[month] != null)) return
+        tradeJobs.remove(month)?.cancel()
+        if (transfersCache[month] == null) {
+            transfersCache[month] = Stage.Loading
+            balancesCache[month] = Stage.Loading
+            categoriesCache[month] = Stage.Loading
             publishTrades()
         }
-    }
-
-    private fun cachedTrades(page: AnalysisPage): Any? = when (page) {
-        is AnalysisPage.Month -> monthTradesCache[page.monthKey]
-        is AnalysisPage.Year -> yearTradesCache[page.year]
-    }
-
-    private fun putTrades(page: AnalysisPage, stage: Stage<Nothing>) {
-        when (page) {
-            is AnalysisPage.Month -> {
-                monthTradesCache[page.monthKey] = stage
-                monthBalancesCache[page.monthKey] = stage
-                monthCategoriesCache[page.monthKey] = stage
+        tradeJobs[month] = viewModelScope.launch {
+            val trend = MonthKey.lastN(month, BALANCE_MONTH_COUNT)
+            // Independent reads: run side by side (WAL lets them share the database).
+            val rowsAsync = async { tradeRepository.amountsAndTimesForMonths(listOf(month), TRADE_TYPES) }
+            val transfersAsync = async { tradeRepository.transferTotalsForMonths(listOf(month)) }
+            val flowsAsync = async { tradeRepository.accountFlows(trend.first(), month) }
+            val openingAsync = async { tradeRepository.balancesBefore(trend.first()) }
+            val movesAsync = async { tradeRepository.accountMovesForMonth(month) }
+            val categoryTotalsAsync = async { statDao.categoryMonthTotals(trend.first(), month) }
+            val rows = rowsAsync.await()
+            val transfers = transfersAsync.await()
+            val flows = flowsAsync.await()
+            val opening = openingAsync.await()
+            val moves = movesAsync.await()
+            val categoryTotals = categoryTotalsAsync.await()
+            val names = accounts
+            val (balances, charts) = withContext(Dispatchers.Default) {
+                val balances = BalancesUi(
+                    buildBalanceTrend(flows, opening, trend, names),
+                    buildDailyBalance(opening, flows, moves, month, names, zone),
+                )
+                balances to buildCategoryCharts(rows, categoryTotals, month, zone)
             }
-            is AnalysisPage.Year -> yearTradesCache[page.year] = stage
+            transfersCache[month] = Stage.Ready(transfers.sumOf { it.total })
+            // Lines that sit at 0 all along are dropped, so none left means no money anywhere.
+            balancesCache[month] = if (balances.balance.lines.isEmpty() && balances.daily.lines.isEmpty()) Stage.Empty else Stage.Ready(balances)
+            categoriesCache[month] = if (charts.daily.isEmpty() && charts.monthly.isEmpty()) Stage.Empty else Stage.Ready(charts)
+            tradeJobs.remove(month)
+            publishTrades()
         }
-        publishTrades()
     }
 
     private fun publishTrades() {
         _state.update {
             it.copy(
-                monthTrades = monthTradesCache.toMap(),
-                monthBalances = monthBalancesCache.toMap(),
-                monthCategories = monthCategoriesCache.toMap(),
-                yearTrades = yearTradesCache.toMap(),
+                monthTransfers = transfersCache.toMap(),
+                monthBalances = balancesCache.toMap(),
+                monthCategories = categoriesCache.toMap(),
             )
         }
-    }
-
-    // ------------------------------------------------------------------- GOALS
-
-    /** A budget/savings card asks for its month once drawn; one query per budget, one for all savings. */
-    fun loadGoals(month: Int, force: Boolean = false) {
-        if (!force && (goalsCache[month] != null || goalJobs[month] != null)) return
-        goalJobs.remove(month)?.cancel()
-        if (goalsCache[month] == null) {
-            goalsCache[month] = Stage.Loading
-            publishGoals()
-        }
-        goalJobs[month] = viewModelScope.launch {
-            val days = yearMonthOf(month).lengthOfMonth()
-            val budgets = budgetInfo.map { (id, name, color) -> BalanceLine(id, name, color, tradeRepository.budgetDays(id, month)) }
-            val changes = tradeRepository.balanceChangeDays(savingInfo.map { it.first }, month)
-            val savings = savingInfo.map { (id, name, color) -> BalanceLine(id, name, color, changes[id].orEmpty()) }
-            goalsCache[month] = Stage.Ready(GoalDaysUi(DailyBalanceUi(days, budgets), DailyBalanceUi(days, savings)))
-            goalJobs.remove(month)
-            publishGoals()
-        }
-    }
-
-    /** The cached months only: the rest load when a card asks. */
-    private fun reloadGoals() = goalsCache.keys.toList().forEach { loadGoals(it, force = true) }
-
-    private fun publishGoals() {
-        _state.update { it.copy(goals = goalsCache.toMap()) }
     }
 
     // -------------------------------------------------------------- navigation
@@ -437,21 +280,15 @@ class AnalysisViewModel(
     /** The pager stopped on [page]: warm its neighbours, drop prefetches the user swiped past. */
     fun onPageSettled(page: AnalysisPage) {
         selectPage(page)
-        val pages = _state.value.pages
-        val index = pages.indexOf(page)
-        val keep = listOfNotNull(pages.getOrNull(index - 1), page, pages.getOrNull(index + 1))
-        tradeJobs.keys.filter { it !in keep }.forEach { stale ->
+        val keep = window(page)
+        val keepMonths = keep.filterIsInstance<AnalysisPage.Month>().map { it.monthKey }
+        tradeJobs.keys.filter { it !in keepMonths }.forEach { stale ->
             tradeJobs.remove(stale)?.cancel()
             // Drop the half-done entry too, or the page would stay stuck on its skeleton.
-            if (cachedTrades(stale) is Stage.Loading) {
-                when (stale) {
-                    is AnalysisPage.Month -> {
-                        monthTradesCache.remove(stale.monthKey)
-                        monthBalancesCache.remove(stale.monthKey)
-                        monthCategoriesCache.remove(stale.monthKey)
-                    }
-                    is AnalysisPage.Year -> yearTradesCache.remove(stale.year)
-                }
+            if (transfersCache[stale] is Stage.Loading) {
+                transfersCache.remove(stale)
+                balancesCache.remove(stale)
+                categoriesCache.remove(stale)
             }
         }
         keep.forEach { loadTrades(it) }

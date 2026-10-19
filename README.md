@@ -85,17 +85,12 @@ Open the app and you are already on the "add expense" screen. Log a purchase in 
 
 <img src="docs/analysis.png" align="right" width="240" alt="Analysis" />
 
-- **One page per month and one per year**, swiped through or stepped with the year and month pickers in the top bar. Swipe right off December to reach that year's summary.
-- **Categories / Accounts:** two tabs under the pickers. Categories covers where your spending and income went; Accounts covers each account.
-- **Your own layout:** every page is a list of chart cards you arrange. Long-press a card to lift it, drag it to a new place and let go. To remove a card, drag it to the right edge: a red strip opens as your finger gets close, and dropping on it removes the card (with **Undo**).
-- **Add chart:** the button at the bottom of the list opens a sheet of the charts that page offers, grouped and shown with icons. Month and year pages keep separate layouts, saved in the database so they travel with backups.
-- **Expense / Income / All** is picked per chart, from the chip in its title. New charts start on All, which draws both kinds together rather than a single net figure.
-- **Month summary:** the total signed as money flows (spending −, income +, net in All mode), the change against last month in amount and percent, the average per day, and money moved between accounts.
-- **Where the money went:** a donut with its category breakdown in one chart (tap a slice to highlight its row), a 6-month trend, and the biggest movers against last month.
-- **When it went:** a cumulative pace line against last month, a daily heatmap that opens that day's history, and the average spend per weekday.
-- **What it went on:** the mix of purchase sizes around the month's median, and the five largest movements.
-- **Accounts tab:** spending and income per account (donut and breakdown in one chart), each account's net flow, month-end balance lines, transfers summed per account pair, and the largest movements of one account you pick.
-- **Yearly analysis:** year summary, month-by-month bars, category totals for the year, and this year against last year. A part-finished year is compared against the same months a year earlier, never against a full twelve.
+- **One page per month and one per year**, swiped through or stepped with the year and month pickers in the top bar. Swipe right off December to reach that year's page, which says **Coming soon** for now.
+- **Your own layout:** every month page is the same list of chart cards you arrange. Long-press a card to lift it, drag it to a new place and let go. To remove a card, drag it to the right edge: a red strip opens as your finger gets close, and dropping on it removes the card (with **Undo**).
+- **Add chart:** the button at the bottom of the list opens a sheet of the charts on offer, grouped (Accounts, Categories, Other) and shown with icons. The layout is saved in the database so it travels with backups.
+- **Accounts:** balances by day, a breakdown pie of month-end balances, and the last 5 months stacked — for each parent account (its subaccounts added up) or for the subaccounts of one parent you pick. Each account can be switched off on its card.
+- **Categories:** the same three charts for expense and income, by category or by the subcategories of one parent category.
+- **Month summary** (under Other): the total signed as money flows (spending −, income +, net in All mode), the change against last month in amount and percent, the average per day, and money moved between accounts. **Expense / Income / All** is picked from the chip in its title.
 
 <br clear="right" />
 
