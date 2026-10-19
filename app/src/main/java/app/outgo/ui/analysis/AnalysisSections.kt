@@ -28,6 +28,10 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.fillMaxHeight
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.mutableStateOf
@@ -351,8 +355,18 @@ private fun DailyLines(
         if (lines.isEmpty()) {
             EmptyBox(BalanceHeight)
         } else {
-            DailyBalanceChart(lines, daysInMonth, zero, introProgress(animate), Modifier.fillMaxWidth().height(BalanceHeight))
-            AccountLegend(lines)
+            // One focused line per chart, shared by the lines and their legend; a tap off both clears it.
+            val focus = remember { AnalysisSelection() }
+            DailyBalanceChart(
+                lines,
+                daysInMonth,
+                zero,
+                introProgress(animate),
+                Modifier.fillMaxWidth().height(BalanceHeight),
+                focusedId = focus.rootId,
+                onFocus = focus::toggle,
+            )
+            AccountLegend(lines, focus.rootId, focus::toggle)
         }
     }
 }
@@ -360,17 +374,31 @@ private fun DailyLines(
 /**
  * A colour block and name per line, on a single row that scrolls sideways when there are more
  * accounts than fit — wrapping would make the card's height depend on the account count.
+ * With [onFocus], tapping a name hands its line's id over and tapping between names hands null;
+ * while [focusedId] names a line, the other names fade.
  */
 @Composable
-internal fun AccountLegend(lines: List<BalanceLine>) {
-    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+internal fun AccountLegend(lines: List<BalanceLine>, focusedId: Long? = null, onFocus: ((Long?) -> Unit)? = null) {
+    val anyFocused = focusedId != null && lines.any { it.accountId == focusedId }
+    val clear = if (onFocus == null) Modifier else Modifier.pointerInput(Unit) { detectTapGestures { onFocus(null) } }
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth().then(clear)) {
         Row(
             modifier = Modifier.horizontalScroll(rememberScrollState()).widthIn(min = maxWidth),
             horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             lines.forEach { line ->
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                val alpha by animateFloatAsState(if (!anyFocused || line.accountId == focusedId) 1f else 0.35f, label = "legendFocus")
+                val item = if (onFocus == null) {
+                    Modifier
+                } else {
+                    Modifier.clip(RoundedCornerShape(4.dp)).clickable { onFocus(line.accountId) }.padding(horizontal = 2.dp, vertical = 2.dp)
+                }
+                Row(
+                    modifier = item.alpha(alpha),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
                     Box(Modifier.size(10.dp).background(Color(line.color), RoundedCornerShape(2.dp)))
                     Text(
                         line.name,

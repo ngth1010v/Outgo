@@ -1,6 +1,7 @@
 package app.outgo.ui.analysis
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -27,6 +28,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -236,11 +238,13 @@ private class HoverHit(val line: Int, val point: Int)
  * lose to one that runs under the finger. The line already picked counts [stickiness] closer, so
  * where lines cross or overlap the hover stays on it rather than flicking between them.
  */
-private fun hoverHit(scrub: Scrub, lines: List<List<Offset>>, stickiness: Float): HoverHit? {
+private fun hoverHit(scrub: Scrub, lines: List<List<Offset>>, stickiness: Float, only: Int = -1): HoverHit? {
     val finger = scrub.finger ?: return null
     var best: HoverHit? = null
     var bestDistance = Float.MAX_VALUE
     lines.forEachIndexed { line, points ->
+        // A focused line keeps the hover to itself.
+        if (only >= 0 && line != only) return@forEachIndexed
         val point = points.indices.minByOrNull { abs(points[it].x - finger.x) } ?: return@forEachIndexed
         val distance = (points[point] - finger).getDistance() - if (line == scrub.line) stickiness else 0f
         if (distance < bestDistance) {
@@ -350,28 +354,106 @@ private fun DrawScope.drawGap(a: List<Long>, b: List<Long>, x: (Int) -> Float, y
     }
 }
 
-/** One line per account, the one under [scrub] picked out; [xText] names point i on the x axis. */
+// ------------------------------------------------------------ line chart focus
+
+/** How far from a line a tap may land and still focus it. */
+private val FocusTapRadius = 20.dp
+
+/** Each line's points as last drawn, for the tap hit test. A plain field: written while drawing. */
+private class LineGeometry {
+    var points: List<List<Offset>> = emptyList()
+}
+
+/** The focused line's id, kept after the focus clears so the ray and pill can fade out with it. */
+private class ShownFocus {
+    var id: Long? = null
+}
+
+private fun distanceToSegment(p: Offset, a: Offset, b: Offset): Float {
+    val ab = b - a
+    val length2 = ab.x * ab.x + ab.y * ab.y
+    val t = if (length2 == 0f) 0f else (((p.x - a.x) * ab.x + (p.y - a.y) * ab.y) / length2).coerceIn(0f, 1f)
+    return (p - (a + ab * t)).getDistance()
+}
+
+/** Index of the line nearest [tap], if one runs within [radius] of it; -1 otherwise. */
+private fun lineAt(lines: List<List<Offset>>, tap: Offset, radius: Float): Int {
+    var best = -1
+    var bestDistance = radius
+    lines.forEachIndexed { index, points ->
+        if (points.isEmpty()) return@forEachIndexed
+        val distance = if (points.size == 1) {
+            (points[0] - tap).getDistance()
+        } else {
+            (0 until points.size - 1).minOf { distanceToSegment(tap, points[it], points[it + 1]) }
+        }
+        if (distance <= bestDistance) {
+            bestDistance = distance
+            best = index
+        }
+    }
+    return best
+}
+
+/** What [drawBalanceLines] needs of the focused line: its index, how far the focus has faded in, its pill. */
+private class FocusDraw(val line: Int, val amount: Float, val label: TextLayoutResult?, val text: Color)
+
+/**
+ * A dashed ray from the focused line's last point to the value axis, and the last value in a pill
+ * of the line's colour on the axis, right-aligned to the edge when wider than the axis.
+ */
+private fun DrawScope.drawFocus(focus: FocusDraw, last: Offset, color: Color, plotWidth: Float) {
+    val label = focus.label ?: return
+    val alpha = focus.amount
+    drawLine(color, last, Offset(plotWidth, last.y), strokeWidth = 1.5.dp.toPx(), pathEffect = DashEffect, alpha = alpha)
+    val padX = 4.dp.toPx()
+    val padY = 1.dp.toPx()
+    val pillSize = Size(label.size.width + padX * 2, label.size.height + padY * 2)
+    val left = plotWidth.coerceAtMost(size.width - pillSize.width).coerceAtLeast(0f)
+    val top = (last.y - pillSize.height / 2f).coerceAtMost(size.height - pillSize.height).coerceAtLeast(0f)
+    drawRoundRect(color, Offset(left, top), pillSize, CornerRadius(pillSize.height / 2f), alpha = alpha)
+    drawText(label, focus.text, Offset(left + padX, top + padY), alpha = alpha)
+}
+
+/**
+ * One line per account. The one under [scrub] is picked out; failing that, the [focus]ed one,
+ * with the others faded and its ray and pill drawn. [xText] names point i on the x axis.
+ */
 private fun DrawScope.drawBalanceLines(
     lines: List<BalanceLine>,
-    x: (Int) -> Float,
-    y: (Long) -> Float,
+    points: List<List<Offset>>,
     scrub: Scrub,
     progress: Float,
+    focus: FocusDraw?,
     look: HoverLook,
     plotWidth: Float,
     plotHeight: Float,
     xText: (Int) -> String,
 ) {
-    val points = lines.map { line -> line.values.mapIndexed { index, value -> Offset(x(index), y(value)) } }
-    val hit = hoverHit(scrub, points, HoverStickiness.toPx())
+    val focused = focus?.line ?: -1
+    // Only a full focus locks the hover; a fading one lets it pick any line again.
+    val hit = hoverHit(scrub, points, HoverStickiness.toPx(), if (focus != null && focus.amount == 1f) focused else -1)
+    val fade = focus?.amount ?: 0f
     lines.forEachIndexed { index, line ->
         val color = Color(line.color)
-        val alpha = hit.alpha(index, progress)
-        if (line.values.size == 1) {
-            drawCircle(color, radius = 5f * hit.grow(index), center = points[index][0], alpha = alpha)
-        } else {
-            drawPath(pathOf(points[index]), color, alpha = alpha, style = Stroke(width = 4f * hit.grow(index), pathEffect = if (line.dashed) DashEffect else null))
+        val alpha = when {
+            hit != null -> hit.alpha(index, progress)
+            index == focused -> progress
+            else -> progress * (1f - 0.7f * fade)
         }
+        val grow = when {
+            hit != null -> hit.grow(index)
+            index == focused -> 1f + 0.5f * fade
+            else -> 1f
+        }
+        if (line.values.size == 1) {
+            drawCircle(color, radius = 5f * grow, center = points[index][0], alpha = alpha)
+        } else {
+            drawPath(pathOf(points[index]), color, alpha = alpha, style = Stroke(width = 4f * grow, pathEffect = if (line.dashed) DashEffect else null))
+        }
+    }
+    if (focus != null && focused in points.indices && points[focused].isNotEmpty()) {
+        drawFocus(focus, points[focused].last(), Color(lines[focused].color), plotWidth)
     }
     hit?.let {
         drawHover(look, points[it.line][it.point], Color(lines[it.line].color), xText(it.point), lines[it.line].values[it.point], plotWidth, plotHeight)
@@ -384,6 +466,8 @@ private fun DrawScope.drawBalanceLines(
  * Seven day labels, always the 1st and the month's last day, each under its own day.
  * With [gapColors] (above, below) the gap between lines[0] and lines[1] is shaded by which one leads.
  * Without [pad] the value axis stops at the data, with no headroom above or below it.
+ * Tapping a line hands its id to [onFocus], tapping off every line hands null; the line whose
+ * id is [focusedId] stays bright while the others fade, with its last value marked on the axis.
  */
 @Composable
 fun DailyBalanceChart(
@@ -394,6 +478,8 @@ fun DailyBalanceChart(
     modifier: Modifier = Modifier,
     gapColors: Pair<Color, Color>? = null,
     pad: Boolean = true,
+    focusedId: Long? = null,
+    onFocus: ((Long?) -> Unit)? = null,
 ) {
     val gridColor = MaterialTheme.colorScheme.outlineVariant
     val axisColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -409,7 +495,34 @@ fun DailyBalanceChart(
     val scrub = remember { Scrub() }
     val look = rememberHoverLook()
 
-    Canvas(modifier = modifier.onSizeChanged { height = it.height }.scrub(scrub)) {
+    val geometry = remember { LineGeometry() }
+    val shown = remember { ShownFocus() }
+    val focusIndex = lines.indexOfFirst { it.accountId == focusedId }
+    if (focusIndex >= 0) shown.id = focusedId
+    val shownIndex = lines.indexOfFirst { it.accountId == shown.id }
+    val focusAmount = animateFloatAsState(if (focusIndex >= 0) 1f else 0f, tween(durationMillis = 220), label = "lineFocus")
+    val units = Triple(
+        stringResource(R.string.unit_thousand),
+        stringResource(R.string.unit_million),
+        stringResource(R.string.unit_billion),
+    )
+    val focusLabel = remember(lines, shownIndex, style, units) {
+        lines.getOrNull(shownIndex)?.values?.lastOrNull()?.let { measurer.measure(compactAmount(it, units), style) }
+    }
+    val focusText = remember(lines, shownIndex) {
+        val color = lines.getOrNull(shownIndex)?.let { Color(it.color) } ?: Color.Black
+        if (color.luminance() > 0.5f) Color.Black else Color.White
+    }
+    val currentLines by rememberUpdatedState(lines)
+    val currentOnFocus by rememberUpdatedState(onFocus)
+    val tap = if (onFocus == null) Modifier else Modifier.pointerInput(Unit) {
+        detectTapGestures { offset ->
+            val index = lineAt(geometry.points, offset, FocusTapRadius.toPx())
+            currentOnFocus?.invoke(currentLines.getOrNull(index)?.accountId)
+        }
+    }
+
+    Canvas(modifier = modifier.onSizeChanged { height = it.height }.then(tap).scrub(scrub)) {
         val gutter = gutterOf(yTicks)
         val plotWidth = size.width - gutter
         val plotHeight = size.height - (xTicks.firstOrNull()?.second?.size?.height ?: 0) - AxisGap.toPx()
@@ -419,10 +532,24 @@ fun DailyBalanceChart(
         val step = (plotWidth - inset * 2) / (daysInMonth - 1).coerceAtLeast(1)
         fun x(index: Int) = inset + index * step
 
+        val points = lines.map { line -> line.values.mapIndexed { index, value -> Offset(x(index), y(value)) } }
+        geometry.points = points
+        val amount = focusAmount.value
+        val focus = if (shownIndex >= 0 && amount > 0f) FocusDraw(shownIndex, amount, focusLabel, focusText) else null
+        // Where the focus pill sits on the axis, so the tick labels under it can fade out of its way.
+        val pillY = focus?.let { points.getOrNull(it.line)?.lastOrNull()?.y }
+        val pillHalf = ((focusLabel?.size?.height ?: 0) + 2.dp.toPx()) / 2f
+
         yTicks.forEach { (value, label) ->
             val lineY = y(value)
             drawLine(gridColor, Offset(0f, lineY), Offset(plotWidth, lineY), strokeWidth = if (value == 0L) 2f else 1f)
-            drawText(label, color = axisColor, topLeft = Offset(plotWidth + AxisGap.toPx(), lineY - label.size.height / 2f))
+            val covered = pillY != null && abs(lineY - pillY) < pillHalf + label.size.height / 2f
+            drawText(
+                label,
+                color = axisColor,
+                topLeft = Offset(plotWidth + AxisGap.toPx(), lineY - label.size.height / 2f),
+                alpha = if (covered) 1f - amount else 1f,
+            )
         }
         xTicks.forEach { (day, label) ->
             drawText(label, color = axisColor, topLeft = Offset(x(day - 1) - label.size.width / 2f, plotHeight + AxisGap.toPx()))
@@ -430,7 +557,7 @@ fun DailyBalanceChart(
         if (gapColors != null && lines.size >= 2) {
             drawGap(lines[0].values, lines[1].values, ::x, ::y, gapColors.first, gapColors.second)
         }
-        drawBalanceLines(lines, ::x, ::y, scrub, progress(), look, plotWidth, plotHeight) {
+        drawBalanceLines(lines, points, scrub, progress(), focus, look, plotWidth, plotHeight) {
             String.format(Locale.US, "%02d", it + 1)
         }
     }
