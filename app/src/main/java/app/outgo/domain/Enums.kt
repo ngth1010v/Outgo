@@ -31,6 +31,14 @@ object AccountType {
     const val SAVINGS = 1
 }
 
+/** Values for `account.hide_saving_progress`: when a savings account's monthly progress is hidden. */
+object SavingProgressHide {
+    const val NEVER = 0
+    /** Hidden once the month's target is reached; shown again when the next month starts. */
+    const val WHEN_REACHED = 1
+    const val ALWAYS = 2
+}
+
 /** Values for `icon.kind`. */
 object IconKind {
     const val BUILTIN = 0

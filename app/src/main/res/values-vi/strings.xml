@@ -154,6 +154,15 @@
     <string name="balance_savings_info">Mục tiêu hằng tháng cho số tiền cần bỏ vào tài khoản này. Chỉ tài khoản tiết kiệm mới có.\n\nMỗi tháng có mục tiêu riêng: chọn tháng cạnh tiêu đề, mọi thay đổi được lưu ngay cho tháng đó. Tháng sau chưa có mục tiêu riêng sẽ dùng mục tiêu của tháng gần nhất trước nó; thay đổi một tháng đã qua chỉ ảnh hưởng tháng đó.\n\n• Mục tiêu tiết kiệm hàng tháng: số tiền cần thêm trong tháng đó. Thu nhập và tiền chuyển vào tài khoản đều được tính.\n• Tổng các tài khoản con (chỉ tài khoản cha): mục tiêu là tổng mục tiêu của các tài khoản con trong tháng đó, và tự cập nhật khi chúng thay đổi. Khi bật, không thể nhập mục tiêu; số tiền bạn đã đặt được giữ lại để dùng khi tắt.</string>
     <string name="balance_parent_saving_exception">Ngoại lệ tiết kiệm tài khoản cha</string>
     <string name="balance_parent_saving_exception_info">Tiền vào tài khoản con này (thu nhập, và chuyển khoản từ bên ngoài vào) không được tính vào mục tiêu tiết kiệm hằng tháng của tài khoản cha, ở mọi tháng (kể cả các tháng đã qua). Số dư vẫn bao gồm nó, và mục tiêu tiết kiệm riêng của tài khoản con này vẫn tính.</string>
+    <string name="balance_privacy">Quyền riêng tư</string>
+    <string name="balance_privacy_info">Chọn những gì tài khoản này giấu đi. Cài đặt của tài khoản cha cũng áp dụng cho các tài khoản con.\n\n• Ẩn số dư: số dư hiện là •••••• ở màn hình Tài khoản, và không được tính vào các tổng ở Trang chủ cũng như các biểu đồ tài khoản trong Phân tích.\n• Ẩn tiến độ tiết kiệm (chỉ tài khoản tiết kiệm): Không; Khi đạt, ẩn khi đã đạt mục tiêu tháng này và hiện lại vào tháng sau; hoặc Luôn ẩn. Tiến độ bị ẩn không có dòng ở Trang chủ và không có thanh ở màn hình Tài khoản.\n• Hiện trong Phân tích: tiến độ vẫn ẩn ở Trang chủ và màn hình Tài khoản nhưng vẫn hiện trong Phân tích. Số dư đã ẩn vẫn bị ẩn ở đó.</string>
+    <string name="balance_hide_balance">Ẩn số dư</string>
+    <string name="balance_hide_progress">Ẩn tiến độ tiết kiệm</string>
+    <string name="balance_hide_progress_never">Không</string>
+    <string name="balance_hide_progress_reached">Khi đạt</string>
+    <string name="balance_hide_progress_always">Luôn ẩn</string>
+    <string name="balance_progress_in_analysis">Hiện trong Phân tích</string>
+    <string name="balance_privacy_from_parent">Đặt bởi tài khoản cha %1$s.</string>
     <string name="category_budget_limit">Hạn mức mỗi tháng</string>
     <string name="category_budget_sum_children">Tổng các danh mục con</string>
     <string name="balance_savings_sum_children">Tổng các tài khoản con</string>

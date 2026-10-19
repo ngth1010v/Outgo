@@ -8,6 +8,7 @@ import app.outgo.data.db.entity.SettingKeys
 import app.outgo.data.repo.AccountRepository
 import app.outgo.data.repo.BudgetRepository
 import app.outgo.data.repo.SettingRepository
+import app.outgo.data.repo.resolvePrivacy
 import app.outgo.domain.AccountType
 import app.outgo.util.MonthKey
 import kotlinx.coroutines.flow.SharingStarted
@@ -87,15 +88,19 @@ class HomeViewModel(
         settingRepository.observeHomeBalanceOrder(),
     ) { budgets, accounts, hidden, order ->
         val (savings, normal) = accounts.partition { it.account.accountType == AccountType.SAVINGS }
+        val privacy = resolvePrivacy(accounts.map { it.account })
+        fun shown(row: AccountWithProgress) = privacy[row.account.id]?.hideBalance != true
         HomeUiState(
-            availableBalance = normal.sumOf { it.account.balance },
-            savingsBalance = savings.sumOf { it.account.balance },
+            // An account whose balance is hidden is left out of every total.
+            availableBalance = normal.filter(::shown).sumOf { it.account.balance },
+            savingsBalance = savings.filter(::shown).sumOf { it.account.balance },
             // Paused budgets and ones whose apply-from is still ahead have no bar this month.
             budgets = budgets.filter { it.enabled },
             // A savings parent stands for its subaccounts, unless one has a target of its own.
+            // One whose progress is hidden has no row.
             savingsAccounts = savings.filter { row ->
-                row.account.isParent || row.monthlyTarget != null ||
-                    savings.none { it.account.id == row.account.parentId }
+                (row.account.isParent || row.monthlyTarget != null || savings.none { it.account.id == row.account.parentId }) &&
+                    privacy[row.account.id]?.progressHidden(row.monthlyIncome, row.monthlyTarget) != true
             },
             hidden = hidden,
             order = parseOrder(order),

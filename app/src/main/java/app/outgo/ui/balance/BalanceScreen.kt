@@ -54,7 +54,10 @@ import app.outgo.data.db.dao.AccountWithProgress
 import app.outgo.data.db.entity.AccountEntity
 import app.outgo.data.repo.DefaultCategoryColor
 import app.outgo.data.repo.SavingsSetting
+import app.outgo.data.repo.resolvePrivacy
+import app.outgo.domain.AccountPrivacy
 import app.outgo.domain.AccountType
+import app.outgo.domain.SavingProgressHide
 import app.outgo.ui.LocalAppContainer
 import app.outgo.ui.category.SectionHeader
 import app.outgo.ui.category.SectionSwitch
@@ -85,6 +88,7 @@ fun BalanceScreen(onOpenEditor: (id: Long?, parentId: Long?) -> Unit) {
     val accounts by viewModel.accounts.collectAsStateWithLifecycle()
     val parents = remember(accounts) { accounts.filter { it.account.isParent } }
     val childrenByParent = remember(accounts) { accounts.filter { !it.account.isParent }.groupBy { it.account.parentId!! } }
+    val privacy = remember(accounts) { resolvePrivacy(accounts.map { it.account }) }
     var expanded by remember { mutableStateOf(setOf<Long>()) }
     val listState = rememberLazyListState()
     // A drop waiting for the convert dialog, with the normal subaccounts it would make savings.
@@ -110,7 +114,9 @@ fun BalanceScreen(onOpenEditor: (id: Long?, parentId: Long?) -> Unit) {
             onAddChild = { onOpenEditor(null, it.account.id) },
             onAddParent = { onOpenEditor(null, null) },
             onReorder = ::onReorder,
-            row = { row, onClick, modifier, trailing -> AccountRow(row, onClick, modifier, trailing) },
+            row = { row, onClick, modifier, trailing ->
+                AccountRow(row, privacy[row.account.id] ?: AccountPrivacy(), onClick, modifier, trailing)
+            },
             modifier = Modifier.fillMaxSize().padding(padding),
         ) }
     }
@@ -132,10 +138,10 @@ fun BalanceScreen(onOpenEditor: (id: Long?, parentId: Long?) -> Unit) {
 }
 
 @Composable
-private fun AccountRow(row: AccountWithProgress, onClick: () -> Unit, modifier: Modifier, trailing: (@Composable () -> Unit)?) {
+private fun AccountRow(row: AccountWithProgress, privacy: AccountPrivacy, onClick: () -> Unit, modifier: Modifier, trailing: (@Composable () -> Unit)?) {
     val trades = LocalAppContainer.current.tradeRepository
     val account = row.account
-    val target = row.monthlyTarget
+    val target = row.monthlyTarget?.takeUnless { privacy.progressHidden(row.monthlyIncome, it) }
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -162,7 +168,11 @@ private fun AccountRow(row: AccountWithProgress, onClick: () -> Unit, modifier: 
                     )
                 }
             }
-            Text(Money.format(row.totalBalance), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                if (privacy.hideBalance) Money.formatHidden() else Money.format(row.totalBalance),
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodyLarge,
+            )
             trailing?.invoke()
         }
         if (target != null) {
@@ -253,6 +263,12 @@ private fun EditAccountScreen(
     }
     var showConvertConfirm by remember { mutableStateOf(false) }
     var exempt by remember { mutableStateOf(account?.parentSavingExempt ?: false) }
+    // This account's own privacy settings; the parent's, when they cover it, show instead and lock the inputs.
+    var privacy by remember { mutableStateOf(account?.ownPrivacy ?: AccountPrivacy()) }
+    fun changePrivacy(p: AccountPrivacy) {
+        privacy = p
+        account?.let { viewModel.setPrivacy(it.id, p) }
+    }
     var name by remember { mutableStateOf(account?.name.orEmpty()) }
     var description by remember { mutableStateOf(account?.description.orEmpty()) }
     var balanceText by remember { mutableStateOf(row?.totalBalance?.takeIf { it != 0L }?.toString().orEmpty()) }
@@ -309,7 +325,7 @@ private fun EditAccountScreen(
     }
 
     // Creating: compared against the values the editor opened with, for the discard check.
-    val fields = listOf(accountType, name, description, balanceText, month, form, iconId, color, exempt)
+    val fields = listOf(accountType, name, description, balanceText, month, form, iconId, color, exempt, privacy)
     val initialFields = remember { fields }
     val savingsShown = accountType == AccountType.SAVINGS && form.enabled
     EditorScaffold(
@@ -325,7 +341,7 @@ private fun EditAccountScreen(
         } else {
             {
                 val savings = form.toSetting().takeIf { savingsShown }
-                viewModel.create(name, iconId, color, balanceText.toLongOrNull() ?: 0L, accountType, savings, month, description.trim().ifEmpty { null }, parent?.id, exempt)
+                viewModel.create(name, iconId, color, balanceText.toLongOrNull() ?: 0L, accountType, savings, month, description.trim().ifEmpty { null }, parent?.id, exempt, privacy)
                 onDismiss()
             }
         },
@@ -452,6 +468,9 @@ private fun EditAccountScreen(
                 },
             )
         }
+
+        Spacer(Modifier.height(24.dp))
+        PrivacySection(privacy, parent, accountType == AccountType.SAVINGS, ::changePrivacy)
     }
 
     if (showConvertConfirm) {
@@ -486,6 +505,63 @@ private fun EditAccountScreen(
                 onDismiss()
             },
             onDismiss = { showDeleteConfirm = false },
+        )
+    }
+}
+
+/**
+ * The editor's Privacy section: [own] is the account's own settings. A parent's settings that cover
+ * this subaccount show instead, locked, with a note saying so. Progress settings are for savings accounts.
+ */
+@Composable
+private fun PrivacySection(own: AccountPrivacy, parent: AccountEntity?, savings: Boolean, onChange: (AccountPrivacy) -> Unit) {
+    val fromParent = parent?.ownPrivacy
+    val balanceLocked = fromParent?.hideBalance == true
+    val progressLocked = savings && fromParent != null && fromParent.progressHide != SavingProgressHide.NEVER
+    val progress = if (progressLocked) fromParent!! else own
+    SectionHeader(stringResource(R.string.balance_privacy), stringResource(R.string.balance_privacy_info))
+    SwitchField(
+        stringResource(R.string.balance_hide_balance),
+        checked = own.hideBalance || balanceLocked,
+        onCheckedChange = { onChange(own.copy(hideBalance = it)) },
+        enabled = !balanceLocked,
+    )
+    if (savings) {
+        Spacer(Modifier.height(12.dp))
+        Text(stringResource(R.string.balance_hide_progress), style = MaterialTheme.typography.labelLarge)
+        Spacer(Modifier.height(8.dp))
+        val options = listOf(
+            SavingProgressHide.NEVER to R.string.balance_hide_progress_never,
+            SavingProgressHide.WHEN_REACHED to R.string.balance_hide_progress_reached,
+            SavingProgressHide.ALWAYS to R.string.balance_hide_progress_always,
+        )
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            options.forEachIndexed { index, (mode, label) ->
+                OutgoSegmentedButton(
+                    selected = progress.progressHide == mode,
+                    onClick = { onChange(own.copy(progressHide = mode)) },
+                    enabled = !progressLocked,
+                    shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+                ) { Text(stringResource(label)) }
+            }
+        }
+        // Only while the progress is hidden somewhere: it keeps it in Analysis.
+        if (progress.progressHide != SavingProgressHide.NEVER) {
+            Spacer(Modifier.height(8.dp))
+            SwitchField(
+                stringResource(R.string.balance_progress_in_analysis),
+                checked = progress.progressInAnalysis,
+                onCheckedChange = { onChange(own.copy(progressInAnalysis = it)) },
+                enabled = !progressLocked,
+            )
+        }
+    }
+    if (balanceLocked || progressLocked) {
+        Text(
+            stringResource(R.string.balance_privacy_from_parent, parent!!.name),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 16.dp, top = 4.dp),
         )
     }
 }

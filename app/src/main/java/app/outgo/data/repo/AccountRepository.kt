@@ -6,6 +6,7 @@ import app.outgo.data.db.dao.AccountDao
 import app.outgo.data.db.dao.AccountWithProgress
 import app.outgo.data.db.entity.AccountEntity
 import app.outgo.data.db.entity.SavingsMonthEntity
+import app.outgo.domain.AccountPrivacy
 import app.outgo.domain.AccountType
 import app.outgo.util.MonthKey
 import kotlinx.coroutines.CoroutineScope
@@ -21,6 +22,14 @@ import kotlinx.coroutines.withContext
  * [sumChildren] (a parent account only): the target is its subaccounts' targets summed; [target] is kept.
  */
 data class SavingsSetting(val enabled: Boolean, val target: Long, val sumChildren: Boolean = false)
+
+/** Each of [accounts]' privacy settings as they apply, its parent's included (see [AccountPrivacy.resolve]), by id. */
+fun resolvePrivacy(accounts: List<AccountEntity>): Map<Long, AccountPrivacy> {
+    val byId = accounts.associateBy { it.id }
+    return accounts.associate { a ->
+        a.id to AccountPrivacy.resolve(a.ownPrivacy, a.parentId?.let { byId[it] }?.ownPrivacy, a.accountType == AccountType.SAVINGS)
+    }
+}
 
 /**
  * `account.balance` is never assigned directly here — editing "current
@@ -70,6 +79,7 @@ class AccountRepository(
         description: String? = null,
         parentId: Long? = null,
         parentSavingExempt: Boolean = false,
+        privacy: AccountPrivacy = AccountPrivacy(),
     ): Long = withContext(Dispatchers.IO) {
         db.withTransaction {
             val now = System.currentTimeMillis()
@@ -86,7 +96,16 @@ class AccountRepository(
                 createdAt = now,
                 updatedAt = now,
             )
-            val id = accountDao.insert(row(parentId, accountDao.maxSortOrder(parentId) + 1).copy(parentSavingExempt = parentId != null && parentSavingExempt))
+            // The privacy settings go on the account created at this level; a new parent's default
+            // subaccount follows them through its parent.
+            val id = accountDao.insert(
+                row(parentId, accountDao.maxSortOrder(parentId) + 1).copy(
+                    parentSavingExempt = parentId != null && parentSavingExempt,
+                    hideBalance = privacy.hideBalance,
+                    hideSavingProgress = privacy.progressHide,
+                    savingProgressInAnalysis = privacy.progressInAnalysis,
+                ),
+            )
             val subId = if (parentId == null) accountDao.insert(row(id, 0)) else id
             if (initialBalance != 0L) tradeRepository.recordAdjustment(subId, initialBalance)
             if (savings != null && type == AccountType.SAVINGS) setSavingsMonth(id, monthKey, savings)
@@ -128,6 +147,11 @@ class AccountRepository(
     /** Leaves a subaccount's income out of its parent's savings progress (or counts it again), in every month. */
     suspend fun setParentSavingExempt(accountId: Long, exempt: Boolean) =
         withContext(Dispatchers.IO) { accountDao.setParentSavingExempt(accountId, exempt) }
+
+    /** Saves [accountId]'s own privacy settings; a parent's cover its subaccounts as they are read (see [resolvePrivacy]). */
+    suspend fun setPrivacy(accountId: Long, privacy: AccountPrivacy) = withContext(Dispatchers.IO) {
+        accountDao.setPrivacy(accountId, privacy.hideBalance, privacy.progressHide, privacy.progressInAnalysis)
+    }
 
     /** [accountId]'s savings target in effect in [monthKey], or null when it has none by then. */
     suspend fun savingsAt(accountId: Long, monthKey: Int): SavingsSetting? = withContext(Dispatchers.IO) {

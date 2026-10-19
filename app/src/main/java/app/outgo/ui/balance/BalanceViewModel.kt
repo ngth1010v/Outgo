@@ -6,6 +6,7 @@ import app.outgo.data.db.dao.AccountWithProgress
 import app.outgo.data.db.entity.AccountEntity
 import app.outgo.data.repo.AccountRepository
 import app.outgo.data.repo.SavingsSetting
+import app.outgo.domain.AccountPrivacy
 import app.outgo.util.MonthKey
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -24,13 +25,17 @@ class BalanceViewModel(private val accountRepository: AccountRepository) : ViewM
 
     fun create(
         name: String, iconId: Long?, color: Int, balance: Long, accountType: Int, savings: SavingsSetting?, monthKey: Int, description: String?, parentId: Long?,
-        parentSavingExempt: Boolean,
+        parentSavingExempt: Boolean, privacy: AccountPrivacy,
     ) {
-        write { accountRepository.create(name, iconId, color, balance, accountType, savings, monthKey, description, parentId, parentSavingExempt) }
+        write { accountRepository.create(name, iconId, color, balance, accountType, savings, monthKey, description, parentId, parentSavingExempt, privacy) }
     }
 
     fun setParentSavingExempt(accountId: Long, exempt: Boolean) {
         write { accountRepository.setParentSavingExempt(accountId, exempt) }
+    }
+
+    fun setPrivacy(accountId: Long, privacy: AccountPrivacy) {
+        write { accountRepository.setPrivacy(accountId, privacy) }
     }
 
     fun update(accountId: Long, name: String, iconId: Long?, color: Int, balance: Long?, accountType: Int, description: String?) {

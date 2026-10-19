@@ -90,6 +90,9 @@ interface AccountDao {
     @Query("UPDATE account SET parent_saving_exempt = :exempt WHERE id = :id")
     suspend fun setParentSavingExempt(id: Long, exempt: Boolean)
 
+    @Query("UPDATE account SET hide_balance = :hideBalance, hide_saving_progress = :progressHide, saving_progress_in_analysis = :inAnalysis WHERE id = :id")
+    suspend fun setPrivacy(id: Long, hideBalance: Boolean, progressHide: Int, inAnalysis: Boolean)
+
     @Delete
     suspend fun delete(account: AccountEntity)
 

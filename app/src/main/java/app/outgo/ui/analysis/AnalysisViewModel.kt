@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import app.outgo.data.db.dao.MonthCategoryTotal
 import app.outgo.data.db.dao.StatDao
 import app.outgo.data.repo.AccountRepository
+import app.outgo.data.repo.resolvePrivacy
+import app.outgo.domain.AccountPrivacy
 import app.outgo.data.repo.CategoryRepository
 import app.outgo.data.repo.SettingRepository
 import app.outgo.data.repo.TradeRepository
@@ -54,6 +56,12 @@ data class AnalysisUiState(
     val layouts: Map<LayoutSlot, List<ChartCard>> = emptyMap(),
     /** Active parent accounts with their active subaccounts, in the user's order. */
     val accountTree: List<AccountNode> = emptyList(),
+    /**
+     * Each active account's privacy settings as they apply, by id. Savings progress charts must skip
+     * an account whose [AccountPrivacy.progressHiddenInAnalysis] is true, and never show a balance
+     * whose [AccountPrivacy.hideBalance] is.
+     */
+    val accountPrivacy: Map<Long, AccountPrivacy> = emptyMap(),
     /** Active parent categories of each kind with their active subcategories, in the user's order. */
     val expenseTree: List<AccountNode> = emptyList(),
     val incomeTree: List<AccountNode> = emptyList(),
@@ -118,10 +126,15 @@ class AnalysisViewModel(
             accountRepository.observeAll().collect { list ->
                 accounts = list.associate { it.id to Triple(it.name, it.iconId, it.color) }
                 val active = list.filter { !it.archived }
-                val tree = treeOf(active.filter { it.isParent }, active.filter { !it.isParent }, link = { it.id to it.parentId }) {
+                val privacy = resolvePrivacy(active)
+                // An account whose balance is hidden is left out of every account chart, and so is a
+                // parent left with no subaccounts by that.
+                val shown = active.filter { privacy[it.id]?.hideBalance != true }
+                val hadChildren = active.mapNotNullTo(HashSet()) { it.parentId }
+                val tree = treeOf(shown.filter { it.isParent }, shown.filter { !it.isParent }, link = { it.id to it.parentId }) {
                     AccountNode(it.id, it.name, it.iconId, it.color)
-                }
-                _state.update { it.copy(accountTree = tree) }
+                }.filter { it.children.isNotEmpty() || it.id !in hadChildren }
+                _state.update { it.copy(accountTree = tree, accountPrivacy = privacy) }
             }
         }
         viewModelScope.launch {

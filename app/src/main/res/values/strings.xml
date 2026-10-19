@@ -161,6 +161,15 @@
     <string name="balance_savings_info">A monthly goal for how much to put into this account. Only savings accounts can have one.\n\nEach month has its own target: pick the month next to the title, and every change is saved for that month right away. A later month with no target of its own uses the last month before it; a change to a past month changes only that month.\n\n• Monthly savings target: the amount to add that month. Income and transfers into the account count toward it.\n• Sum of subaccounts (a parent account only): the target is its subaccounts\' targets that month added up, and follows them when they change. While on, the target can\'t be typed; your own amount is kept for when it is turned off.</string>
     <string name="balance_parent_saving_exception">Parent saving exception</string>
     <string name="balance_parent_saving_exception_info">Money coming into this subaccount (income, and transfers from outside it) is not counted toward its parent account\'s monthly savings target, in every month (past months too). Balances still include it, and this subaccount\'s own savings target still counts it.</string>
+    <string name="balance_privacy">Privacy</string>
+    <string name="balance_privacy_info">Choose what this account keeps out of sight. A parent account\'s settings also cover its subaccounts.\n\n• Hide balance: the balance shows as •••••• on the Accounts screen. It is left out of Home\'s totals and out of Analysis\' account charts.\n• Hide savings progress (savings accounts only): Never; When reached, hidden once this month\'s target is met and shown again next month; or Always. A hidden progress has no row on Home and no bar on the Accounts screen.\n• Show in Analysis: the progress stays hidden on Home and the Accounts screen but still shows in Analysis. A hidden balance stays hidden there.</string>
+    <string name="balance_hide_balance">Hide balance</string>
+    <string name="balance_hide_progress">Hide savings progress</string>
+    <string name="balance_hide_progress_never">Never</string>
+    <string name="balance_hide_progress_reached">When reached</string>
+    <string name="balance_hide_progress_always">Always</string>
+    <string name="balance_progress_in_analysis">Show in Analysis</string>
+    <string name="balance_privacy_from_parent">Set by the parent account %1$s.</string>
     <string name="category_budget_limit">Monthly budget limit</string>
     <string name="category_budget_sum_children">Sum of subcategories</string>
     <string name="balance_savings_sum_children">Sum of subaccounts</string>

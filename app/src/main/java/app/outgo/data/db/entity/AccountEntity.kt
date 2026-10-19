@@ -5,7 +5,9 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import app.outgo.domain.AccountPrivacy
 import app.outgo.domain.AccountType
+import app.outgo.domain.SavingProgressHide
 
 /**
  * A place money is held (cash, a bank account, an e-wallet, a savings pot…).
@@ -75,7 +77,19 @@ data class AccountEntity(
      */
     @ColumnInfo(name = "parent_saving_exempt", defaultValue = "0")
     val parentSavingExempt: Boolean = false,
+    /** Hides this account's balance everywhere it shows, and leaves it out of Home's totals and Analysis' account charts. */
+    @ColumnInfo(name = "hide_balance", defaultValue = "0")
+    val hideBalance: Boolean = false,
+    /** Savings accounts only: when the monthly savings progress is hidden, an [app.outgo.domain.SavingProgressHide]. */
+    @ColumnInfo(name = "hide_saving_progress", defaultValue = "0")
+    val hideSavingProgress: Int = SavingProgressHide.NEVER,
+    /** With [hideSavingProgress] set: the progress still shows in Analysis. */
+    @ColumnInfo(name = "saving_progress_in_analysis", defaultValue = "0")
+    val savingProgressInAnalysis: Boolean = false,
 ) {
+    /** This account's own privacy settings; [AccountPrivacy.resolve] adds its parent's. */
+    val ownPrivacy: AccountPrivacy get() = AccountPrivacy(hideBalance, hideSavingProgress, savingProgressInAnalysis)
+
     val isParent: Boolean get() = parentId == null
 
     /** A savings subaccount left out of its parent's savings progress; the flag means nothing elsewhere. */

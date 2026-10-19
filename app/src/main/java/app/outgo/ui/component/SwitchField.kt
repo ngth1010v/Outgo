@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.dp
  * toggles it.
  */
 @Composable
-fun SwitchField(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+fun SwitchField(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
     val shape = OutlinedTextFieldDefaults.shape
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -34,12 +34,12 @@ fun SwitchField(label: String, checked: Boolean, onCheckedChange: (Boolean) -> U
             .heightIn(min = OutlinedTextFieldDefaults.MinHeight)
             .clip(shape)
             .border(OutlinedTextFieldDefaults.UnfocusedBorderThickness, MaterialTheme.colorScheme.outline, shape)
-            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
+            .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
             .padding(start = 16.dp, end = 12.dp),
     ) {
         Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Spacer(Modifier.width(8.dp))
         // The box handles the toggle and its semantics; the switch only shows the state.
-        Switch(checked = checked, onCheckedChange = null)
+        Switch(checked = checked, onCheckedChange = null, enabled = enabled)
     }
 }
