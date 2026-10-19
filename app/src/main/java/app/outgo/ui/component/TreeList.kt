@@ -133,7 +133,9 @@ fun <T> TreeList(
                     add(AddChildEntry(parent, parentId))
                 }
             }
-            add(AddParentEntry(addParentKey))
+            // Keyed apart while the list is empty (still loading): a list keeps its first visible key
+            // in view, so the rows arriving would otherwise scroll it to this last row.
+            add(AddParentEntry(if (shownParents.isEmpty()) "$addParentKey-empty" else addParentKey))
         }
     }
     val byKey = remember(entries) { entries.associateBy { it.key } }

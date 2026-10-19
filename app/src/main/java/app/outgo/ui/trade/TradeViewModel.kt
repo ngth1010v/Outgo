@@ -31,6 +31,8 @@ data class TradeUiState(
     val selectedAccountId: Long? = null,
     val selectedToAccountId: Long? = null,
     val occurredAt: Long = System.currentTimeMillis(),
+    /** The user picked the date or time. Until then a new trade follows the clock: see [TradeViewModel.refreshTime]. */
+    val occurredAtPicked: Boolean = false,
     val note: String = "",
     /** Per [CategoryKind], both loaded so a swipe can draw the other type's picker too. */
     val pickers: Map<Int, CategoryPicker> = emptyMap(),
@@ -281,15 +283,23 @@ class TradeViewModel(
             val old = java.time.Instant.ofEpochMilli(s.occurredAt).atZone(java.time.ZoneId.systemDefault())
             val newDate = java.time.Instant.ofEpochMilli(epochMillisAtMidnight).atZone(java.time.ZoneId.systemDefault())
             val combined = newDate.withHour(old.hour).withMinute(old.minute).withSecond(0).withNano(0)
-            s.copy(occurredAt = combined.toInstant().toEpochMilli())
+            s.copy(occurredAt = combined.toInstant().toEpochMilli(), occurredAtPicked = true)
         }
+    }
+
+    /**
+     * Moves a new trade's date and time to now, unless the user picked them. Called when the form is
+     * shown again: the tab stays composed, so the time it was first shown at goes stale.
+     */
+    fun refreshTime() {
+        _state.update { s -> if (s.isEditing || s.occurredAtPicked) s else s.copy(occurredAt = System.currentTimeMillis()) }
     }
 
     fun onTimeChange(hour: Int, minute: Int) {
         _state.update { s ->
             val z = java.time.Instant.ofEpochMilli(s.occurredAt).atZone(java.time.ZoneId.systemDefault())
                 .withHour(hour).withMinute(minute).withSecond(0).withNano(0)
-            s.copy(occurredAt = z.toInstant().toEpochMilli())
+            s.copy(occurredAt = z.toInstant().toEpochMilli(), occurredAtPicked = true)
         }
     }
 
@@ -319,7 +329,8 @@ class TradeViewModel(
             // A transfer's category is its optional "From budget".
             categoryId = if (s.isTransfer) s.selectedCategory?.id else s.selectedCategory!!.id,
             toAccountId = if (s.isTransfer) s.selectedToAccountId else null,
-            occurredAt = s.occurredAt,
+            // Not picked: the moment of saving, not of opening the form.
+            occurredAt = if (s.isEditing || s.occurredAtPicked) s.occurredAt else System.currentTimeMillis(),
             note = s.note,
             budgetExempt = s.effectiveBudgetExempt,
             savingExempt = s.effectiveSavingExempt,
@@ -365,6 +376,7 @@ class TradeViewModel(
                 selectedParentCategory = null,
                 selectedToAccountId = null,
                 occurredAt = System.currentTimeMillis(),
+                occurredAtPicked = false,
                 note = "",
                 type = CategoryKind.EXPENSE,
                 budgetExempt = false,

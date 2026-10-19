@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -16,6 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -48,6 +51,7 @@ fun AmountField(
     )
 
     val placeholderColor = color.copy(alpha = 0.35f)
+    val focusManager = LocalFocusManager.current
     Box(contentAlignment = Alignment.Center, modifier = modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box {
@@ -58,7 +62,9 @@ fun AmountField(
                     textStyle = style,
                     singleLine = true,
                     cursorBrush = SolidColor(color),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    // Done (✓) closes the keyboard, which otherwise covers the save button.
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                     modifier = Modifier
                         .width(IntrinsicSize.Min)
                         .let { if (focusRequester != null) it.focusRequester(focusRequester) else it },

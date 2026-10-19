@@ -63,7 +63,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -92,6 +95,7 @@ import app.outgo.ui.component.swipeShift
 import app.outgo.ui.component.swipeStep
 import app.outgo.util.formatDate
 import app.outgo.util.formatTime
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.util.Calendar
@@ -113,6 +117,18 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit, visible: Boolean = t
     var wasHidden by remember { mutableStateOf(false) }
     LaunchedEffect(visible) {
         if (!visible) wasHidden = true else if (wasHidden) viewModel.refreshPickers()
+    }
+    // A new trade's time follows the clock while the form is on screen, and on coming back to it
+    // (from another tab, or the app from the background) until the user picks a date or time.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(visible, lifecycle) {
+        if (!visible) return@LaunchedEffect
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                viewModel.refreshTime()
+                delay(TIME_REFRESH_MS)
+            }
+        }
     }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -224,6 +240,9 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit, visible: Boolean = t
         )
     }
 }
+
+/** How often the shown time of a new trade catches up with the clock. */
+private const val TIME_REFRESH_MS = 30_000L
 
 private val TRADE_TYPES = listOf(CategoryKind.EXPENSE, CategoryKind.INCOME, TradeType.TRANSFER)
 
