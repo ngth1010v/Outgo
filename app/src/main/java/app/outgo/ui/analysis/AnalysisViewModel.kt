@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import app.outgo.data.db.dao.MonthCategoryTotal
 import app.outgo.data.db.dao.StatDao
 import app.outgo.data.repo.AccountRepository
+import app.outgo.data.repo.BudgetRepository
 import app.outgo.data.repo.resolvePrivacy
 import app.outgo.domain.AccountPrivacy
 import app.outgo.data.repo.CategoryRepository
@@ -23,11 +24,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.ZoneId
@@ -65,13 +68,20 @@ data class AnalysisUiState(
     /** Active parent categories of each kind with their active subcategories, in the user's order. */
     val expenseTree: List<AccountNode> = emptyList(),
     val incomeTree: List<AccountNode> = emptyList(),
+    /** The Trades, Savings and Budgets groups' data per month, loaded only while the list holds one of their charts. */
+    val monthTradeInsights: Map<Int, Stage<TradesInsightUi>> = emptyMap(),
+    val monthSavingsInsights: Map<Int, Stage<SavingsInsightUi>> = emptyMap(),
+    val monthBudgetInsights: Map<Int, Stage<BudgetsInsightUi>> = emptyMap(),
+    /** id -> (name, iconId, color) of every account, archived ones too, for the transfer flow chart. */
+    val accountNames: Map<Long, Triple<String, Long?, Int>> = emptyMap(),
 )
 
 class AnalysisViewModel(
     private val statDao: StatDao,
     private val tradeRepository: TradeRepository,
     categoryRepository: CategoryRepository,
-    accountRepository: AccountRepository,
+    private val accountRepository: AccountRepository,
+    private val budgetRepository: BudgetRepository,
     private val settingRepository: SettingRepository,
 ) : ViewModel() {
 
@@ -92,6 +102,8 @@ class AnalysisViewModel(
     private val balancesCache = lru<Stage<BalancesUi>>()
     private val categoriesCache = lru<Stage<CategoryChartsUi>>()
     private val tradeJobs = HashMap<Int, Job>()
+    private val insightCaches = InsightGroup.entries.associateWith { lru<Stage<*>>() }
+    private val insightJobs = HashMap<Pair<InsightGroup, Int>, Job>()
 
     /** Pages whose charts have already played their intro animation. */
     private val animated = HashSet<AnalysisPage>()
@@ -134,7 +146,7 @@ class AnalysisViewModel(
                 val tree = treeOf(shown.filter { it.isParent }, shown.filter { !it.isParent }, link = { it.id to it.parentId }) {
                     AccountNode(it.id, it.name, it.iconId, it.color)
                 }.filter { it.children.isNotEmpty() || it.id !in hadChildren }
-                _state.update { it.copy(accountTree = tree, accountPrivacy = privacy) }
+                _state.update { it.copy(accountTree = tree, accountPrivacy = privacy, accountNames = accounts) }
             }
         }
         viewModelScope.launch {
@@ -159,6 +171,7 @@ class AnalysisViewModel(
             }
             val layouts = decoded.mapValues { (_, cards) -> cards.withIds(nextCardId).also { nextCardId += it.size } }
             _state.update { it.copy(layouts = layouts) }
+            window(selected.value).forEach { loadInsights(it) }
         }
         viewModelScope.launch { observeSummary() }
         viewModelScope.launch {
@@ -166,6 +179,7 @@ class AnalysisViewModel(
             // pulled in by hand — and only for the months still in the cache.
             tradeRepository.changes.collect {
                 transfersCache.keys.toList().forEach { loadTrades(AnalysisPage.Month(it), force = true) }
+                reloadInsights()
             }
         }
     }
@@ -282,6 +296,96 @@ class AnalysisViewModel(
         }
     }
 
+    // ---------------------------------------------------------------- INSIGHTS
+
+    /** The groups the saved list draws from; the others are not loaded at all. */
+    private fun neededGroups(): Set<InsightGroup> =
+        _state.value.layouts[LayoutSlot.MONTH].orEmpty().mapNotNullTo(HashSet()) { it.type.insight }
+
+    /** Loads the Trades/Savings/Budgets data [page] needs and doesn't have yet (or again, with [force]). */
+    fun loadInsights(page: AnalysisPage, force: Boolean = false) {
+        val month = (page as? AnalysisPage.Month)?.monthKey ?: return
+        neededGroups().forEach { group ->
+            val cache = insightCaches.getValue(group)
+            val key = group to month
+            if (!force && (cache[month] != null || insightJobs[key] != null)) return@forEach
+            insightJobs.remove(key)?.cancel()
+            if (cache[month] == null) {
+                cache[month] = Stage.Loading
+                publishInsights()
+            }
+            insightJobs[key] = viewModelScope.launch {
+                val stage: Stage<Any> = Stage.Ready(buildInsight(group, month))
+                cache[month] = stage
+                insightJobs.remove(key)
+                publishInsights()
+            }
+        }
+    }
+
+    /** Every month already loaded, again: a trade, a budget or a savings target may have changed. */
+    private fun reloadInsights() {
+        val months = insightCaches.values.flatMapTo(HashSet()) { it.keys }
+        months.forEach { loadInsights(AnalysisPage.Month(it), force = true) }
+    }
+
+    /**
+     * The tab is shown again. Budget and savings settings change on other screens without a trade
+     * write, so the months already loaded are read again.
+     */
+    fun onShown() = reloadInsights()
+
+    private suspend fun buildInsight(group: InsightGroup, month: Int): Any = coroutineScope {
+        when (group) {
+            InsightGroup.TRADES -> {
+                val months = MonthKey.lastN(month, INSIGHT_MONTH_COUNT)
+                val trades = async { tradeRepository.amountsAndTimesForMonths(listOf(month), TRADE_TYPES) }
+                val stats = async { statDao.categoryMonthStats(months.first(), month) }
+                val transfers = async { tradeRepository.transferTotalsForMonths(listOf(month)) }
+                val t = trades.await()
+                val st = stats.await()
+                val tr = transfers.await()
+                withContext(Dispatchers.Default) { buildTradesInsight(t, st, tr, month, zone) }
+            }
+            InsightGroup.SAVINGS -> {
+                val months = MonthKey.lastN(month, SAVINGS_HISTORY_MONTH_COUNT)
+                val all = accountRepository.observeAll().first()
+                val book = SavingsBook(all, accountRepository.allSavingsMonths())
+                val trades = async { tradeRepository.savingsTrades(months.first(), month, book.savingsIds) }
+                val opening = async { tradeRepository.balancesBefore(month) }
+                val stats = async { statDao.categoryMonthStats(MonthKey.lastN(month, INSIGHT_MONTH_COUNT).first(), month) }
+                val active = all.filter { !it.archived }
+                val privacy = resolvePrivacy(active)
+                val income = stats.await().filter { it.type == CategoryKind.INCOME }
+                    .groupBy { it.monthKey }.mapValues { (_, rows) -> rows.sumOf { it.total } }
+                val t = trades.await()
+                val o = opening.await()
+                withContext(Dispatchers.Default) { buildSavingsInsight(book, active, privacy, t, o, income, month, zone) }
+            }
+            InsightGroup.BUDGETS -> {
+                val months = MonthKey.lastN(month, INSIGHT_MONTH_COUNT)
+                val progress = async { budgetRepository.progressFor(months) }
+                val moves = async { tradeRepository.budgetMoves(months.first(), month) }
+                val stats = async { statDao.categoryMonthStats(months.first(), month) }
+                val p = progress.await()
+                val m = moves.await()
+                val st = stats.await()
+                withContext(Dispatchers.Default) { buildBudgetsInsight(p, m, st, month, zone) }
+            }
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun publishInsights() {
+        _state.update {
+            it.copy(
+                monthTradeInsights = insightCaches.getValue(InsightGroup.TRADES).toMap() as Map<Int, Stage<TradesInsightUi>>,
+                monthSavingsInsights = insightCaches.getValue(InsightGroup.SAVINGS).toMap() as Map<Int, Stage<SavingsInsightUi>>,
+                monthBudgetInsights = insightCaches.getValue(InsightGroup.BUDGETS).toMap() as Map<Int, Stage<BudgetsInsightUi>>,
+            )
+        }
+    }
+
     // -------------------------------------------------------------- navigation
 
     fun selectPage(page: AnalysisPage) {
@@ -304,7 +408,10 @@ class AnalysisViewModel(
                 categoriesCache.remove(stale)
             }
         }
-        keep.forEach { loadTrades(it) }
+        keep.forEach {
+            loadTrades(it)
+            loadInsights(it)
+        }
     }
 
     // ------------------------------------------------------------------ layout
@@ -317,7 +424,11 @@ class AnalysisViewModel(
 
     fun saveLayout(slot: LayoutSlot) = editLayout(slot) { it }
 
-    fun addCard(slot: LayoutSlot, type: ChartType) = editLayout(slot) { it + ChartCard(nextCardId++, type) }
+    fun addCard(slot: LayoutSlot, type: ChartType) {
+        editLayout(slot) { it + ChartCard(nextCardId++, type) }
+        // A chart of a group not loaded yet brings its data in.
+        if (type.insight != null) window(selected.value).forEach { loadInsights(it) }
+    }
 
     fun updateCard(slot: LayoutSlot, card: ChartCard) =
         editLayout(slot) { cards -> cards.map { if (it.id == card.id) card else it } }

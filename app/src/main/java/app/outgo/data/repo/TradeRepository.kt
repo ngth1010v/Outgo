@@ -3,6 +3,8 @@ package app.outgo.data.repo
 import app.outgo.data.db.dao.AccountBalance
 import app.outgo.data.db.dao.AccountFlow
 import app.outgo.data.db.dao.AccountMove
+import app.outgo.data.db.dao.BudgetMoveRow
+import app.outgo.data.db.dao.SavingsTradeRow
 import app.outgo.data.db.dao.TradeDao
 import app.outgo.data.db.dao.TradeSlim
 import app.outgo.data.db.dao.TransferTotal
@@ -266,6 +268,14 @@ class TradeRepository(private val tradeDao: TradeDao) {
 
     suspend fun accountMovesForMonth(monthKey: Int): List<AccountMove> =
         withContext(Dispatchers.IO) { tradeDao.accountMovesForMonth(monthKey) }
+
+    /** Every trade of months [fromMonth]..[toMonth] touching one of [accountIds]; empty without ids. */
+    suspend fun savingsTrades(fromMonth: Int, toMonth: Int, accountIds: List<Long>): List<SavingsTradeRow> =
+        if (accountIds.isEmpty()) emptyList() else withContext(Dispatchers.IO) { tradeDao.savingsTrades(fromMonth, toMonth, accountIds) }
+
+    /** Budget spend and top-ups of months [fromMonth]..[toMonth]; see TradeDao.budgetMoves. */
+    suspend fun budgetMoves(fromMonth: Int, toMonth: Int): List<BudgetMoveRow> =
+        withContext(Dispatchers.IO) { tradeDao.budgetMoves(fromMonth, toMonth) }
 
     /** Running spend of a budget's category for each day of [monthKey], day 1 to today (or the month's end). */
     suspend fun budgetDays(categoryId: Long, monthKey: Int = MonthKey.current()): List<Long> = withContext(Dispatchers.IO) {

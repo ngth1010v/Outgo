@@ -82,6 +82,7 @@ import app.outgo.domain.CategoryKind
 import app.outgo.ui.LocalAppContainer
 import app.outgo.ui.component.reorderableItem
 import app.outgo.ui.component.rememberReorderState
+import app.outgo.ui.nav.HistoryType
 import app.outgo.ui.theme.ExpenseRed
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
@@ -98,7 +99,11 @@ import kotlinx.coroutines.launch
  * page keeps that position.
  */
 @Composable
-fun AnalysisScreen() {
+fun AnalysisScreen(
+    visible: Boolean = true,
+    onOpenTrade: (Long) -> Unit = {},
+    onOpenDay: (HistoryType, Long) -> Unit = { _, _ -> },
+) {
     val container = LocalAppContainer.current
     val viewModel: AnalysisViewModel = viewModel(
         factory = viewModelFactory {
@@ -108,6 +113,7 @@ fun AnalysisScreen() {
                     container.tradeRepository,
                     container.categoryRepository,
                     container.accountRepository,
+                    container.budgetRepository,
                     container.settingRepository,
                 )
             }
@@ -115,6 +121,13 @@ fun AnalysisScreen() {
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
     val pages = state.pages
+    // Shown again after another tab: budget and savings settings may have changed there.
+    var wasVisible by remember { mutableStateOf(visible) }
+    LaunchedEffect(visible) {
+        if (visible && !wasVisible) viewModel.onShown()
+        wasVisible = visible
+    }
+    val actions = remember(onOpenTrade, onOpenDay) { InsightActions(onOpenTrade, onOpenDay) }
     // Opens on the current month, not on the first page of the list.
     val pagerState = rememberPagerState(
         initialPage = pages.indexOf(state.selected).coerceAtLeast(0),
@@ -171,7 +184,7 @@ fun AnalysisScreen() {
                 is AnalysisPage.Month -> {
                     // By page rather than index: the index shifts when the list grows backwards.
                     val listState = rememberSyncedListState(monthAnchor) { pages.getOrNull(pagerState.settledPage) == page }
-                    MonthPage(page, listState, state, viewModel, onDeleted)
+                    ProvideInsightFormats { MonthPage(page, listState, state, viewModel, onDeleted, actions) }
                 }
                 is AnalysisPage.Year -> ComingSoonPage()
             }
@@ -337,6 +350,7 @@ private fun cardColor(): Color =
  */
 @Composable
 private fun ChartList(
+    month: Int,
     slot: LayoutSlot,
     cards: List<ChartCard>,
     state: AnalysisUiState,
@@ -377,8 +391,8 @@ private fun ChartList(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             items(cards, key = { it.id }, contentType = { it.type }) { card ->
-                val action: (@Composable () -> Unit)? = if (card.type.hasMode || card.type.hasZero || card.type.hasParent || card.type.hasToggles) {
-                    { CardChips(card, state) { viewModel.updateCard(slot, it) } }
+                val action: (@Composable () -> Unit)? = if (card.type.hasMode || card.type.hasZero || card.type.hasParent || card.type.hasToggles || card.type.pick != null) {
+                    { CardChips(card, state, month) { viewModel.updateCard(slot, it) } }
                 } else {
                     null
                 }
@@ -422,8 +436,13 @@ private fun ChartList(
 }
 
 @Composable
-private fun CardChips(card: ChartCard, state: AnalysisUiState, onChange: (ChartCard) -> Unit) {
+private fun CardChips(card: ChartCard, state: AnalysisUiState, month: Int, onChange: (ChartCard) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
+        if (card.type.pick != null) {
+            val options = pickOptions(card.type, month, state)
+            val id = card.accountId?.takeIf { picked -> options.any { it.first == picked } } ?: options.firstOrNull()?.first
+            ChoiceChip(options.firstOrNull { it.first == id }?.second ?: "—", options) { onChange(card.copy(accountId = it)) }
+        }
         val tree = treeOf(card.type, state)
         if (card.type.hasParent) {
             val parents = tree.map { it.id to it.name }
@@ -572,7 +591,7 @@ private fun shortChartName(type: ChartType): String {
 
 /** The "+" sheet's name for a chart: never names a kind, since the card's own chip picks that. */
 @Composable
-private fun chartName(type: ChartType): String = stringResource(
+private fun chartName(type: ChartType): String = if (type.insight != null) insightChartName(type) else stringResource(
     when (type) {
         ChartType.SUMMARY -> R.string.analysis_summary_title
         ChartType.ACCOUNT_DAILY -> R.string.analysis_account_daily_title
@@ -593,6 +612,7 @@ private fun chartName(type: ChartType): String = stringResource(
         ChartType.INCOME_SUBCATEGORY_SHARE -> R.string.analysis_income_subcategory_share_title
         ChartType.INCOME_CATEGORY_MONTHS -> R.string.analysis_income_category_months_title
         ChartType.INCOME_SUBCATEGORY_MONTHS -> R.string.analysis_income_subcategory_months_title
+        else -> 0
     },
 )
 
@@ -605,6 +625,7 @@ private fun MonthPage(
     state: AnalysisUiState,
     viewModel: AnalysisViewModel,
     onDeleted: (LayoutSlot, Int, ChartCard) -> Unit,
+    actions: InsightActions,
 ) {
     val month = page.monthKey
     val summary = state.monthSummary[month] ?: Stage.Loading
@@ -613,7 +634,7 @@ private fun MonthPage(
     LoadTradesAfterFirstFrame(page, viewModel)
 
     val cards = state.layouts[LayoutSlot.MONTH] ?: return
-    ChartList(LayoutSlot.MONTH, cards, state, listState, viewModel, onDeleted) { card ->
+    ChartList(month, LayoutSlot.MONTH, cards, state, listState, viewModel, onDeleted) { card ->
         val height = chartContentHeight(card.type)
         when (card.type) {
             ChartType.SUMMARY -> StageSection(summary, stringResource(R.string.analysis_summary_title), height) {
@@ -624,7 +645,7 @@ private fun MonthPage(
             in MonthCategoryGroupCharts ->
                 CategoryCard(card, height, state.monthCategories[month] ?: Stage.Loading, treeOf(card.type, state), month, animate)
             // Every chart a list can hold is one of the above; decodeLayout drops the rest.
-            else -> Unit
+            else -> if (card.type.insight != null) InsightCard(card, height, state, month, animate, actions)
         }
     }
 }
@@ -742,6 +763,7 @@ private fun LoadTradesAfterFirstFrame(page: AnalysisPage, viewModel: AnalysisVie
     LaunchedEffect(page) {
         withFrameNanos { }
         viewModel.loadTrades(page)
+        viewModel.loadInsights(page)
     }
 }
 

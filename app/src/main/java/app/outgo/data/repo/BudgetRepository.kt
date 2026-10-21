@@ -67,6 +67,19 @@ class BudgetRepository(
     private val progress = HashMap<Int, Flow<List<BudgetWithProgress>>>()
     private val shareScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    /**
+     * One-shot [observeWithProgress] for each of [monthKeys]: the budgets with that month's settings,
+     * progress and carried offsets. The snapshots are read once for all of them.
+     */
+    suspend fun progressFor(monthKeys: List<Int>): Map<Int, List<BudgetWithProgress>> = withContext(Dispatchers.IO) {
+        val months = budgetDao.months()
+        monthKeys.associateWith { month ->
+            val budgets = budgetDao.budgetsWithProgress(month, MonthKey.minus(month, 1))
+            val carry = budgetCarry(budgets, months, budgetDao.carrySpend(month), month)
+            budgets.map { b -> carry[b.categoryId]?.let { b.copy(carry = it) } ?: b }
+        }
+    }
+
     suspend fun findByCategory(categoryId: Long): BudgetEntity? =
         withContext(Dispatchers.IO) { budgetDao.findByCategory(categoryId) }
 

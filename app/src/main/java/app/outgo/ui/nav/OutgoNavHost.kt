@@ -187,7 +187,11 @@ private fun TabContent(route: String, shown: Boolean, navController: NavHostCont
         Routes.CATEGORY -> CategoryScreen(
             onOpenEditor = { id, parentId -> navController.navigate(Routes.categoryEdit(id, parentId)) },
         )
-        Routes.ANALYSIS -> AnalysisScreen()
+        Routes.ANALYSIS -> AnalysisScreen(
+            visible = shown,
+            onOpenTrade = { tradeId -> navController.navigate(Routes.tradeEdit(tradeId)) },
+            onOpenDay = { type, day -> navController.navigate(Routes.history(type, day)) },
+        )
         Routes.HISTORY -> HistoryTabScreen(
             visible = shown,
             onOpenTrade = { tradeId -> navController.navigate(Routes.tradeEdit(tradeId)) },

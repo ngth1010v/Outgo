@@ -31,6 +31,17 @@ interface StatDao {
     )
     suspend fun categoryMonthTotals(fromMonth: Int, toMonth: Int): List<CategoryMonthTotal>
 
+    /** Analysis budget coverage and trade frequency: every category's month totals in range, with its kind and parent. */
+    @Query(
+        """
+        SELECT s.category_id AS categoryId, c.parent_id AS parentId, c.parent_budget_exempt AS parentExempt, c.type,
+               s.month_key AS monthKey, s.total, s.exempt_total AS exemptTotal, s.trade_count AS tradeCount
+        FROM category_month_stat s JOIN category c ON c.id = s.category_id
+        WHERE s.month_key BETWEEN :fromMonth AND :toMonth
+        """,
+    )
+    suspend fun categoryMonthStats(fromMonth: Int, toMonth: Int): List<CategoryMonthStatRow>
+
     /** Oldest month that has any data, i.e. the lower bound of the Analysis month picker. */
     @Query("SELECT MIN(month_key) FROM category_month_stat")
     suspend fun earliestMonth(): Int?

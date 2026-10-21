@@ -158,6 +158,9 @@ class AccountRepository(
         accountDao.savingsAt(accountId, monthKey)?.let { SavingsSetting(it.enabled, it.target, it.sumChildren) }
     }
 
+    /** Every savings target snapshot, oldest first within an account. */
+    suspend fun allSavingsMonths(): List<SavingsMonthEntity> = withContext(Dispatchers.IO) { accountDao.allSavingsMonths() }
+
     /** What [accountId]'s target sums in [monthKey] when it sums its subaccounts'. */
     suspend fun childTargetSum(accountId: Long, monthKey: Int): Long =
         withContext(Dispatchers.IO) { accountDao.childTargetSum(accountId, monthKey) }

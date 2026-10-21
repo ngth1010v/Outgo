@@ -94,6 +94,7 @@ fun chartContentHeight(type: ChartType): Dp {
             BalanceHeight + SectionGap + small
         ChartType.ACCOUNT_SHARE, ChartType.SUBACCOUNT_SHARE, ChartType.EXPENSE_CATEGORY_SHARE, ChartType.EXPENSE_SUBCATEGORY_SHARE,
         ChartType.INCOME_CATEGORY_SHARE, ChartType.INCOME_SUBCATEGORY_SHARE -> ShareHeight
+        else -> insightContentHeight(type)
     }
 }
 

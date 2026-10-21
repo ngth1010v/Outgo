@@ -90,6 +90,8 @@ data class BalanceLine(
     val dashed: Boolean = false,
     /** Shown in the legend, tinted with [color]; without one the legend falls back to a colour block. */
     val iconId: Long? = null,
+    /** Index of the day (or month) [values]' first point sits on: a projection starts at today. */
+    val start: Int = 0,
 )
 
 @Immutable

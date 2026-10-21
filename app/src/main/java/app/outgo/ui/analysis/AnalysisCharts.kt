@@ -456,7 +456,7 @@ private fun DrawScope.drawBalanceLines(
         drawFocus(focus, points[focused].last(), Color(lines[focused].color), plotWidth)
     }
     hit?.let {
-        drawHover(look, points[it.line][it.point], Color(lines[it.line].color), xText(it.point), lines[it.line].values[it.point], plotWidth, plotHeight)
+        drawHover(look, points[it.line][it.point], Color(lines[it.line].color), xText(it.point + lines[it.line].start), lines[it.line].values[it.point], plotWidth, plotHeight)
     }
 }
 
@@ -532,7 +532,7 @@ fun DailyBalanceChart(
         val step = (plotWidth - inset * 2) / (daysInMonth - 1).coerceAtLeast(1)
         fun x(index: Int) = inset + index * step
 
-        val points = lines.map { line -> line.values.mapIndexed { index, value -> Offset(x(index), y(value)) } }
+        val points = lines.map { line -> line.values.mapIndexed { index, value -> Offset(x(line.start + index), y(value)) } }
         geometry.points = points
         val amount = focusAmount.value
         val focus = if (shownIndex >= 0 && amount > 0f) FocusDraw(shownIndex, amount, focusLabel, focusText) else null

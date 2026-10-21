@@ -79,6 +79,10 @@ interface AccountDao {
     @Query("SELECT EXISTS(SELECT 1 FROM savings_month WHERE account_id = :accountId AND month_key = :monthKey)")
     suspend fun hasSavingsMonth(accountId: Long, monthKey: Int): Boolean
 
+    /** Every savings target snapshot, oldest first within an account; Analysis resolves months from these. */
+    @Query("SELECT * FROM savings_month ORDER BY account_id, month_key")
+    suspend fun allSavingsMonths(): List<SavingsMonthEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun putSavingsMonth(month: SavingsMonthEntity)
     @Insert

@@ -286,6 +286,40 @@ interface TradeDao {
     )
     suspend fun unlinkedOffsetTransfer(fromAccountId: Long, toAccountId: Long, monthText: String): TradeEntity?
 
+    /**
+     * Analysis savings charts: every trade of months [fromMonth]..[toMonth] that touches one of
+     * [accountIds], on either end.
+     */
+    @Query(
+        """
+        SELECT month_key AS monthKey, type, amount, occurred_at AS occurredAt, account_id AS accountId,
+               to_account_id AS toAccountId, saving_exempt AS savingExempt, offset_month AS offsetMonth
+        FROM trade
+        WHERE month_key BETWEEN :fromMonth AND :toMonth
+          AND (account_id IN (:accountIds) OR to_account_id IN (:accountIds))
+        """,
+    )
+    suspend fun savingsTrades(fromMonth: Int, toMonth: Int, accountIds: List<Long>): List<SavingsTradeRow>
+
+    /**
+     * Analysis budget charts: the spend `BudgetWithProgress.spent` counts (an expense, or a transfer
+     * taken from a budget, not budget exempt) and the "To budget" top-ups, of months
+     * [fromMonth]..[toMonth], each with its category's parent.
+     */
+    @Query(
+        """
+        SELECT t.month_key AS monthKey, t.occurred_at AS occurredAt, t.amount, c.id AS categoryId,
+               c.parent_id AS parentId, c.parent_budget_exempt AS parentExempt, 0 AS funding
+        FROM trade t JOIN category c ON c.id = t.category_id
+        WHERE t.month_key BETWEEN :fromMonth AND :toMonth AND t.budget_exempt = 0 AND t.type IN (0, 4) AND c.type = 0
+        UNION ALL
+        SELECT t.month_key, t.occurred_at, t.amount, c.id, c.parent_id, c.parent_budget_exempt, 1
+        FROM trade t JOIN category c ON c.id = t.to_category_id
+        WHERE t.type = 4 AND t.month_key BETWEEN :fromMonth AND :toMonth
+        """,
+    )
+    suspend fun budgetMoves(fromMonth: Int, toMonth: Int): List<BudgetMoveRow>
+
     @Query("SELECT balance FROM account WHERE id = :accountId")
     suspend fun accountBalance(accountId: Long): Long?
 }

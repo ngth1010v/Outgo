@@ -24,6 +24,10 @@ enum class ChartType(
     val hasToggles: Boolean = false,
     /** A Categories-group chart of this [CategoryKind]; its [hasParent] picks a parent category. */
     val categoryKind: Int? = null,
+    /** A Trades, Savings or Budgets chart: the data it is drawn from. */
+    val insight: InsightGroup? = null,
+    /** Picks one savings account or budget ([ChartCard.accountId]) and draws only that one. */
+    val pick: Pick? = null,
 ) {
     // Accounts, month pages only. "Account" charts add each parent's subaccounts up; "subaccount"
     // charts draw the subaccounts of one picked parent.
@@ -55,6 +59,46 @@ enum class ChartType(
     INCOME_SUBCATEGORY_SHARE(R.drawable.ph_vault, hasMode = false, hasParent = true, hasToggles = true, categoryKind = CategoryKind.INCOME),
     INCOME_CATEGORY_MONTHS(R.drawable.ph_money_wavy, hasMode = false, hasToggles = true, categoryKind = CategoryKind.INCOME),
     INCOME_SUBCATEGORY_MONTHS(R.drawable.ph_currency_circle_dollar, hasMode = false, hasParent = true, hasToggles = true, categoryKind = CategoryKind.INCOME),
+
+    // Trades, month pages only: how and when money moves, whatever its category.
+    /** The month as a calendar, each day shaded by what went out (or came in, or the net). */
+    TRADE_CALENDAR(R.drawable.ic_chart_calendar_heat, insight = InsightGroup.TRADES),
+    /** Weekday x four-hour slot grid of the month's trades. */
+    TRADE_WEEK(R.drawable.ic_chart_week_clock, insight = InsightGroup.TRADES),
+    /** Trades by size: each bucket's share of the trades next to its share of the money. */
+    TRADE_SIZES(R.drawable.ic_chart_sizes, insight = InsightGroup.TRADES),
+    /** The month's largest trades; a tap opens one. */
+    TRADE_TOP(R.drawable.ic_chart_top, insight = InsightGroup.TRADES),
+    /** Trade count per month in bars, the average trade as a line. */
+    TRADE_FREQUENCY(R.drawable.ic_chart_frequency, insight = InsightGroup.TRADES),
+    /** Transfers as flows from the sending accounts to the receiving ones. */
+    TRADE_TRANSFERS(R.drawable.ic_chart_flow, hasMode = false, insight = InsightGroup.TRADES),
+
+    // Savings, month pages only. Progress an account hides stays hidden here unless kept in Analysis.
+    /** Each target's progress against where an even pace would be by today. */
+    SAVING_PACE(R.drawable.ic_chart_saving_pace, hasMode = false, insight = InsightGroup.SAVINGS),
+    /** One account's month: saved so far, the even pace to its target, and where it is heading. */
+    SAVING_BURNUP(R.drawable.ic_chart_burnup, hasMode = false, insight = InsightGroup.SAVINGS, pick = Pick.SAVINGS),
+    /** The last twelve months' targets, hit or missed, with the current streak. */
+    SAVING_HISTORY(R.drawable.ic_chart_saving_streak, hasMode = false, insight = InsightGroup.SAVINGS),
+    /** Saved per month, and as a share of the month's income. */
+    SAVING_RATE(R.drawable.ic_chart_saving_rate, hasMode = false, insight = InsightGroup.SAVINGS),
+    /** One account's balance from the month's start to its end, step by step. */
+    SAVING_SOURCES(R.drawable.ic_chart_saving_sources, hasMode = false, insight = InsightGroup.SAVINGS, pick = Pick.SAVINGS_BALANCE),
+
+    // Budgets, month pages only.
+    /** Each budget's spend, its even pace, and where the month ends at that pace; riskiest first. */
+    BUDGET_FORECAST(R.drawable.ic_chart_budget_forecast, hasMode = false, insight = InsightGroup.BUDGETS),
+    /** One budget's month: what is left day by day, top-ups stepping it up. */
+    BUDGET_BURNDOWN(R.drawable.ic_chart_burndown, hasMode = false, insight = InsightGroup.BUDGETS, pick = Pick.BUDGET),
+    /** The last months of every budget: share of the limit used, and the months over. */
+    BUDGET_HISTORY(R.drawable.ic_chart_budget_grid, hasMode = false, insight = InsightGroup.BUDGETS),
+    /** How one budget's limit this month comes about, and what is left of it. */
+    BUDGET_WATERFALL(R.drawable.ic_chart_budget_waterfall, hasMode = false, insight = InsightGroup.BUDGETS, pick = Pick.BUDGET),
+    /** Spend inside budgets, outside them, and left out of them, per month. */
+    BUDGET_COVERAGE(R.drawable.ic_chart_coverage, hasMode = false, insight = InsightGroup.BUDGETS),
+    /** The day each budget went over its limit, in each of the last months. */
+    BUDGET_REACHED(R.drawable.ic_chart_reached, hasMode = false, insight = InsightGroup.BUDGETS),
 
     // Other
     /** Month totals, the change since last month, the daily average and the month's transfers. */
@@ -116,6 +160,9 @@ enum class LayoutSlot(
                     ),
                 ),
             ),
+            ChartGroup(R.string.analysis_group_trades, TradeCharts),
+            ChartGroup(R.string.analysis_group_savings, SavingCharts),
+            ChartGroup(R.string.analysis_group_budgets, BudgetCharts),
             ChartGroup(R.string.analysis_group_other, listOf(ChartType.SUMMARY)),
         ),
         listOf(
@@ -131,6 +178,24 @@ enum class LayoutSlot(
      */
     val offered: Set<ChartType> get() = groups.flatMapTo(HashSet()) { it.allCharts() }
 }
+
+val TradeCharts
+    get() = listOf(
+        ChartType.TRADE_CALENDAR, ChartType.TRADE_WEEK, ChartType.TRADE_SIZES,
+        ChartType.TRADE_TOP, ChartType.TRADE_FREQUENCY, ChartType.TRADE_TRANSFERS,
+    )
+
+val SavingCharts
+    get() = listOf(
+        ChartType.SAVING_PACE, ChartType.SAVING_BURNUP, ChartType.SAVING_HISTORY,
+        ChartType.SAVING_RATE, ChartType.SAVING_SOURCES,
+    )
+
+val BudgetCharts
+    get() = listOf(
+        ChartType.BUDGET_FORECAST, ChartType.BUDGET_BURNDOWN, ChartType.BUDGET_HISTORY,
+        ChartType.BUDGET_WATERFALL, ChartType.BUDGET_COVERAGE, ChartType.BUDGET_REACHED,
+    )
 
 /** This group's charts and those of its sub-groups, at any depth. */
 fun ChartGroup.allCharts(): List<ChartType> = charts + sub.flatMap { it.allCharts() }

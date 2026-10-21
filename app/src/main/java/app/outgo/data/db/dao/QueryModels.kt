@@ -126,3 +126,46 @@ data class AccountMove(
     val occurredAt: Long,
     val delta: Long,
 )
+
+/**
+ * Analysis savings charts: one trade touching a savings account, with what decides whether it
+ * counts toward a savings target ([savingExempt]) and whether it is an automatic budget leftover
+ * ([offsetMonth] set). [toAccountId] is a transfer's receiving account, else null.
+ */
+data class SavingsTradeRow(
+    val monthKey: Int,
+    val type: Int,
+    val amount: Long,
+    val occurredAt: Long,
+    val accountId: Long,
+    val toAccountId: Long?,
+    val savingExempt: Boolean,
+    val offsetMonth: Int?,
+)
+
+/**
+ * Analysis budget charts: a trade's effect on the budgets of its category. [funding] false is spend
+ * (counted, not exempt); true is a "To budget" top-up of [categoryId]. [parentId]/[parentExempt] are
+ * the category's, so a subcategory's money also reaches its parent's budget unless it is exempt.
+ */
+data class BudgetMoveRow(
+    val monthKey: Int,
+    val occurredAt: Long,
+    val amount: Long,
+    val categoryId: Long,
+    val parentId: Long?,
+    val parentExempt: Boolean,
+    val funding: Boolean,
+)
+
+/** One category's stored month totals, with its kind and parent, for the budget coverage and trade frequency charts. */
+data class CategoryMonthStatRow(
+    val categoryId: Long,
+    val parentId: Long?,
+    val parentExempt: Boolean,
+    val type: Int,
+    val monthKey: Int,
+    val total: Long,
+    val exemptTotal: Long,
+    val tradeCount: Int,
+)
