@@ -12,6 +12,16 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.clickable
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.withStyle
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -111,7 +121,7 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit, visible: Boolean = t
         key = "trade-$editingTradeId",
         factory = viewModelFactory {
             initializer {
-                TradeViewModel(container.categoryRepository, container.accountRepository, container.tradeRepository, container.budgetRepository, editingTradeId)
+                TradeViewModel(container.categoryRepository, container.accountRepository, container.tradeRepository, container.budgetRepository, container.settingRepository, editingTradeId)
             }
         },
     )
@@ -286,6 +296,7 @@ private fun TradeForm(
     @Composable
     fun errorFor(error: TradeError, message: Int): String? = if (error in errors) stringResource(message) else null
     val selfTransferBudgetError = errorFor(TradeError.SELF_TRANSFER_BUDGET, R.string.trade_error_self_transfer_budget)
+    val pickedCategoryId = state.selectedCategory?.id.takeIf { PredictField.CATEGORY !in state.predicted }
     Column(modifier) {
         Spacer(Modifier.height(16.dp))
 
@@ -303,14 +314,19 @@ private fun TradeForm(
                 ErrorText(errorFor(TradeError.AMOUNT, R.string.trade_error_amount), centered = true)
 
                 if (!state.isTransfer) {
-                    SelectedCategoryChip(state.selectedParentCategory, state.selectedCategory)
+                    SelectedCategoryChip(
+                        state.selectedParentCategory,
+                        state.selectedCategory,
+                        predicted = PredictField.CATEGORY in state.predicted,
+                        onDismiss = { viewModel.dismissPrediction(PredictField.CATEGORY) },
+                    )
                     ErrorText(errorFor(TradeError.CATEGORY, R.string.trade_error_category), centered = true)
                     Spacer(Modifier.height(8.dp))
 
                     CategoryPickerSection(
                         title = stringResource(R.string.trade_recent),
                         categories = state.picker.recent,
-                        selectedId = state.selectedCategory?.id,
+                        selectedId = pickedCategoryId,
                         onSelect = viewModel::onCategorySelected,
                         onSeeAll = onSeeAll,
                     )
@@ -318,7 +334,7 @@ private fun TradeForm(
                     CategoryPickerSection(
                         title = stringResource(R.string.trade_top_used),
                         categories = state.picker.top,
-                        selectedId = state.selectedCategory?.id,
+                        selectedId = pickedCategoryId,
                         onSelect = viewModel::onCategorySelected,
                     )
                     Spacer(Modifier.height(16.dp))
@@ -329,6 +345,8 @@ private fun TradeForm(
                     accounts = state.accounts,
                     selectedAccount = state.selectedAccount,
                     onSelect = { viewModel.onAccountSelected(it.id) },
+                    predicted = PredictField.ACCOUNT in state.predicted,
+                    onOpen = { viewModel.dismissPrediction(PredictField.ACCOUNT) },
                     // Also where any account the trade would take below 0 is named, the "To" one included.
                     error = errorFor(TradeError.ACCOUNT, R.string.trade_error_account)
                         ?: state.overdrawnBySave?.takeIf { TradeError.NEGATIVE_BALANCE in errors }
@@ -344,6 +362,8 @@ private fun TradeForm(
                         budgets = state.budgetOptions,
                         selected = state.selectedCategory,
                         onSelect = viewModel::onBudgetSelected,
+                        predicted = PredictField.CATEGORY in state.predicted,
+                        onOpen = { viewModel.dismissPrediction(PredictField.CATEGORY) },
                         isError = selfTransferBudgetError != null,
                         error = selfTransferBudgetError.takeUnless { state.showToBudget },
                     )
@@ -354,6 +374,8 @@ private fun TradeForm(
                         accounts = state.accounts,
                         selectedAccount = state.selectedToAccount,
                         onSelect = { viewModel.onToAccountSelected(it.id) },
+                        predicted = PredictField.TO_ACCOUNT in state.predicted,
+                        onOpen = { viewModel.dismissPrediction(PredictField.TO_ACCOUNT) },
                         error = errorFor(TradeError.TO_ACCOUNT, R.string.trade_error_to_account),
                     )
                     Spacer(Modifier.height(16.dp))
@@ -365,6 +387,8 @@ private fun TradeForm(
                             budgets = state.toBudgetOptions,
                             selected = state.effectiveToBudget,
                             onSelect = viewModel::onToBudgetSelected,
+                            predicted = PredictField.TO_BUDGET in state.predicted,
+                            onOpen = { viewModel.dismissPrediction(PredictField.TO_BUDGET) },
                             isError = selfTransferBudgetError != null,
                             error = selfTransferBudgetError,
                         )
@@ -383,14 +407,7 @@ private fun TradeForm(
                 )
                 Spacer(Modifier.height(16.dp))
 
-                OutlinedTextField(
-                    value = state.note,
-                    onValueChange = viewModel::onNoteChange,
-                    label = { Text(stringResource(R.string.trade_note_hint)) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                NoteField(state, viewModel)
             }
             if (state.locked) Box(Modifier.matchParentSize().pointerInput(Unit) { detectTapGestures { } })
         }
@@ -491,6 +508,7 @@ private fun BudgetExemptRow(state: TradeUiState, onChange: (Boolean) -> Unit) {
             checked = state.effectiveBudgetExempt,
             onCheckedChange = onChange,
             enabled = state.showBudgetExempt && !state.budgetExemptLocked,
+            modifier = Modifier.predictedAlpha(PredictField.EXEMPT in state.predicted),
         )
     }
     Spacer(Modifier.height(12.dp))
@@ -503,18 +521,29 @@ private fun SavingExemptRow(state: TradeUiState, onChange: (Boolean) -> Unit) {
             checked = state.effectiveSavingExempt,
             onCheckedChange = onChange,
             enabled = state.showSavingExempt && !state.savingExemptLocked,
+            modifier = Modifier.predictedAlpha(PredictField.EXEMPT in state.predicted),
         )
     }
     Spacer(Modifier.height(12.dp))
 }
 
+/** How opaque a predicted field's value is drawn. */
+private const val PREDICTED_ALPHA = 0.4f
+
+private fun Modifier.predictedAlpha(predicted: Boolean) = if (predicted) alpha(PREDICTED_ALPHA) else this
+
+/** A predicted category is drawn faded; tapping it takes the prediction away. */
 @Composable
-private fun SelectedCategoryChip(parent: CategoryEntity?, category: CategoryEntity?) {
+private fun SelectedCategoryChip(parent: CategoryEntity?, category: CategoryEntity?, predicted: Boolean, onDismiss: () -> Unit) {
     if (category == null) return
     Row(
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .let { if (predicted) it.clickable(onClick = onDismiss) else it }
+            .predictedAlpha(predicted)
+            .padding(vertical = 2.dp),
     ) {
         if (parent != null) {
             IconView(iconId = parent.iconId, size = 20.dp, color = parent.color)
@@ -607,6 +636,9 @@ private fun AccountDropdown(
     onSelect: (AccountEntity) -> Unit,
     label: String = stringResource(R.string.trade_account_label),
     error: String? = null,
+    /** [selectedAccount] is a prediction: drawn faded, and [onOpen] (the tap) takes it away. */
+    predicted: Boolean = false,
+    onOpen: () -> Unit = {},
 ) {
     var open by remember { mutableStateOf(false) }
     Column {
@@ -615,16 +647,16 @@ private fun AccountDropdown(
             modifier = Modifier
                 .fillMaxWidth()
                 .border(1.dp, fieldBorderColor(error != null), RoundedCornerShape(8.dp))
-                .clickable { open = true }
+                .clickable { onOpen(); open = true }
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box {
+            Box(Modifier.predictedAlpha(predicted)) {
                 IconView(iconId = selectedAccount?.iconId, size = 24.dp, color = selectedAccount?.color)
                 if (selectedAccount?.isExempt == true) ExceptionBadge(24.dp)
             }
             Spacer(Modifier.width(8.dp))
-            Text(selectedAccount?.name ?: "—", modifier = Modifier.weight(1f))
+            Text(selectedAccount?.name ?: "—", modifier = Modifier.weight(1f).predictedAlpha(predicted))
             Icon(painterResource(R.drawable.ph_caret_down), contentDescription = null)
         }
         ErrorText(error)
@@ -652,6 +684,9 @@ private fun BudgetDropdown(
     onSelect: (Long?) -> Unit,
     isError: Boolean = false,
     error: String? = null,
+    /** [selected] is a prediction: drawn faded, and [onOpen] (the tap) takes it away. */
+    predicted: Boolean = false,
+    onOpen: () -> Unit = {},
 ) {
     var open by remember { mutableStateOf(false) }
     val budget = budgets.find { it.categoryId == selected?.id }
@@ -661,10 +696,11 @@ private fun BudgetDropdown(
             modifier = Modifier
                 .fillMaxWidth()
                 .border(1.dp, fieldBorderColor(isError), RoundedCornerShape(8.dp))
-                .clickable { open = true }
+                .clickable { onOpen(); open = true }
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            Row(Modifier.weight(1f).predictedAlpha(predicted), verticalAlignment = Alignment.CenterVertically) {
             if (selected != null) {
                 IconView(iconId = budget?.displayIconId ?: selected.iconId, size = 24.dp, color = budget?.categoryColor ?: selected.color)
                 Spacer(Modifier.width(8.dp))
@@ -674,6 +710,7 @@ private fun BudgetDropdown(
                 color = if (selected == null) MaterialTheme.colorScheme.onSurfaceVariant else Color.Unspecified,
                 modifier = Modifier.weight(1f),
             )
+            }
             Icon(painterResource(R.drawable.ph_caret_down), contentDescription = null)
         }
         ErrorText(error)
@@ -686,6 +723,54 @@ private fun BudgetDropdown(
             onDismiss = { open = false },
         )
     }
+}
+
+/**
+ * The note. A predicted whole note shows faded in the empty field (as its label, so the two never
+ * overlap) until the field is tapped. While typing, the predicted rest of the note shows faded
+ * after the text; the check button takes it.
+ */
+@Composable
+private fun NoteField(state: TradeUiState, viewModel: TradeViewModel) {
+    val predicted = PredictField.NOTE in state.predicted
+    val ghost = MaterialTheme.colorScheme.onSurface.copy(alpha = PREDICTED_ALPHA)
+    // Still focused after a save, the field never gets a new focus event: a note predicted then goes too.
+    var focused by remember { mutableStateOf(false) }
+    LaunchedEffect(predicted, focused) { if (predicted && focused) viewModel.dismissPrediction(PredictField.NOTE) }
+    OutlinedTextField(
+        value = if (predicted) "" else state.note,
+        onValueChange = viewModel::onNoteChange,
+        label = {
+            if (predicted) Text(state.note, color = ghost, maxLines = 1) else Text(stringResource(R.string.trade_note_hint))
+        },
+        singleLine = true,
+        visualTransformation = if (state.noteSuffix.isEmpty()) VisualTransformation.None else GhostSuffix(state.noteSuffix, ghost),
+        trailingIcon = if (state.noteSuffix.isEmpty()) null else {
+            {
+                IconButton(onClick = viewModel::acceptNoteSuffix) {
+                    Icon(painterResource(R.drawable.ph_check), contentDescription = stringResource(R.string.trade_note_accept))
+                }
+            }
+        },
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+        modifier = Modifier
+            .fillMaxWidth()
+            .onFocusChanged { focused = it.isFocused },
+    )
+}
+
+/** Draws [suffix] in [color] after the text; the cursor never goes into it. */
+private data class GhostSuffix(val suffix: String, val color: Color) : VisualTransformation {
+    override fun filter(text: AnnotatedString): TransformedText = TransformedText(
+        buildAnnotatedString {
+            append(text)
+            withStyle(SpanStyle(color = color)) { append(suffix) }
+        },
+        object : OffsetMapping {
+            override fun originalToTransformed(offset: Int) = offset
+            override fun transformedToOriginal(offset: Int) = offset.coerceAtMost(text.length)
+        },
+    )
 }
 
 @Composable

@@ -9,6 +9,7 @@ import app.outgo.data.db.dao.BudgetWithProgress
 import app.outgo.data.repo.AccountRepository
 import app.outgo.data.repo.BudgetRepository
 import app.outgo.data.repo.CategoryRepository
+import app.outgo.data.repo.SettingRepository
 import app.outgo.data.repo.TradeRepository
 import app.outgo.domain.AccountType
 import app.outgo.domain.CategoryKind
@@ -21,7 +22,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 data class TradeUiState(
@@ -57,6 +58,12 @@ data class TradeUiState(
     val showErrors: Boolean = false,
     /** Counts saves tapped with [errors]; each new value shakes the save button once. */
     val invalidSaveCount: Int = 0,
+    /** Fields the user tapped or set: not predicted again until the form is fresh. */
+    val touched: Set<PredictField> = emptySet(),
+    /** Fields that hold a prediction, not the user's input: drawn faded, saved as they are. */
+    val predicted: Set<PredictField> = emptySet(),
+    /** The predicted rest of the note being typed, shown faded after it. */
+    val noteSuffix: String = "",
 ) {
     val isEditing: Boolean get() = editingTradeId != null
     val picker: CategoryPicker get() = pickers[type] ?: CategoryPicker(emptyList(), emptyList())
@@ -184,40 +191,55 @@ class TradeViewModel(
     private val accountRepository: AccountRepository,
     private val tradeRepository: TradeRepository,
     private val budgetRepository: BudgetRepository,
+    private val settingRepository: SettingRepository,
     editingTradeId: Long? = null,
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(TradeUiState(editingTradeId = editingTradeId))
+    /** The form as the user filled it; [state] is it with the predictions filled in. */
+    private var raw = TradeUiState(editingTradeId = editingTradeId)
+    private val _state = MutableStateFlow(raw)
     val state: StateFlow<TradeUiState> = _state.asStateFlow()
+
+    /** Past trades the predictions learn from, newest first, and the categories they can name. */
+    private var history: List<TradeEntity> = emptyList()
+    private var categories: Map<Long, CategoryEntity> = emptyMap()
+    private var predictEnabled = false
+    private var minConfidence = SettingRepository.DEFAULT_PREDICT_MIN_CONFIDENCE
+
+    /** Every change goes through here, so [state] follows [raw] in the same call (a text field needs that). */
+    private inline fun edit(change: (TradeUiState) -> TradeUiState) {
+        raw = change(raw)
+        _state.value = withPrediction(raw)
+    }
 
     private val _events = MutableSharedFlow<TradeEvent>(extraBufferCapacity = 1)
     val events: SharedFlow<TradeEvent> = _events
 
     init {
         viewModelScope.launch {
-            accountRepository.observeActive().collect { accounts ->
-                _state.update { s ->
-                    // While loading, the default (last used) account is still on its way: the first
-                    // account would beat it. After that, this covers an account created from none.
-                    val fallbackAccount = if (s.isLoading) null else accounts.firstOrNull { !it.isParent }?.id
-                    s.copy(accounts = accounts, selectedAccountId = s.selectedAccountId ?: fallbackAccount)
-                }
-            }
+            // A new trade starts with no account: the user picks it, or a prediction fills it.
+            accountRepository.observeActive().collect { accounts -> edit { it.copy(accounts = accounts) } }
         }
 
         viewModelScope.launch {
-            if (editingTradeId != null) {
-                loadForEdit(editingTradeId)
-            } else {
-                val defaultAccount = accountRepository.defaultAccountId()
-                _state.update { it.copy(selectedAccountId = it.selectedAccountId ?: defaultAccount) }
-            }
+            if (editingTradeId != null) loadForEdit(editingTradeId)
             loadPickers()
-            _state.update { it.copy(isLoading = false) }
+            edit { it.copy(isLoading = false) }
+            if (editingTradeId == null) {
+                loadPredictionData()
+                launch {
+                    combine(settingRepository.observePredictEnabled(), settingRepository.observePredictMinConfidence(), ::Pair)
+                        .collect { (on, min) ->
+                            predictEnabled = on
+                            minConfidence = min
+                            edit { it }
+                        }
+                }
+            }
             // Budgets only feed the transfer form's "From budget": started after the pickers, so on
             // a cold start their queries and carry walk don't compete with the first screen's data.
             budgetRepository.observeWithProgress(MonthKey.current()).collect { budgets ->
-                _state.update { it.copy(budgets = budgets.filter { b -> b.categoryId != null }) }
+                edit { it.copy(budgets = budgets.filter { b -> b.categoryId != null }) }
             }
         }
     }
@@ -227,7 +249,7 @@ class TradeViewModel(
         // An automatic transfer shows the budget it moves the unspent amount of (read-only).
         val category = (trade.categoryId ?: trade.offsetCategoryId)?.let { categoryRepository.findById(it) }
         val parent = category?.parentId?.let { categoryRepository.findById(it) }
-        _state.update {
+        edit {
             it.copy(
                 original = trade,
                 type = trade.type,
@@ -246,14 +268,85 @@ class TradeViewModel(
         }
     }
 
+    private suspend fun loadPredictionData() {
+        if (raw.isEditing) return
+        history = tradeRepository.recentForPrediction()
+        categories = categoryRepository.allActive().associateBy { it.id }
+        edit { it }
+    }
+
+    /**
+     * [s] with the predictions in the fields the user has neither filled nor touched. Only the
+     * new-trade form predicts; a prediction naming an account, category or budget no longer
+     * offered is dropped.
+     */
+    private fun withPrediction(s: TradeUiState): TradeUiState {
+        if (!predictEnabled || s.isEditing || history.isEmpty()) return s
+        val transfer = s.isTransfer
+        val exempt = if (s.type == CategoryKind.EXPENSE) s.budgetExempt else s.savingExempt
+        val known = TradeFields(
+            categoryId = s.selectedCategory?.id,
+            accountId = s.selectedAccountId,
+            toAccountId = s.selectedToAccountId.takeIf { transfer },
+            toCategoryId = s.toBudget?.id.takeIf { transfer },
+            exempt = exempt.takeIf { PredictField.EXEMPT in s.touched },
+        )
+        val p = TradePredictor.predict(history, s.type, s.amount, known, s.note, s.occurredAt, minConfidence / 100.0)
+        val f = p.fields
+        fun open(field: PredictField, current: Any?) = current == null && field !in s.touched
+        fun account(id: Long?) = id?.takeIf { s.accounts.any { a -> a.id == id && !a.isParent } }
+        fun budget(id: Long?) = id?.takeIf { s.budgets.any { b -> b.enabled && b.categoryId == id } }?.let(categories::get)
+        val category = (if (transfer) budget(f.categoryId) else f.categoryId?.let(categories::get))
+            ?.takeIf { open(PredictField.CATEGORY, s.selectedCategory) }
+        val accountId = account(f.accountId)?.takeIf { open(PredictField.ACCOUNT, s.selectedAccountId) }
+        val toAccountId = account(f.toAccountId)?.takeIf { transfer && open(PredictField.TO_ACCOUNT, s.selectedToAccountId) }
+        val toBudget = budget(f.toCategoryId)?.takeIf { transfer && open(PredictField.TO_BUDGET, s.toBudget) }
+        val predictExempt = f.exempt == true && PredictField.EXEMPT !in s.touched
+        val note = f.note?.takeIf { s.note.isEmpty() && PredictField.NOTE !in s.touched }
+        return s.copy(
+            selectedCategory = category ?: s.selectedCategory,
+            selectedParentCategory = if (category != null) category.parentId?.let(categories::get) else s.selectedParentCategory,
+            selectedAccountId = accountId ?: s.selectedAccountId,
+            selectedToAccountId = toAccountId ?: s.selectedToAccountId,
+            toBudget = toBudget ?: s.toBudget,
+            budgetExempt = s.budgetExempt || (predictExempt && s.type == CategoryKind.EXPENSE),
+            savingExempt = s.savingExempt || (predictExempt && s.type != CategoryKind.EXPENSE),
+            note = note ?: s.note,
+            predicted = buildSet {
+                if (category != null) add(PredictField.CATEGORY)
+                if (accountId != null) add(PredictField.ACCOUNT)
+                if (toAccountId != null) add(PredictField.TO_ACCOUNT)
+                if (toBudget != null) add(PredictField.TO_BUDGET)
+                if (predictExempt) add(PredictField.EXEMPT)
+                if (note != null) add(PredictField.NOTE)
+            },
+            noteSuffix = p.noteSuffix,
+        )
+    }
+
+    /** The user tapped [field]: its prediction goes, and it stays empty until they fill it. */
+    fun dismissPrediction(field: PredictField) {
+        if (field in raw.touched) return
+        edit { it.copy(touched = it.touched + field) }
+    }
+
+    /** Takes the faded rest of the note as typed. */
+    fun acceptNoteSuffix() {
+        val suffix = _state.value.noteSuffix
+        if (suffix.isNotEmpty()) onNoteChange(raw.note + suffix)
+    }
+
     private suspend fun loadPicker(type: Int) {
         val picker = categoryRepository.getPicker(type)
-        _state.update { it.copy(pickers = it.pickers + (type to picker)) }
+        edit { it.copy(pickers = it.pickers + (type to picker)) }
     }
 
     /** Re-reads the quick picks, e.g. when the tab is shown again after a category was edited. */
     fun refreshPickers() {
-        viewModelScope.launch { loadPickers() }
+        viewModelScope.launch {
+            loadPickers()
+            loadPredictionData()
+        }
     }
 
     private suspend fun loadPickers() {
@@ -262,9 +355,9 @@ class TradeViewModel(
     }
 
     fun onTypeChange(type: Int) {
-        if (type == _state.value.type) return
-        // Another type is a fresh form: its errors wait for its own save.
-        _state.update { it.copy(type = type, selectedCategory = null, selectedParentCategory = null, toBudget = null, showErrors = false) }
+        if (type == raw.type) return
+        // Another type is a fresh form: its errors wait for its own save, its fields can be predicted again.
+        edit { it.copy(type = type, selectedCategory = null, selectedParentCategory = null, toBudget = null, showErrors = false, touched = emptySet()) }
         if (type != TradeType.TRANSFER) {
             viewModelScope.launch { loadPicker(type) }
         }
@@ -272,49 +365,49 @@ class TradeViewModel(
 
     fun onAmountChange(amount: Long) {
         // 999,999,999,999 (amounts are in hundredths).
-        _state.update { it.copy(amount = amount.coerceAtMost(99_999_999_999_900L)) }
+        edit { it.copy(amount = amount.coerceAtMost(99_999_999_999_900L)) }
     }
 
     fun onCategorySelected(category: CategoryEntity) {
-        _state.update { it.copy(selectedCategory = category, selectedParentCategory = null) }
+        edit { it.copy(selectedCategory = category, selectedParentCategory = null, touched = it.touched + PredictField.CATEGORY) }
         viewModelScope.launch {
             val parent = category.parentId?.let { categoryRepository.findById(it) }
-            _state.update { it.copy(selectedParentCategory = parent) }
+            edit { it.copy(selectedParentCategory = parent) }
         }
     }
 
     /** A transfer's "From budget": the budget's category id, or null for none. */
     fun onBudgetSelected(categoryId: Long?) {
         if (categoryId == null) {
-            _state.update { it.copy(selectedCategory = null, selectedParentCategory = null) }
+            edit { it.copy(selectedCategory = null, selectedParentCategory = null, touched = it.touched + PredictField.CATEGORY) }
             return
         }
         viewModelScope.launch {
-            categoryRepository.findById(categoryId)?.let { category -> _state.update { it.copy(selectedCategory = category) } }
+            categoryRepository.findById(categoryId)?.let { category -> edit { it.copy(selectedCategory = category) } }
         }
     }
 
     /** A transfer's "To budget": the budget's category id, or null for none. */
     fun onToBudgetSelected(categoryId: Long?) {
         if (categoryId == null) {
-            _state.update { it.copy(toBudget = null) }
+            edit { it.copy(toBudget = null, touched = it.touched + PredictField.TO_BUDGET) }
             return
         }
         viewModelScope.launch {
-            categoryRepository.findById(categoryId)?.let { category -> _state.update { it.copy(toBudget = category) } }
+            categoryRepository.findById(categoryId)?.let { category -> edit { it.copy(toBudget = category) } }
         }
     }
 
     fun onAccountSelected(accountId: Long) {
-        _state.update { it.copy(selectedAccountId = accountId) }
+        edit { it.copy(selectedAccountId = accountId) }
     }
 
     fun onToAccountSelected(accountId: Long) {
-        _state.update { it.copy(selectedToAccountId = accountId) }
+        edit { it.copy(selectedToAccountId = accountId) }
     }
 
     fun onDateChange(epochMillisAtMidnight: Long) {
-        _state.update { s ->
+        edit { s ->
             val old = java.time.Instant.ofEpochMilli(s.occurredAt).atZone(java.time.ZoneId.systemDefault())
             val newDate = java.time.Instant.ofEpochMilli(epochMillisAtMidnight).atZone(java.time.ZoneId.systemDefault())
             val combined = newDate.withHour(old.hour).withMinute(old.minute).withSecond(0).withNano(0)
@@ -327,11 +420,11 @@ class TradeViewModel(
      * shown again: the tab stays composed, so the time it was first shown at goes stale.
      */
     fun refreshTime() {
-        _state.update { s -> if (s.isEditing || s.occurredAtPicked) s else s.copy(occurredAt = System.currentTimeMillis()) }
+        edit { s -> if (s.isEditing || s.occurredAtPicked) s else s.copy(occurredAt = System.currentTimeMillis()) }
     }
 
     fun onTimeChange(hour: Int, minute: Int) {
-        _state.update { s ->
+        edit { s ->
             val z = java.time.Instant.ofEpochMilli(s.occurredAt).atZone(java.time.ZoneId.systemDefault())
                 .withHour(hour).withMinute(minute).withSecond(0).withNano(0)
             s.copy(occurredAt = z.toInstant().toEpochMilli(), occurredAtPicked = true)
@@ -339,22 +432,22 @@ class TradeViewModel(
     }
 
     fun onBudgetExemptChange(on: Boolean) {
-        _state.update { it.copy(budgetExempt = on) }
+        edit { it.copy(budgetExempt = on, touched = it.touched + PredictField.EXEMPT) }
     }
 
     fun onSavingExemptChange(on: Boolean) {
-        _state.update { it.copy(savingExempt = on) }
+        edit { it.copy(savingExempt = on, touched = it.touched + PredictField.EXEMPT) }
     }
 
     fun onNoteChange(note: String) {
-        _state.update { it.copy(note = note.take(100)) }
+        edit { it.copy(note = note.take(100)) }
     }
 
     fun save() {
         val s = _state.value
         if (s.isSaving || s.locked) return
         if (!s.isValid) {
-            _state.update { it.copy(showErrors = true, invalidSaveCount = it.invalidSaveCount + 1) }
+            edit { it.copy(showErrors = true, invalidSaveCount = it.invalidSaveCount + 1) }
             return
         }
         val draft = TradeDraft(
@@ -372,7 +465,7 @@ class TradeViewModel(
             toCategoryId = s.effectiveToBudget?.id,
         )
         viewModelScope.launch {
-            _state.update { it.copy(isSaving = true) }
+            edit { it.copy(isSaving = true) }
             try {
                 if (s.isEditing) {
                     tradeRepository.update(s.editingTradeId!!, draft)
@@ -381,12 +474,13 @@ class TradeViewModel(
                     val id = tradeRepository.insert(draft)
                     lastSaved = id to s
                     resetForm()
+                    loadPredictionData()
                     _events.emit(TradeEvent.Saved(id))
                 }
             } catch (t: Throwable) {
                 _events.emit(TradeEvent.Error(t.message ?: "Error"))
             } finally {
-                _state.update { it.copy(isSaving = false) }
+                edit { it.copy(isSaving = false) }
             }
         }
     }
@@ -408,7 +502,7 @@ class TradeViewModel(
         val saved = lastSaved?.takeIf { it.first == tradeId }?.second
         lastSaved = null
         if (saved != null) {
-            _state.update {
+            edit {
                 it.copy(
                     type = saved.type,
                     amount = saved.amount,
@@ -423,6 +517,8 @@ class TradeViewModel(
                     savingExempt = saved.savingExempt,
                     toBudget = saved.toBudget,
                     showErrors = false,
+                    // What was saved, predictions included, is the user's input now.
+                    touched = saved.touched + saved.predicted,
                 )
             }
         }
@@ -430,6 +526,7 @@ class TradeViewModel(
             tradeRepository.delete(tradeId)
             // Its category's use count and last use went back with it.
             loadPickers()
+            loadPredictionData()
         }
     }
 
@@ -439,7 +536,7 @@ class TradeViewModel(
      * as the process, so a fresh start of the app begins from a blank form.
      */
     private fun resetForm() {
-        _state.update { it.copy(amount = 0, note = "", showErrors = false) }
+        edit { it.copy(amount = 0, note = "", showErrors = false, touched = it.touched - PredictField.NOTE) }
         viewModelScope.launch { loadPickers() }
     }
 }

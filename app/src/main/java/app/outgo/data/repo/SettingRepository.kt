@@ -61,6 +61,18 @@ class SettingRepository(private val context: Context, private val settingDao: Se
 
     suspend fun setHomeBalanceOrder(order: String) = settingDao.set(SettingEntity(SettingKeys.HOME_BALANCE_ORDER, order))
 
+    /** Whether the Trade screen predicts the fields not filled yet. */
+    fun observePredictEnabled(): Flow<Boolean> = settingDao.observe(SettingKeys.PREDICT_ENABLED).map { it != "0" }
+
+    suspend fun setPredictEnabled(on: Boolean) = setFlag(SettingKeys.PREDICT_ENABLED, on)
+
+    /** Lowest confidence (percent) a prediction needs to show. */
+    fun observePredictMinConfidence(): Flow<Int> =
+        settingDao.observe(SettingKeys.PREDICT_MIN_CONFIDENCE).map { it?.toIntOrNull() ?: DEFAULT_PREDICT_MIN_CONFIDENCE }
+
+    suspend fun setPredictMinConfidence(percent: Int) =
+        settingDao.set(SettingEntity(SettingKeys.PREDICT_MIN_CONFIDENCE, percent.toString()))
+
     private suspend fun setFlag(key: String, value: Boolean) {
         settingDao.set(SettingEntity(key, if (value) "1" else "0"))
     }
@@ -68,4 +80,8 @@ class SettingRepository(private val context: Context, private val settingDao: Se
     suspend fun get(key: String): String? = settingDao.get(key)
 
     suspend fun set(key: String, value: String) = settingDao.set(SettingEntity(key, value))
+
+    companion object {
+        const val DEFAULT_PREDICT_MIN_CONFIDENCE = 60
+    }
 }

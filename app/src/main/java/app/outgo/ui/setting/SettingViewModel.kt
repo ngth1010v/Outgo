@@ -29,6 +29,20 @@ class SettingViewModel(
     val numberStyle: StateFlow<NumberStyle> = settingRepository.observeNumberStyle()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Money.style)
 
+    val predictEnabled: StateFlow<Boolean> = settingRepository.observePredictEnabled()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    val predictMinConfidence: StateFlow<Int> = settingRepository.observePredictMinConfidence()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingRepository.DEFAULT_PREDICT_MIN_CONFIDENCE)
+
+    fun setPredictEnabled(on: Boolean) {
+        viewModelScope.launch { settingRepository.setPredictEnabled(on) }
+    }
+
+    fun setPredictMinConfidence(percent: Int) {
+        viewModelScope.launch { settingRepository.setPredictMinConfidence(percent) }
+    }
+
     fun setNumberStyle(style: NumberStyle) {
         viewModelScope.launch { settingRepository.setNumberStyle(style) }
     }

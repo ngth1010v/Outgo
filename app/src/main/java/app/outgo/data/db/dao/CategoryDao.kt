@@ -34,6 +34,9 @@ interface CategoryDao {
     @Query("SELECT * FROM category WHERE id = :id")
     suspend fun findById(id: Long): CategoryEntity?
 
+    @Query("SELECT * FROM category WHERE archived = 0")
+    suspend fun allActive(): List<CategoryEntity>
+
     @Query(
         """
         SELECT * FROM category

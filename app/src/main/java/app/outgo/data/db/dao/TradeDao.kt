@@ -322,4 +322,15 @@ interface TradeDao {
 
     @Query("SELECT balance FROM account WHERE id = :accountId")
     suspend fun accountBalance(accountId: Long): Long?
+
+    /** The Trade screen's predictions learn from these: the latest hand-made expenses, incomes and transfers. */
+    @Query(
+        """
+        SELECT * FROM trade
+        WHERE type IN (0, 1, 4) AND offset_month IS NULL AND pending_amount IS NULL
+        ORDER BY occurred_at DESC, id DESC
+        LIMIT :limit
+        """,
+    )
+    suspend fun recentForPrediction(limit: Int): List<TradeEntity>
 }

@@ -526,4 +526,10 @@
     <string name="analysis_info_budget_reached_about">Với mỗi ngân sách, ngày trong tháng bị vượt hạn mức, trong từng tháng của 6 tháng gần nhất.</string>
     <string name="analysis_info_budget_reached_meaning">Chấm càng về bên trái nghĩa là tiền hết càng sớm trong tháng. Tháng mới nhất là chấm lớn có viền; các tháng cũ nhạt dần. Cột TB là ngày thường bị vượt; dấu gạch nghĩa là chưa từng vượt.</string>
     <string name="analysis_info_budget_reached_how">Cuộn bên trong thẻ để xem thêm ngân sách. Tháng ngân sách tắt hoặc không bị vượt thì không có chấm.</string>
+    <string name="trade_note_accept">Dùng gợi ý</string>
+    <string name="setting_section_predict">Dự đoán</string>
+    <string name="setting_predict">Dự đoán giao dịch</string>
+    <string name="setting_predict_desc">Khi thêm giao dịch, các ô còn trống được đoán từ giao dịch cũ và hiển thị mờ. Giá trị mờ sẽ được lưu như hiển thị; chạm vào ô để xoá gợi ý.</string>
+    <string name="setting_predict_confidence">Độ tin cậy tối thiểu: %1$d%%</string>
+    <string name="setting_predict_confidence_desc">Thấp hơn: nhiều gợi ý hơn. Cao hơn: chỉ gợi ý chắc chắn.</string>
 </resources>

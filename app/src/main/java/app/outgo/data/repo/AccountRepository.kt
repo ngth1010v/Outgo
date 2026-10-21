@@ -57,11 +57,6 @@ class AccountRepository(
 
     suspend fun findById(id: Long): AccountEntity? = withContext(Dispatchers.IO) { accountDao.findById(id) }
 
-    /** Last account used in a trade, else the first active account, else null (no accounts yet). */
-    suspend fun defaultAccountId(): Long? = withContext(Dispatchers.IO) {
-        (accountDao.lastUsedAccount() ?: accountDao.firstActiveOrNull())?.id
-    }
-
     /**
      * Creates a subaccount of [parentId], or with null a parent plus its default subaccount (same
      * name, icon, color, description and type): trades only ever target a subaccount. The

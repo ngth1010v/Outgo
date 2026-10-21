@@ -18,6 +18,12 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.mutableFloatStateOf
+import kotlin.math.roundToInt
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -69,6 +75,8 @@ fun SettingScreen() {
     val locale by viewModel.locale.collectAsStateWithLifecycle()
     val currency by viewModel.currency.collectAsStateWithLifecycle()
     val numberStyle by viewModel.numberStyle.collectAsStateWithLifecycle()
+    val predictEnabled by viewModel.predictEnabled.collectAsStateWithLifecycle()
+    val predictMinConfidence by viewModel.predictMinConfidence.collectAsStateWithLifecycle()
 
     val exportSuccessTemplate = stringResource(R.string.backup_export_success)
     val exportError = stringResource(R.string.backup_export_failed)
@@ -102,7 +110,13 @@ fun SettingScreen() {
     }
 
     Scaffold(topBar = { CenterAlignedTopAppBar(title = { Text(stringResource(R.string.nav_setting)) }) }) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding).padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp),
+        ) {
             SectionLabel(stringResource(R.string.setting_section_general))
             SettingRow(
                 title = stringResource(R.string.setting_language),
@@ -119,6 +133,11 @@ fun SettingScreen() {
                 subtitle = numberStyleSample(numberStyle),
                 onClick = { showNumberStylePicker = true },
             )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+
+            SectionLabel(stringResource(R.string.setting_section_predict))
+            PredictSettings(predictEnabled, predictMinConfidence, viewModel::setPredictEnabled, viewModel::setPredictMinConfidence)
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
@@ -253,6 +272,36 @@ private fun <T> OptionSheet(
             }
         }
     }
+}
+
+/** The Trade screen's predictions: on/off, and the confidence a prediction needs to show. */
+@Composable
+private fun PredictSettings(enabled: Boolean, minConfidence: Int, onEnabledChange: (Boolean) -> Unit, onMinConfidenceChange: (Int) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onEnabledChange(!enabled) }
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(R.string.setting_predict), style = MaterialTheme.typography.bodyLarge)
+            Text(stringResource(R.string.setting_predict_desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = enabled, onCheckedChange = onEnabledChange)
+    }
+    if (!enabled) return
+    // Follows the finger; stored once let go.
+    var value by remember(minConfidence) { mutableFloatStateOf(minConfidence.toFloat()) }
+    Text(stringResource(R.string.setting_predict_confidence, value.roundToInt()), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 10.dp))
+    Text(stringResource(R.string.setting_predict_confidence_desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Slider(
+        value = value,
+        onValueChange = { value = it },
+        onValueChangeFinished = { onMinConfidenceChange(value.roundToInt()) },
+        valueRange = 10f..100f,
+        steps = 17,
+    )
 }
 
 @Composable

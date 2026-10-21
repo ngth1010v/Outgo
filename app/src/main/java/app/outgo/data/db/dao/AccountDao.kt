@@ -112,20 +112,6 @@ interface AccountDao {
     @Query("SELECT COUNT(*) FROM trade WHERE account_id = :accountId")
     suspend fun countTrades(accountId: Long): Int
 
-    @Query("SELECT * FROM account WHERE archived = 0 AND parent_id IS NOT NULL ORDER BY sort_order, id LIMIT 1")
-    suspend fun firstActiveOrNull(): AccountEntity?
-
-    @Query(
-        """
-        SELECT a.* FROM account a
-        JOIN trade t ON t.account_id = a.id
-        WHERE a.archived = 0
-        ORDER BY t.occurred_at DESC, t.id DESC
-        LIMIT 1
-        """,
-    )
-    suspend fun lastUsedAccount(): AccountEntity?
-
     @Query("SELECT COALESCE(MAX(sort_order), -1) FROM account WHERE parent_id IS :parentId")
     suspend fun maxSortOrder(parentId: Long?): Int
 

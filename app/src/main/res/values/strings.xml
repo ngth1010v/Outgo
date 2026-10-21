@@ -540,4 +540,10 @@
     <string name="analysis_info_budget_reached_about">For each budget, the day of the month it went over its limit, in each of the last 6 months.</string>
     <string name="analysis_info_budget_reached_meaning">Dots far to the left mean the money runs out early in the month. The newest month is the large, ringed dot; older months are paler. Avg is the usual day; a dash means it never went over.</string>
     <string name="analysis_info_budget_reached_how">Scroll inside the card for more budgets. A month the budget was off or stayed under its limit has no dot.</string>
+    <string name="trade_note_accept">Use suggestion</string>
+    <string name="setting_section_predict">Prediction</string>
+    <string name="setting_predict">Predict trade</string>
+    <string name="setting_predict_desc">When adding a trade, empty fields are guessed from past trades and shown faded. They are saved as shown; tap a field to clear its guess.</string>
+    <string name="setting_predict_confidence">Minimum confidence: %1$d%%</string>
+    <string name="setting_predict_confidence_desc">Lower shows more guesses, higher shows only sure ones.</string>
 </resources>

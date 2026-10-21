@@ -20,6 +20,8 @@ class CategoryRepository(
 
     suspend fun findById(id: Long): CategoryEntity? = withContext(Dispatchers.IO) { categoryDao.findById(id) }
 
+    suspend fun allActive(): List<CategoryEntity> = withContext(Dispatchers.IO) { categoryDao.allActive() }
+
     /**
      * Builds the Trade screen's two quick-pick rows: up to 5 recently used and
      * up to 5 most used child categories, each ranked independently (a category

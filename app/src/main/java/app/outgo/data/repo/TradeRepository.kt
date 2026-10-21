@@ -194,6 +194,9 @@ class TradeRepository(private val tradeDao: TradeDao) {
 
     suspend fun findById(id: Long): TradeEntity? = withContext(Dispatchers.IO) { tradeDao.findById(id) }
 
+    suspend fun recentForPrediction(limit: Int = 1000): List<TradeEntity> =
+        withContext(Dispatchers.IO) { tradeDao.recentForPrediction(limit) }
+
     suspend fun firstPage(type: Int, limit: Int = 50): List<TradeEntity> =
         withContext(Dispatchers.IO) { tradeDao.firstPage(type, limit) }
 

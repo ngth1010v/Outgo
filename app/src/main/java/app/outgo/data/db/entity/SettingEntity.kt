@@ -62,4 +62,10 @@ object SettingKeys {
      * missing ones appended, so a renamed or added balance never breaks an older value.
      */
     const val HOME_BALANCE_ORDER = "home_balance_order"
+
+    /** "0" while the Trade screen's predictions are off. Absent row means on. */
+    const val PREDICT_ENABLED = "predict_enabled"
+
+    /** Lowest confidence, in percent, a Trade screen prediction needs to show. Absent row means 60. */
+    const val PREDICT_MIN_CONFIDENCE = "predict_min_confidence"
 }
