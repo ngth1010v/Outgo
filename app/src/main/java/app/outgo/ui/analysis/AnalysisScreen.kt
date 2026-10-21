@@ -2,7 +2,9 @@ package app.outgo.ui.analysis
 
 import androidx.compose.foundation.background
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ButtonDefaults
@@ -404,7 +406,7 @@ private fun ChartList(
                         // Fixed per chart and chip, never per data: every page lays out alike.
                         .height(chartHeight(card.type)),
                 ) {
-                    CompositionLocalProvider(LocalSectionAction provides action) { chart(card) }
+                    CompositionLocalProvider(LocalSectionAction provides action, LocalSectionInfo provides card.type) { chart(card) }
                 }
             }
             item(key = "add", contentType = "add") {
@@ -501,6 +503,10 @@ private fun DeleteZone(isNear: () -> Boolean, isActive: () -> Boolean, modifier:
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddChartSheet(slot: LayoutSlot, onSelect: (ChartType) -> Unit, onDismiss: () -> Unit) {
+    // The chart whose description a long press opened.
+    var info by remember { mutableStateOf<ChartType?>(null) }
+    val onInfo: (ChartType) -> Unit = { info = it }
+    info?.let { ChartInfoDialog(it, chartName(it)) { info = null } }
     ModalBottomSheet(onDismissRequest = onDismiss) {
         LazyColumn(
             modifier = Modifier.padding(horizontal = 16.dp),
@@ -508,13 +514,20 @@ private fun AddChartSheet(slot: LayoutSlot, onSelect: (ChartType) -> Unit, onDis
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             item(key = "title") {
-                Text(stringResource(R.string.analysis_add_chart), style = MaterialTheme.typography.titleMedium)
+                Column {
+                    Text(stringResource(R.string.analysis_add_chart), style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        stringResource(R.string.analysis_add_chart_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             items(slot.groups, key = { it.title }) { group ->
                 Column {
                     Text(stringResource(group.title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium)
                     Spacer(Modifier.height(8.dp))
-                    ChartCells(group.charts, short = false, onSelect)
+                    ChartCells(group.charts, short = false, onSelect, onInfo)
                     group.sub.forEach { sub ->
                         Text(
                             stringResource(sub.title),
@@ -522,7 +535,7 @@ private fun AddChartSheet(slot: LayoutSlot, onSelect: (ChartType) -> Unit, onDis
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 4.dp),
                         )
-                        ChartCells(sub.charts, short = true, onSelect)
+                        ChartCells(sub.charts, short = true, onSelect, onInfo)
                     }
                 }
             }
@@ -531,20 +544,32 @@ private fun AddChartSheet(slot: LayoutSlot, onSelect: (ChartType) -> Unit, onDis
 }
 
 @Composable
-private fun ChartCells(charts: List<ChartType>, short: Boolean, onSelect: (ChartType) -> Unit) {
+private fun ChartCells(charts: List<ChartType>, short: Boolean, onSelect: (ChartType) -> Unit, onInfo: (ChartType) -> Unit) {
     charts.chunked(6).forEach { row ->
         Row(modifier = Modifier.fillMaxWidth()) {
-            row.forEach { type -> ChartCell(type, short, { onSelect(type) }, Modifier.weight(1f)) }
+            row.forEach { type -> ChartCell(type, short, { onSelect(type) }, { onInfo(type) }, Modifier.weight(1f)) }
             repeat(6 - row.size) { Spacer(Modifier.weight(1f)) }
         }
     }
 }
 
 @Composable
-private fun ChartCell(type: ChartType, short: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+@OptIn(ExperimentalFoundationApi::class)
+private fun ChartCell(type: ChartType, short: Boolean, onClick: () -> Unit, onLongClick: () -> Unit, modifier: Modifier = Modifier) {
+    val haptic = LocalHapticFeedback.current
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier.clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick).padding(vertical = 8.dp, horizontal = 2.dp),
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .combinedClickable(
+                onClick = onClick,
+                onLongClickLabel = stringResource(R.string.analysis_info_open, chartName(type)),
+                onLongClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onLongClick()
+                },
+            )
+            .padding(vertical = 8.dp, horizontal = 2.dp),
     ) {
         Box(
             modifier = Modifier.size(40.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape),

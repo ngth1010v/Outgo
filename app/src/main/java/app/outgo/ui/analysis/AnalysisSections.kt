@@ -135,11 +135,30 @@ internal fun deltaColor(delta: Long, kind: Int = CategoryKind.EXPENSE): Color {
  */
 val LocalSectionAction = compositionLocalOf<(@Composable () -> Unit)?> { null }
 
+/** The chart a section belongs to: its title row starts with an (i) opening [ChartInfoDialog]. */
+val LocalSectionInfo = compositionLocalOf<ChartType?> { null }
+
 @Composable
 fun Section(title: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     val action = LocalSectionAction.current
+    val info = LocalSectionInfo.current
+    var showInfo by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(SectionGap)) {
         Row(modifier = Modifier.fillMaxWidth().height(SectionTitleHeight), verticalAlignment = Alignment.CenterVertically) {
+            if (info != null) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.size(SectionTitleHeight).clip(androidx.compose.foundation.shape.CircleShape).clickable { showInfo = true },
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ph_info),
+                        contentDescription = stringResource(R.string.analysis_info_open, title),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+                Spacer(Modifier.width(2.dp))
+            }
             Text(
                 title,
                 style = MaterialTheme.typography.titleSmall,
@@ -152,6 +171,7 @@ fun Section(title: String, modifier: Modifier = Modifier, content: @Composable (
         }
         content()
     }
+    if (showInfo && info != null) ChartInfoDialog(info, title) { showInfo = false }
 }
 
 /** Fits a chip, so a card with one is as tall as a card without. */
