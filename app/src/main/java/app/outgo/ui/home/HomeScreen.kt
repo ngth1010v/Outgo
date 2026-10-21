@@ -415,7 +415,18 @@ private fun BudgetRow(budget: BudgetWithProgress, modifier: Modifier = Modifier)
 private fun MonthAmountBlock(current: Long, previous: Long, greenWhenLower: Boolean) {
     // Negative gap pulls the ratio up against the amount, same trick as BalanceBlock.
     Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy((-4).dp)) {
-        Text(Money.format(current), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
+        // A budget's amount is money spent ("-", red), a savings account's is money saved ("+", green).
+        val signed = if (greenWhenLower) -current else current
+        Text(
+            Money.formatSigned(signed),
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.bodyLarge,
+            color = when {
+                signed > 0L -> IncomeGreen
+                signed < 0L -> ExpenseRed
+                else -> MaterialTheme.colorScheme.onSurface
+            },
+        )
         // No previous month to divide by: any amount at all counts as a full 100% swing.
         val percent = when {
             previous != 0L -> Math.round((current - previous) * 100.0 / previous)

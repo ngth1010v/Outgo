@@ -167,8 +167,8 @@ internal fun HistoryItem(
             TradeRow(
             trade = item.trade,
             category = category,
-            // "parent/sub", or just the name of a parent-level one.
-            fromPath = fromAccount?.let { a -> listOfNotNull(accountsById[a.parentId]?.name, a.name).joinToString("/") }.orEmpty(),
+            // Just the account's own name, a subaccount without its parent.
+            fromPath = fromAccount?.name.orEmpty(),
             budgetPath = category?.let { c -> listOfNotNull(categoriesById[c.parentId]?.name, c.name).joinToString("/") },
             toBudget = toBudget,
             toBudgetPath = toBudget?.let { c -> listOfNotNull(categoriesById[c.parentId]?.name, c.name).joinToString("/") },
