@@ -253,7 +253,8 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit, visible: Boolean = t
     if (showDeleteConfirm) {
         ConfirmDialog(
             title = stringResource(R.string.history_delete_confirm_title),
-            message = "",
+            // Allowed, but said first: deleting (an income, say) takes this account below 0.
+            message = state.overdrawnByDelete?.let { stringResource(R.string.trade_delete_negative_warning, it.name) }.orEmpty(),
             onConfirm = {
                 showDeleteConfirm = false
                 viewModel.deleteEditingTrade()
@@ -328,7 +329,10 @@ private fun TradeForm(
                     accounts = state.accounts,
                     selectedAccount = state.selectedAccount,
                     onSelect = { viewModel.onAccountSelected(it.id) },
-                    error = errorFor(TradeError.ACCOUNT, R.string.trade_error_account),
+                    // Also where any account the trade would take below 0 is named, the "To" one included.
+                    error = errorFor(TradeError.ACCOUNT, R.string.trade_error_account)
+                        ?: state.overdrawnBySave?.takeIf { TradeError.NEGATIVE_BALANCE in errors }
+                            ?.let { stringResource(R.string.trade_error_negative_balance, it.name) },
                 )
                 Spacer(Modifier.height(16.dp))
 

@@ -6,6 +6,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -200,9 +201,12 @@ fun <T> TreeList(
     // The gap above each row is part of the row (no spacedBy), so a folding panel takes its gaps along.
     // While one folds, the rows below follow its edge frame by frame instead of sliding after it.
     val slide = folding.isEmpty()
+    // Margins as content padding, not a padding modifier: a row's warning badge hangs past its
+    // top-left corner and would be clipped at the list's edge.
     LazyColumn(
         state = listState,
-        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        modifier = modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(start = 16.dp, top = 6.dp, end = 16.dp),
     ) {
         itemsIndexed(entries, key = { _, it -> it.key }, contentType = { _, it -> it::class }) { index, entry ->
             val gap = Modifier.padding(top = if (index == 0) 0.dp else 8.dp)

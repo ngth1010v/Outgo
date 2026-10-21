@@ -14,6 +14,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
+import app.outgo.ui.LocalAppContainer
+import kotlinx.coroutines.flow.map
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -89,7 +92,20 @@ fun OutgoRoot(openSetting: Boolean = false) {
         }
     }
 
-    Scaffold(bottomBar = { OutgoBottomBar(selectedRoute = if (onTabs) tab else null, onSelect = ::selectTab) }) { padding ->
+    val accounts = LocalAppContainer.current.accountRepository
+    // A negative subaccount marks the Accounts tab.
+    val negativeBalance by remember { accounts.observeActive().map { all -> all.any { !it.isParent && it.balance < 0 } } }
+        .collectAsState(initial = false)
+
+    Scaffold(
+        bottomBar = {
+            OutgoBottomBar(
+                selectedRoute = if (onTabs) tab else null,
+                onSelect = ::selectTab,
+                warnedRoutes = if (negativeBalance) setOf(Routes.BALANCE) else emptySet(),
+            )
+        },
+    ) { padding ->
         Box(Modifier.padding(padding).consumeWindowInsets(padding)) {
             composedTabs.forEach { route ->
                 key(route) {

@@ -74,6 +74,8 @@ import app.outgo.ui.component.IconView
 import app.outgo.ui.component.MonthPicker
 import app.outgo.ui.component.SwitchField
 import app.outgo.ui.component.TreeList
+import app.outgo.ui.component.WarningBadge
+import app.outgo.ui.theme.WarningContainer
 import app.outgo.ui.component.savingsProgressColor
 import app.outgo.ui.component.savingsProgressText
 import app.outgo.util.Money
@@ -89,6 +91,10 @@ fun BalanceScreen(onOpenEditor: (id: Long?, parentId: Long?) -> Unit) {
     val parents = remember(accounts) { accounts.filter { it.account.isParent } }
     val childrenByParent = remember(accounts) { accounts.filter { !it.account.isParent }.groupBy { it.account.parentId!! } }
     val privacy = remember(accounts) { resolvePrivacy(accounts.map { it.account }) }
+    // Negative subaccounts and their parents: each row gets the warning.
+    val warned = remember(accounts) {
+        accounts.map { it.account }.filter { !it.isParent && it.balance < 0 }.flatMap { listOf(it.id, it.parentId!!) }.toSet()
+    }
     var expanded by remember { mutableStateOf(setOf<Long>()) }
     val listState = rememberLazyListState()
     // A drop waiting for the convert dialog, with the normal subaccounts it would make savings.
@@ -115,7 +121,7 @@ fun BalanceScreen(onOpenEditor: (id: Long?, parentId: Long?) -> Unit) {
             onAddParent = { onOpenEditor(null, null) },
             onReorder = ::onReorder,
             row = { row, onClick, modifier, trailing ->
-                AccountRow(row, privacy[row.account.id] ?: AccountPrivacy(), onClick, modifier, trailing)
+                AccountRow(row, privacy[row.account.id] ?: AccountPrivacy(), row.account.id in warned, onClick, modifier, trailing)
             },
             modifier = Modifier.fillMaxSize().padding(padding),
         ) }
@@ -138,14 +144,21 @@ fun BalanceScreen(onOpenEditor: (id: Long?, parentId: Long?) -> Unit) {
 }
 
 @Composable
-private fun AccountRow(row: AccountWithProgress, privacy: AccountPrivacy, onClick: () -> Unit, modifier: Modifier, trailing: (@Composable () -> Unit)?) {
+private fun AccountRow(
+    row: AccountWithProgress,
+    privacy: AccountPrivacy,
+    warn: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier,
+    trailing: (@Composable () -> Unit)?,
+) = Box(modifier) {
     val trades = LocalAppContainer.current.tradeRepository
     val account = row.account
     val target = row.monthlyTarget?.takeUnless { privacy.progressHidden(row.monthlyIncome, it) }
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+            .background(if (warn) WarningContainer else MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         Row(
@@ -194,6 +207,7 @@ private fun AccountRow(row: AccountWithProgress, privacy: AccountPrivacy, onClic
             )
         }
     }
+    if (warn) WarningBadge(stringResource(R.string.balance_negative_warning))
 }
 
 /**

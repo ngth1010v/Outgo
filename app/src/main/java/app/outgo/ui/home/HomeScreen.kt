@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
@@ -61,6 +62,8 @@ import app.outgo.data.db.dao.AccountWithProgress
 import app.outgo.data.db.dao.BudgetWithProgress
 import app.outgo.ui.LocalAppContainer
 import app.outgo.ui.component.BudgetProgressBlock
+import app.outgo.ui.component.WarningBadge
+import app.outgo.ui.theme.WarningContainer
 import app.outgo.ui.component.IconView
 import app.outgo.ui.component.budgetRemainingColor
 import app.outgo.ui.component.budgetRemainingText
@@ -110,8 +113,9 @@ fun HomeScreen() {
         Box(Modifier.fillMaxSize().padding(padding)) {
             LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(top = LIST_TOP_PADDING, bottom = 16.dp),
+                modifier = Modifier.fillMaxSize(),
+                // Side margins as content padding: an overspent budget's badge hangs past its card's corner.
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, top = LIST_TOP_PADDING, end = 16.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(LIST_SPACING),
             ) {
                 items(balanceOrder, key = { it }) { balance ->
@@ -145,7 +149,13 @@ fun HomeScreen() {
                         } else {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 state.budgets.forEach { budget ->
-                                    Card { BudgetRow(budget, modifier = Modifier.padding(12.dp)) }
+                                    val over = budget.spent > budget.effectiveLimit
+                                    Box {
+                                        Card(colors = if (over) CardDefaults.cardColors(containerColor = WarningContainer) else CardDefaults.cardColors()) {
+                                            BudgetRow(budget, modifier = Modifier.padding(12.dp))
+                                        }
+                                        if (over) WarningBadge(stringResource(R.string.category_over_budget_warning))
+                                    }
                                 }
                             }
                         }

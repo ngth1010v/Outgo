@@ -28,3 +28,10 @@ val WarningDarkYellow = Color(0xFFC49000)
 /** Unfinished budget-offset transfers: a pale yellow badge with dark amber content. */
 val PendingContainer = Color(0xFFFFF3C4)
 val OnPendingContainer = Color(0xFF7A5800)
+/**
+ * Behind a row with a warning (a negative balance, an overspent budget): the normal row color
+ * tinted slightly toward amber, so it reads as the same kind of row.
+ */
+val WarningContainer: Color
+    @androidx.compose.runtime.Composable
+    get() = androidx.compose.ui.graphics.lerp(androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant, Color(0xFFFFD54F), 0.3f)

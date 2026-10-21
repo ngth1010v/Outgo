@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -28,6 +29,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.outgo.R
+import app.outgo.ui.theme.WarningDarkYellow
 
 internal data class BottomItem(
     val route: String,
@@ -47,7 +49,7 @@ internal val bottomItems = listOf(
 )
 
 @Composable
-fun OutgoBottomBar(selectedRoute: String?, onSelect: (String) -> Unit) {
+fun OutgoBottomBar(selectedRoute: String?, onSelect: (String) -> Unit, warnedRoutes: Set<String> = emptySet()) {
     // Own items, not NavigationBarItem: its 64x32dp indicator can't be resized.
     Surface(color = NavigationBarDefaults.containerColor, tonalElevation = NavigationBarDefaults.Elevation) {
         Row(
@@ -88,6 +90,16 @@ fun OutgoBottomBar(selectedRoute: String?, onSelect: (String) -> Unit) {
                             },
                             modifier = Modifier.size(20.dp),
                         )
+                        if (item.route in warnedRoutes) {
+                            Icon(
+                                painter = painterResource(R.drawable.ph_warning),
+                                contentDescription = stringResource(R.string.balance_negative_warning),
+                                tint = WarningDarkYellow,
+                                // On the 20dp icon's bottom-right corner.
+                                modifier = Modifier.offset(x = 9.dp, y = 7.dp).size(12.dp)
+                                    .background(MaterialTheme.colorScheme.surface, CircleShape).padding(1.dp),
+                            )
+                        }
                     }
                 }
             }

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.outgo.data.db.entity.AccountEntity
 import app.outgo.data.db.entity.CategoryEntity
+import app.outgo.data.db.entity.TradeEntity
 import app.outgo.data.db.dao.BudgetWithProgress
 import app.outgo.data.repo.AccountRepository
 import app.outgo.data.repo.BudgetRepository
@@ -43,6 +44,8 @@ data class TradeUiState(
     val isLoading: Boolean = true,
     val isSaving: Boolean = false,
     val editingTradeId: Long? = null,
+    /** The edited trade as loaded: its balance moves are undone by the save, see [overdrawnBySave]. */
+    val original: TradeEntity? = null,
     /** The edited trade is an automatic budget-offset transfer: it follows its budget, so it is read-only. */
     val locked: Boolean = false,
     /** As picked; saved only while its chip shows, see [showBudgetExempt] / [showSavingExempt]. */
@@ -67,7 +70,31 @@ data class TradeUiState(
             if (isTransfer && selectedToAccountId == null) add(TradeError.TO_ACCOUNT)
             // Into the same account it only moves budget, so it needs a "From" or "To" budget.
             if (isSelfTransfer && selectedCategory == null && effectiveToBudget == null) add(TradeError.SELF_TRANSFER_BUDGET)
+            if (overdrawnBySave != null) add(TradeError.NEGATIVE_BALANCE)
         }
+
+    private val originalMoves: Map<Long, Long>
+        get() = original?.let { balanceMoves(it.type, it.amount, it.accountId, it.toAccountId) }.orEmpty()
+
+    /** The account saving would take below 0 (in place of the edited trade, when editing); null when none. */
+    val overdrawnBySave: AccountEntity?
+        get() {
+            val from = selectedAccountId ?: return null
+            if (amount <= 0) return null
+            val moves = balanceMoves(type, amount, from, selectedToAccountId.takeIf { isTransfer })
+            return overdrawn((moves.keys + originalMoves.keys).associateWith { (moves[it] ?: 0L) - (originalMoves[it] ?: 0L) })
+        }
+
+    /** The account deleting the edited trade takes below 0 (deleting an income, say); null when none. */
+    val overdrawnByDelete: AccountEntity? get() = overdrawn(originalMoves.mapValues { -it.value })
+
+    /**
+     * The first account [change] (balance change by account id) takes below 0. One already below 0
+     * may still gain: only a loss counts.
+     */
+    private fun overdrawn(change: Map<Long, Long>): AccountEntity? = change.entries.firstNotNullOfOrNull { (id, delta) ->
+        accounts.find { it.id == id }?.takeIf { delta < 0 && it.balance + delta < 0 }
+    }
     val isValid: Boolean get() = errors.isEmpty()
 
     /** [errors] as the form marks them: none until a save was tapped with some. */
@@ -137,7 +164,13 @@ data class TradeUiState(
 }
 
 /** A reason the trade can't be saved, marked on its field. */
-enum class TradeError { AMOUNT, CATEGORY, ACCOUNT, TO_ACCOUNT, SELF_TRANSFER_BUDGET }
+enum class TradeError { AMOUNT, CATEGORY, ACCOUNT, TO_ACCOUNT, SELF_TRANSFER_BUDGET, NEGATIVE_BALANCE }
+
+/** What a trade does to account balances, by account id: as the trade triggers apply it (see OutgoDatabase). */
+internal fun balanceMoves(type: Int, amount: Long, accountId: Long, toAccountId: Long?): Map<Long, Long> = buildMap {
+    put(accountId, if (TradeType.isCredit(type)) amount else -amount)
+    if (type == TradeType.TRANSFER && toAccountId != null) put(toAccountId, (get(toAccountId) ?: 0L) + amount)
+}
 
 sealed interface TradeEvent {
     data class Saved(val tradeId: Long) : TradeEvent
@@ -196,6 +229,7 @@ class TradeViewModel(
         val parent = category?.parentId?.let { categoryRepository.findById(it) }
         _state.update {
             it.copy(
+                original = trade,
                 type = trade.type,
                 amount = trade.amount,
                 selectedCategory = category,

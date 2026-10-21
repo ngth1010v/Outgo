@@ -93,6 +93,8 @@ import app.outgo.ui.component.IconView
 import app.outgo.ui.component.MonthPicker
 import app.outgo.ui.component.SwitchField
 import app.outgo.ui.component.TreeList
+import app.outgo.ui.component.WarningBadge
+import app.outgo.ui.theme.WarningContainer
 import app.outgo.ui.component.budgetRemainingColor
 import app.outgo.ui.component.budgetRemainingText
 import app.outgo.ui.component.rememberSwipeLevel
@@ -235,11 +237,13 @@ private fun CategoryRow(
     onRowClick: () -> Unit,
     modifier: Modifier = Modifier,
     trailing: (@Composable () -> Unit)? = null,
-) {
+) = Box(modifier) {
+    // Its own budget only: an overspent subcategory doesn't mark its parent.
+    val over = budget != null && budget.spent > budget.effectiveLimit
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+            .background(if (over) WarningContainer else MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         Row(
@@ -283,6 +287,7 @@ private fun CategoryRow(
             )
         }
     }
+    if (over) WarningBadge(stringResource(R.string.category_over_budget_warning))
 }
 
 @Composable
