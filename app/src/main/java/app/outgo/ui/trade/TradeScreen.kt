@@ -304,7 +304,9 @@ private fun TradeForm(
         Box {
             Column {
                 AmountField(
-                    amount = state.amount,
+                    // A predicted amount shows faded where the "0" goes; typing replaces it.
+                    amount = if (PredictField.AMOUNT in state.predicted) 0 else state.amount,
+                    predicted = if (PredictField.AMOUNT in state.predicted) state.amount else 0,
                     onAmountChange = viewModel::onAmountChange,
                     isIncome = state.type == CategoryKind.INCOME,
                     isTransfer = state.isTransfer,

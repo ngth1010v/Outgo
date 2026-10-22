@@ -24,8 +24,23 @@ class TradePredictorTest {
     private val rent = List(3) { trade(category = 2, account = 20, amount = 500_000, note = "Rent") }
 
     @Test
-    fun nothingTyped_predictsNothing() {
-        assertEquals(TradePrediction(), predict(coffee + rent))
+    fun nothingTyped_predictsFromTheHour() {
+        val evening = List(3) { trade(category = 2, account = 20, amount = 500_000, note = "Rent", at = monday8 + 12 * hour) }
+        val p = predict(coffee + evening)
+        assertEquals(1L, p.fields.categoryId)
+        assertEquals(3_000L, p.fields.amount)
+    }
+
+    @Test
+    fun typedNotePredictsTheAmount() {
+        val p = predict(coffee + rent, note = "Rent")
+        assertEquals(500_000L, p.fields.amount)
+        assertEquals(2L, p.fields.categoryId)
+    }
+
+    @Test
+    fun typedAmountIsNotPredicted() {
+        assertNull(predict(coffee, amount = 4_000).fields.amount)
     }
 
     @Test
@@ -49,6 +64,39 @@ class TradePredictorTest {
         assertEquals("ffee", p.noteSuffix)
         assertNull(p.fields.note)
         assertEquals(1L, p.fields.categoryId)
+    }
+
+    private val metro = List(5) { trade(category = 3, account = 10, amount = 7_000, note = "An phú - DHQG") }
+
+    @Test
+    fun knownNoteComesBackWhole() {
+        val p = predict(metro + coffee, note = "an ph")
+        assertEquals("ú - DHQG", p.noteSuffix)
+        assertEquals("an phú - DHQG", p.noteAccepted)
+        assertEquals(3L, p.fields.categoryId)
+    }
+
+    @Test
+    fun newMixOfKnownSegmentsStopsWhereNotesEnd() {
+        val p = predict(metro + coffee, note = "Tân cảng - An")
+        assertEquals(" phú", p.noteSuffix)
+        assertEquals("Tân cảng - An phú", p.noteAccepted)
+        assertEquals(3L, p.fields.categoryId)
+    }
+
+    @Test
+    fun matchIgnoresDiacriticsAndCase() {
+        val p = predict(metro, note = "tan cang - an")
+        assertEquals(" phú", p.noteSuffix)
+        // The half-typed word takes its history spelling.
+        assertEquals("tan cang - An phú", p.noteAccepted)
+        assertEquals("phú", predict(metro, note = "Tân cảng - an ph").noteAccepted.takeLast(3))
+    }
+
+    @Test
+    fun splitNextWordStopsTheCompletion() {
+        val grab = List(4) { trade(4, 10, 50_000, "Grab nhà") } + List(4) { trade(4, 10, 50_000, "Grab công ty") }
+        assertEquals("ab", predict(grab, note = "Gr").noteSuffix)
     }
 
     @Test

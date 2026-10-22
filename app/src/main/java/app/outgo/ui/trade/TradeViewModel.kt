@@ -64,6 +64,8 @@ data class TradeUiState(
     val predicted: Set<PredictField> = emptySet(),
     /** The predicted rest of the note being typed, shown faded after it. */
     val noteSuffix: String = "",
+    /** The whole note once [noteSuffix] is taken. */
+    val noteAccepted: String = "",
 ) {
     val isEditing: Boolean get() = editingTradeId != null
     val picker: CategoryPicker get() = pickers[type] ?: CategoryPicker(emptyList(), emptyList())
@@ -303,7 +305,9 @@ class TradeViewModel(
         val toBudget = budget(f.toCategoryId)?.takeIf { transfer && open(PredictField.TO_BUDGET, s.toBudget) }
         val predictExempt = f.exempt == true && PredictField.EXEMPT !in s.touched
         val note = f.note?.takeIf { s.note.isEmpty() && PredictField.NOTE !in s.touched }
+        val amount = f.amount?.takeIf { s.amount <= 0 }
         return s.copy(
+            amount = amount ?: s.amount,
             selectedCategory = category ?: s.selectedCategory,
             selectedParentCategory = if (category != null) category.parentId?.let(categories::get) else s.selectedParentCategory,
             selectedAccountId = accountId ?: s.selectedAccountId,
@@ -313,6 +317,7 @@ class TradeViewModel(
             savingExempt = s.savingExempt || (predictExempt && s.type != CategoryKind.EXPENSE),
             note = note ?: s.note,
             predicted = buildSet {
+                if (amount != null) add(PredictField.AMOUNT)
                 if (category != null) add(PredictField.CATEGORY)
                 if (accountId != null) add(PredictField.ACCOUNT)
                 if (toAccountId != null) add(PredictField.TO_ACCOUNT)
@@ -321,6 +326,7 @@ class TradeViewModel(
                 if (note != null) add(PredictField.NOTE)
             },
             noteSuffix = p.noteSuffix,
+            noteAccepted = p.noteAccepted,
         )
     }
 
@@ -332,8 +338,8 @@ class TradeViewModel(
 
     /** Takes the faded rest of the note as typed. */
     fun acceptNoteSuffix() {
-        val suffix = _state.value.noteSuffix
-        if (suffix.isNotEmpty()) onNoteChange(raw.note + suffix)
+        val s = _state.value
+        if (s.noteSuffix.isNotEmpty()) onNoteChange(s.noteAccepted)
     }
 
     private suspend fun loadPicker(type: Int) {

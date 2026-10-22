@@ -52,6 +52,8 @@ fun AmountField(
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester = remember { FocusRequester() },
     isTransfer: Boolean = false,
+    /** Shown faded in place of the "0" while [amount] is 0; 0 for none. */
+    predicted: Long = 0,
 ) {
     val color = if (isTransfer) TransferBlue else if (isIncome) IncomeGreen else ExpenseRed
     // As typed, so "4." keeps its separator while the decimals are on their way. It follows an
@@ -78,7 +80,7 @@ fun AmountField(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box {
-                if (text.isEmpty()) Text("0", style = style.copy(color = placeholderColor))
+                if (text.isEmpty()) Text(if (predicted > 0) Money.inputText(predicted) else "0", style = style.copy(color = placeholderColor))
                 BasicTextField(
                     value = TextFieldValue(text = text, selection = TextRange(text.length)),
                     onValueChange = {
