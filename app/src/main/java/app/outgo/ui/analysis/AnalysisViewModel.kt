@@ -74,6 +74,8 @@ data class AnalysisUiState(
     val monthBudgetInsights: Map<Int, Stage<BudgetsInsightUi>> = emptyMap(),
     /** id -> (name, iconId, color) of every account, archived ones too, for the transfer flow chart. */
     val accountNames: Map<Long, Triple<String, Long?, Int>> = emptyMap(),
+    /** Each year page's summary, Accounts and Categories data, by year. Its insights sit in the month maps above, keyed `yyyy00`. */
+    val years: Map<Int, Stage<YearUi>> = emptyMap(),
 )
 
 class AnalysisViewModel(
@@ -104,6 +106,8 @@ class AnalysisViewModel(
     private val tradeJobs = HashMap<Int, Job>()
     private val insightCaches = InsightGroup.entries.associateWith { lru<Stage<*>>() }
     private val insightJobs = HashMap<Pair<InsightGroup, Int>, Job>()
+    private val yearCache = lru<Stage<YearUi>>()
+    private val yearJobs = HashMap<Int, Job>()
 
     /** Pages whose charts have already played their intro animation. */
     private val animated = HashSet<AnalysisPage>()
@@ -179,6 +183,7 @@ class AnalysisViewModel(
             // pulled in by hand — and only for the months still in the cache.
             tradeRepository.changes.collect {
                 transfersCache.keys.toList().forEach { loadTrades(AnalysisPage.Month(it), force = true) }
+                yearCache.keys.toList().forEach { loadTrades(AnalysisPage.Year(it), force = true) }
                 reloadInsights()
             }
         }
@@ -245,6 +250,7 @@ class AnalysisViewModel(
      * would compete with that frame for the main thread. A year page has nothing to load.
      */
     fun loadTrades(page: AnalysisPage, force: Boolean = false) {
+        if (page is AnalysisPage.Year) return loadYear(page.year, force)
         val month = (page as? AnalysisPage.Month)?.monthKey ?: return
         if (!force && (transfersCache[month] != null || tradeJobs[month] != null)) return
         tradeJobs.remove(month)?.cancel()
@@ -286,6 +292,46 @@ class AnalysisViewModel(
         }
     }
 
+    /** A year page's summary, Accounts and Categories data, read once like a month's trades. */
+    private fun loadYear(year: Int, force: Boolean) {
+        if (!force && (yearCache[year] != null || yearJobs[year] != null)) return
+        yearJobs.remove(year)?.cancel()
+        if (yearCache[year] == null) {
+            yearCache[year] = Stage.Loading
+            publishYears()
+        }
+        yearJobs[year] = viewModelScope.launch {
+            val last = lastMonthOf(year, currentMonth)
+            val first = (year - YEAR_COUNT + 1) * 100 + 1
+            val totalsAsync = async { statDao.observeMonthlyTotals((year - 1) * 100 + 1, last).first() }
+            val transfersAsync = async { tradeRepository.transferTotalsForMonths(monthsBetween(year * 100 + 1, last)) }
+            val flowsAsync = async { tradeRepository.accountFlows(first, last) }
+            val openingAsync = async { tradeRepository.balancesBefore(first) }
+            val categoryTotalsAsync = async { statDao.categoryMonthTotals(first, last) }
+            val totals = totalsAsync.await()
+            val transfers = transfersAsync.await()
+            val flows = flowsAsync.await()
+            val opening = openingAsync.await()
+            val categoryTotals = categoryTotalsAsync.await()
+            val names = accounts
+            val ui = withContext(Dispatchers.Default) {
+                YearUi(
+                    buildYearSummary(totals, year, last),
+                    transfers.sumOf { it.total },
+                    buildYearBalances(flows, opening, year, last, names),
+                    buildYearCategories(categoryTotals, year, last),
+                )
+            }
+            yearCache[year] = if (ui.summary == null && ui.balances == null && ui.categories == null) Stage.Empty else Stage.Ready(ui)
+            yearJobs.remove(year)
+            publishYears()
+        }
+    }
+
+    private fun publishYears() {
+        _state.update { it.copy(years = yearCache.toMap()) }
+    }
+
     private fun publishTrades() {
         _state.update {
             it.copy(
@@ -298,14 +344,18 @@ class AnalysisViewModel(
 
     // ---------------------------------------------------------------- INSIGHTS
 
-    /** The groups the saved list draws from; the others are not loaded at all. */
-    private fun neededGroups(): Set<InsightGroup> =
-        _state.value.layouts[LayoutSlot.MONTH].orEmpty().mapNotNullTo(HashSet()) { it.type.insight }
+    /** The groups the page's saved list draws from; the others are not loaded at all. */
+    private fun neededGroups(page: AnalysisPage): Set<InsightGroup> =
+        _state.value.layouts[if (page is AnalysisPage.Year) LayoutSlot.YEAR else LayoutSlot.MONTH].orEmpty()
+            .mapNotNullTo(HashSet()) { it.type.insight }
 
-    /** Loads the Trades/Savings/Budgets data [page] needs and doesn't have yet (or again, with [force]). */
+    /**
+     * Loads the Trades/Savings/Budgets data [page] needs and doesn't have yet (or again, with
+     * [force]). Cached under the page's [key]: a year's `yyyy00` never meets a month's.
+     */
     fun loadInsights(page: AnalysisPage, force: Boolean = false) {
-        val month = (page as? AnalysisPage.Month)?.monthKey ?: return
-        neededGroups().forEach { group ->
+        val month = page.key
+        neededGroups(page).forEach { group ->
             val cache = insightCaches.getValue(group)
             val key = group to month
             if (!force && (cache[month] != null || insightJobs[key] != null)) return@forEach
@@ -315,7 +365,7 @@ class AnalysisViewModel(
                 publishInsights()
             }
             insightJobs[key] = viewModelScope.launch {
-                val stage: Stage<Any> = Stage.Ready(buildInsight(group, month))
+                val stage: Stage<Any> = Stage.Ready(if (page is AnalysisPage.Year) buildYearInsight(group, page.year) else buildInsight(group, month))
                 cache[month] = stage
                 insightJobs.remove(key)
                 publishInsights()
@@ -326,7 +376,7 @@ class AnalysisViewModel(
     /** Every month already loaded, again: a trade, a budget or a savings target may have changed. */
     private fun reloadInsights() {
         val months = insightCaches.values.flatMapTo(HashSet()) { it.keys }
-        months.forEach { loadInsights(AnalysisPage.Month(it), force = true) }
+        months.forEach { loadInsights(if (it % 100 == 0) AnalysisPage.Year(it / 100) else AnalysisPage.Month(it), force = true) }
     }
 
     /**
@@ -375,6 +425,56 @@ class AnalysisViewModel(
         }
     }
 
+    /** The month builders over [year]'s months so far: the frequency, rate and grid charts get a column per month. */
+    private suspend fun buildYearInsight(group: InsightGroup, year: Int): Any = coroutineScope {
+        val last = lastMonthOf(year, currentMonth)
+        val first = year * 100 + 1
+        val months = monthsBetween(first, last)
+        when (group) {
+            InsightGroup.TRADES -> {
+                val trades = async { tradeRepository.amountsAndTimesForMonths(months, TRADE_TYPES) }
+                val stats = async { statDao.categoryMonthStats(first, last) }
+                val transfers = async { tradeRepository.transferTotalsForMonths(months) }
+                val t = trades.await()
+                val st = stats.await()
+                val tr = transfers.await()
+                withContext(Dispatchers.Default) { buildTradesInsight(t, st, tr, last, zone, period = months, activityMonths = months) }
+            }
+            InsightGroup.SAVINGS -> {
+                val all = accountRepository.observeAll().first()
+                val book = SavingsBook(all, accountRepository.allSavingsMonths())
+                val trades = async { tradeRepository.savingsTrades(first, last, book.savingsIds) }
+                val opening = async { tradeRepository.balancesBefore(first) }
+                val stats = async { statDao.categoryMonthStats(first, last) }
+                val active = all.filter { !it.archived }
+                val privacy = resolvePrivacy(active)
+                val income = stats.await().filter { it.type == CategoryKind.INCOME }
+                    .groupBy { it.monthKey }.mapValues { (_, rows) -> rows.sumOf { it.total } }
+                val t = trades.await()
+                val o = opening.await()
+                withContext(Dispatchers.Default) {
+                    // The pace runs over the whole year, so its target is the year's.
+                    buildSavingsInsight(
+                        book, active, privacy, t, o, income, last, zone,
+                        period = monthsBetween(first, year * 100 + 12), historyMonths = months, rateMonths = months,
+                    )
+                }
+            }
+            InsightGroup.BUDGETS -> {
+                val progress = async { budgetRepository.progressFor(months) }
+                val moves = async { tradeRepository.budgetMoves(first, last) }
+                val stats = async { statDao.categoryMonthStats(first, last) }
+                val p = progress.await()
+                val m = moves.await()
+                val st = stats.await()
+                withContext(Dispatchers.Default) {
+                    // A finished total, not a forecast: the bars read "left" or "over by".
+                    buildBudgetsInsight(p, m, st, last, zone, historyMonths = months).copy(forecast = budgetTotals(p, months), live = false)
+                }
+            }
+        }
+    }
+
     @Suppress("UNCHECKED_CAST")
     private fun publishInsights() {
         _state.update {
@@ -399,6 +499,11 @@ class AnalysisViewModel(
         selectPage(page)
         val keep = window(page)
         val keepMonths = keep.filterIsInstance<AnalysisPage.Month>().map { it.monthKey }
+        val keepYears = keep.filterIsInstance<AnalysisPage.Year>().map { it.year }
+        yearJobs.keys.filter { it !in keepYears }.forEach { stale ->
+            yearJobs.remove(stale)?.cancel()
+            if (yearCache[stale] is Stage.Loading) yearCache.remove(stale)
+        }
         tradeJobs.keys.filter { it !in keepMonths }.forEach { stale ->
             tradeJobs.remove(stale)?.cancel()
             // Drop the half-done entry too, or the page would stay stuck on its skeleton.

@@ -38,6 +38,14 @@ private val CategoryDaily = ChartTexts(R.string.analysis_info_category_daily_abo
 private val CategoryShare = ChartTexts(R.string.analysis_info_category_share_about, R.string.analysis_info_category_share_meaning, R.string.analysis_info_category_share_how)
 private val CategoryMonths = ChartTexts(R.string.analysis_info_category_months_about, R.string.analysis_info_category_months_meaning, R.string.analysis_info_category_months_how)
 
+/** The year page's account and category charts' shared texts by shape: by month, breakdown, 5 years. */
+private val YearAccountMonthly = ChartTexts(R.string.analysis_info_year_account_monthly_about, R.string.analysis_info_year_account_monthly_meaning, R.string.analysis_info_year_account_monthly_how)
+private val YearAccountShare = ChartTexts(R.string.analysis_info_year_account_share_about, R.string.analysis_info_year_account_share_meaning, R.string.analysis_info_year_account_share_how)
+private val YearAccountYears = ChartTexts(R.string.analysis_info_year_account_years_about, R.string.analysis_info_year_account_years_meaning, R.string.analysis_info_year_account_years_how)
+private val YearCategoryMonthly = ChartTexts(R.string.analysis_info_year_category_monthly_about, R.string.analysis_info_year_category_monthly_meaning, R.string.analysis_info_year_category_monthly_how)
+private val YearCategoryShare = ChartTexts(R.string.analysis_info_year_category_share_about, R.string.analysis_info_year_category_share_meaning, R.string.analysis_info_year_category_share_how)
+private val YearCategoryYears = ChartTexts(R.string.analysis_info_year_category_years_about, R.string.analysis_info_year_category_years_meaning, R.string.analysis_info_year_category_years_how)
+
 /** A chart's own texts, named analysis_info_<key>_about / _meaning / _how. */
 private fun own(about: Int, meaning: Int, how: Int) = ChartTexts(about, meaning, how, templated = false)
 
@@ -69,6 +77,29 @@ private fun textsOf(type: ChartType): ChartTexts = when (type) {
     ChartType.BUDGET_WATERFALL -> own(R.string.analysis_info_budget_waterfall_about, R.string.analysis_info_budget_waterfall_meaning, R.string.analysis_info_budget_waterfall_how)
     ChartType.BUDGET_COVERAGE -> own(R.string.analysis_info_budget_coverage_about, R.string.analysis_info_budget_coverage_meaning, R.string.analysis_info_budget_coverage_how)
     ChartType.BUDGET_REACHED -> own(R.string.analysis_info_budget_reached_about, R.string.analysis_info_budget_reached_meaning, R.string.analysis_info_budget_reached_how)
+    ChartType.YEAR_ACCOUNT_MONTHLY, ChartType.YEAR_SUBACCOUNT_MONTHLY -> YearAccountMonthly
+    ChartType.YEAR_ACCOUNT_SHARE, ChartType.YEAR_SUBACCOUNT_SHARE -> YearAccountShare
+    ChartType.YEAR_ACCOUNT_YEARS, ChartType.YEAR_SUBACCOUNT_YEARS -> YearAccountYears
+    ChartType.YEAR_EXPENSE_CATEGORY_MONTHLY, ChartType.YEAR_EXPENSE_SUBCATEGORY_MONTHLY,
+    ChartType.YEAR_INCOME_CATEGORY_MONTHLY, ChartType.YEAR_INCOME_SUBCATEGORY_MONTHLY -> YearCategoryMonthly
+    ChartType.YEAR_EXPENSE_CATEGORY_SHARE, ChartType.YEAR_EXPENSE_SUBCATEGORY_SHARE,
+    ChartType.YEAR_INCOME_CATEGORY_SHARE, ChartType.YEAR_INCOME_SUBCATEGORY_SHARE -> YearCategoryShare
+    ChartType.YEAR_EXPENSE_CATEGORY_YEARS, ChartType.YEAR_EXPENSE_SUBCATEGORY_YEARS,
+    ChartType.YEAR_INCOME_CATEGORY_YEARS, ChartType.YEAR_INCOME_SUBCATEGORY_YEARS -> YearCategoryYears
+    ChartType.YEAR_SUMMARY -> own(R.string.analysis_info_year_summary_about, R.string.analysis_info_year_summary_meaning, R.string.analysis_info_year_summary_how)
+    ChartType.YEAR_TRADE_WEEK -> own(R.string.analysis_info_year_trade_week_about, R.string.analysis_info_trade_week_meaning, R.string.analysis_info_trade_week_how)
+    ChartType.YEAR_TRADE_SIZES -> own(R.string.analysis_info_year_trade_sizes_about, R.string.analysis_info_trade_sizes_meaning, R.string.analysis_info_trade_sizes_how)
+    ChartType.YEAR_TRADE_TOP -> own(R.string.analysis_info_year_trade_top_about, R.string.analysis_info_year_trade_top_meaning, R.string.analysis_info_trade_top_how)
+    ChartType.YEAR_TRADE_FREQUENCY -> own(R.string.analysis_info_year_trade_frequency_about, R.string.analysis_info_trade_frequency_meaning, R.string.analysis_info_trade_frequency_how)
+    ChartType.YEAR_TRADE_TRANSFERS -> own(R.string.analysis_info_year_trade_transfers_about, R.string.analysis_info_trade_transfers_meaning, R.string.analysis_info_trade_transfers_how)
+    ChartType.YEAR_SAVING_PACE -> own(R.string.analysis_info_year_saving_pace_about, R.string.analysis_info_year_saving_pace_meaning, R.string.analysis_info_saving_pace_how)
+    ChartType.YEAR_SAVING_HISTORY -> own(R.string.analysis_info_year_saving_history_about, R.string.analysis_info_saving_history_meaning, R.string.analysis_info_saving_history_how)
+    ChartType.YEAR_SAVING_RATE -> own(R.string.analysis_info_year_saving_rate_about, R.string.analysis_info_saving_rate_meaning, R.string.analysis_info_saving_rate_how)
+    ChartType.YEAR_SAVING_SOURCES -> own(R.string.analysis_info_year_saving_sources_about, R.string.analysis_info_saving_sources_meaning, R.string.analysis_info_saving_sources_how)
+    ChartType.YEAR_BUDGET_TOTALS -> own(R.string.analysis_info_year_budget_totals_about, R.string.analysis_info_year_budget_totals_meaning, R.string.analysis_info_year_budget_totals_how)
+    ChartType.YEAR_BUDGET_HISTORY -> own(R.string.analysis_info_year_budget_history_about, R.string.analysis_info_budget_history_meaning, R.string.analysis_info_budget_history_how)
+    ChartType.YEAR_BUDGET_COVERAGE -> own(R.string.analysis_info_year_budget_coverage_about, R.string.analysis_info_year_budget_coverage_meaning, R.string.analysis_info_budget_coverage_how)
+    ChartType.YEAR_BUDGET_REACHED -> own(R.string.analysis_info_year_budget_reached_about, R.string.analysis_info_budget_reached_meaning, R.string.analysis_info_budget_reached_how)
 }
 
 /** Which accounts or categories an account/category chart draws, as its texts' first argument. */

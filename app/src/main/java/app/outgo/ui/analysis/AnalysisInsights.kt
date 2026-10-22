@@ -80,6 +80,9 @@ fun buildTradesInsight(
     transfers: List<TransferTotal>,
     month: Int,
     zone: ZoneId,
+    /** The months whose trades the page covers: [month] alone, or a year's. [days] is [month]'s only. */
+    period: List<Int> = listOf(month),
+    activityMonths: List<Int> = MonthKey.lastN(month, INSIGHT_MONTH_COUNT),
 ): TradesInsightUi {
     val ym = yearMonthOf(month)
     val length = ym.lengthOfMonth()
@@ -87,8 +90,8 @@ fun buildTradesInsight(
     val income = LongArray(length)
     val expenseCount = IntArray(length)
     val incomeCount = IntArray(length)
-    val inMonth = trades.filter { monthKeyOf(it.occurredAt, zone) == month }
-    inMonth.forEach { t ->
+    val inPeriod = trades.filter { monthKeyOf(it.occurredAt, zone) in period }
+    inPeriod.filter { monthKeyOf(it.occurredAt, zone) == month }.forEach { t ->
         val day = Instant.ofEpochMilli(t.occurredAt).atZone(zone).dayOfMonth - 1
         if (t.type == TradeType.INCOME) {
             income[day] += t.amount
@@ -98,8 +101,7 @@ fun buildTradesInsight(
             expenseCount[day]++
         }
     }
-    val months = MonthKey.lastN(month, INSIGHT_MONTH_COUNT)
-    val activity = months.map { m ->
+    val activity = activityMonths.map { m ->
         val rows = stats.filter { it.monthKey == m }
         val e = rows.filter { it.type == CategoryKind.EXPENSE }
         val i = rows.filter { it.type == CategoryKind.INCOME }
@@ -110,7 +112,7 @@ fun buildTradesInsight(
         daysInMonth = length,
         firstWeekday = ym.atDay(1).dayOfWeek.value - 1,
         days = (0 until length).map { DayTotals(expense[it], income[it], expenseCount[it], incomeCount[it]) },
-        trades = inMonth.sortedByDescending { it.amount },
+        trades = inPeriod.sortedByDescending { it.amount },
         activity = activity,
         transfers = transfers.filter { it.toAccountId != null && it.total > 0 },
     )
@@ -388,10 +390,22 @@ fun buildSavingsInsight(
     month: Int,
     zone: ZoneId,
     nowMillis: Long = System.currentTimeMillis(),
+    /** The months the pace and sources charts add up: [month] alone, or a whole year. [opening] is at its start. */
+    period: List<Int> = listOf(month),
+    historyMonths: List<Int> = MonthKey.lastN(month, SAVINGS_HISTORY_MONTH_COUNT),
+    rateMonths: List<Int> = MonthKey.lastN(month, INSIGHT_MONTH_COUNT),
 ): SavingsInsightUi {
-    val length = yearMonthOf(month).lengthOfMonth()
-    val elapsed = daysCounted(month, zone, nowMillis).coerceAtMost(length)
-    val live = MonthKey.of(nowMillis, zone) == month
+    val now = MonthKey.of(nowMillis, zone)
+    val length = period.sumOf { yearMonthOf(it).lengthOfMonth() }
+    val elapsed = period.sumOf { m ->
+        val days = yearMonthOf(m).lengthOfMonth()
+        when {
+            m < now -> days
+            m == now -> daysCounted(m, zone, nowMillis).coerceAtMost(days)
+            else -> 0
+        }
+    }
+    val live = now in period
     val savings = active.filter { it.accountType == AccountType.SAVINGS }
     fun ref(a: AccountEntity) = InsightRef(a.id, a.name, a.iconId, a.color)
     val byMonth = trades.groupBy { it.monthKey }
@@ -404,8 +418,10 @@ fun buildSavingsInsight(
     val pace = ArrayList<SavingPaceRow>()
     val daily = HashMap<Long, List<Long>>()
     savings.forEach { a ->
-        val target = book.target(a.id, month) ?: return@forEach
-        val saved = savedIn(a.id, month)
+        val targets = period.mapNotNull { book.target(a.id, it) }
+        if (targets.isEmpty()) return@forEach
+        val target = targets.sum()
+        val saved = period.sumOf { savedIn(a.id, it) }
         if (privacy[a.id]?.progressHiddenInAnalysis(saved, target) == true) return@forEach
         pace += SavingPaceRow(
             ref(a),
@@ -414,6 +430,8 @@ fun buildSavingsInsight(
             pace = target * elapsed / length,
             projected = if (live && elapsed > 0) saved * length / elapsed else saved,
         )
+        // Day by day only makes sense for one month (the burn-up chart).
+        if (period.size != 1) return@forEach
         val group = book.countedGroup(a.id)
         val days = LongArray(elapsed.coerceAtLeast(1))
         byMonth[month].orEmpty().filter { countsToward(it, group) }.forEach { t ->
@@ -425,7 +443,6 @@ fun buildSavingsInsight(
     }
 
     // Twelve months of target hits, for accounts that had a target in any of them.
-    val historyMonths = MonthKey.lastN(month, SAVINGS_HISTORY_MONTH_COUNT)
     val history = savings.filter { !privacy[it.id].hidesHistory() }.mapNotNull { a ->
         val cells = historyMonths.map { m -> book.target(a.id, m)?.let { GridCell(savedIn(a.id, m), it) } }
         if (cells.all { it == null }) return@mapNotNull null
@@ -433,7 +450,6 @@ fun buildSavingsInsight(
     }
 
     // The rate: every top savings level (no savings parent above it) counted once.
-    val rateMonths = MonthKey.lastN(month, INSIGHT_MONTH_COUNT)
     val tops = savings.filter { a ->
         val parent = a.parentId?.let { book.account(it) }
         (parent == null || parent.accountType != AccountType.SAVINGS) && !privacy[a.id].hidesHistory()
@@ -448,7 +464,7 @@ fun buildSavingsInsight(
         val group = book.balanceGroup(a.id)
         val counted = book.countedGroup(a.id)
         val sums = LongArray(StepKind.entries.size)
-        byMonth[month].orEmpty().forEach { t ->
+        period.flatMap { byMonth[it].orEmpty() }.forEach { t ->
             val from = t.accountId in group
             val to = t.toAccountId in group
             if (!from && !to) return@forEach
@@ -547,6 +563,29 @@ const val COVER_IN = 1L
 const val COVER_OUT = 2L
 const val COVER_EXEMPT = 3L
 
+private fun ref(b: BudgetWithProgress) = InsightRef(b.categoryId!!, b.displayName, b.displayIconId, b.categoryColor ?: OTHER_COLOR)
+
+/**
+ * Each budget's spend and limit over [months] added up, the furthest over first: a row per budget on
+ * in any of them. The limit is each month's limit plus top-ups; what was carried over is left out,
+ * since the month before already counted that money.
+ */
+fun budgetTotals(progress: Map<Int, List<BudgetWithProgress>>, months: List<Int>): List<BudgetForecastRow> {
+    val rows = LinkedHashMap<Long, BudgetForecastRow>()
+    months.reversed().forEach { m ->
+        progress[m].orEmpty().filter { it.enabled && it.categoryId != null }.forEach { b ->
+            val limit = b.effectiveLimit - b.carry
+            val row = rows[b.categoryId!!]
+            rows[b.categoryId] = if (row == null) {
+                BudgetForecastRow(ref(b), b.spent, limit, 0L, b.spent)
+            } else {
+                row.copy(spent = row.spent + b.spent, limit = row.limit + limit, projected = row.projected + b.spent)
+            }
+        }
+    }
+    return rows.values.sortedByDescending { if (it.limit > 0) it.spent.toDouble() / it.limit else if (it.spent > 0) Double.MAX_VALUE else 0.0 }
+}
+
 /** Budgets that count a category's money: its own and, unless it is left out, its parent's. */
 private fun budgetsOf(categoryId: Long, parentId: Long?, parentExempt: Boolean): List<Long> =
     if (parentId != null && !parentExempt) listOf(categoryId, parentId) else listOf(categoryId)
@@ -562,12 +601,12 @@ fun buildBudgetsInsight(
     month: Int,
     zone: ZoneId,
     nowMillis: Long = System.currentTimeMillis(),
+    /** The month-by-month charts' months, [month] last; [progress], [moves] and [stats] must cover them. */
+    historyMonths: List<Int> = MonthKey.lastN(month, INSIGHT_MONTH_COUNT),
 ): BudgetsInsightUi {
     val length = yearMonthOf(month).lengthOfMonth()
     val elapsed = daysCounted(month, zone, nowMillis).coerceAtMost(length)
     val live = MonthKey.of(nowMillis, zone) == month
-    fun ref(b: BudgetWithProgress) = InsightRef(b.categoryId!!, b.displayName, b.displayIconId, b.categoryColor ?: OTHER_COLOR)
-    val historyMonths = MonthKey.lastN(month, INSIGHT_MONTH_COUNT)
     fun shown(m: Int) = progress[m].orEmpty().filter { it.enabled && it.categoryId != null }
     val current = shown(month)
 

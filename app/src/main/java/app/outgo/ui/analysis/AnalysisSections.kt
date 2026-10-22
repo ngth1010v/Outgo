@@ -85,7 +85,8 @@ fun chartContentHeight(type: ChartType): Dp {
     val small = line(typography.bodySmall)
     fun summary(smallLines: Int) =
         line(typography.headlineMedium) + line(typography.bodyMedium) + small * smallLines + SummaryLineGap * (smallLines + 1)
-    return when (type) {
+    // A year chart is drawn like its month chart, at its height.
+    return when (type.base ?: type) {
         ChartType.SUMMARY -> summary(MONTH_SUMMARY_SMALL_LINES)
         ChartType.ACCOUNT_DAILY, ChartType.SUBACCOUNT_DAILY, ChartType.ACCOUNT_MONTHS, ChartType.SUBACCOUNT_MONTHS,
         ChartType.EXPENSE_CATEGORY_DAILY, ChartType.EXPENSE_SUBCATEGORY_DAILY, ChartType.EXPENSE_CATEGORY_MONTHS,
@@ -94,7 +95,7 @@ fun chartContentHeight(type: ChartType): Dp {
             BalanceHeight + SectionGap + small
         ChartType.ACCOUNT_SHARE, ChartType.SUBACCOUNT_SHARE, ChartType.EXPENSE_CATEGORY_SHARE, ChartType.EXPENSE_SUBCATEGORY_SHARE,
         ChartType.INCOME_CATEGORY_SHARE, ChartType.INCOME_SUBCATEGORY_SHARE -> ShareHeight
-        else -> insightContentHeight(type)
+        else -> insightContentHeight(type.base ?: type)
     }
 }
 
@@ -296,6 +297,8 @@ fun SummarySection(
     /** The month's transfer total; null until the raw-trade load is in. */
     transfers: Long?,
     modifier: Modifier = Modifier,
+    /** The year page's: against last year, averaged per month. */
+    yearly: Boolean = false,
 ) {
     val kind = summary.of(mode)
     val kindType = if (mode == AnalysisMode.INCOME) CategoryKind.INCOME else CategoryKind.EXPENSE
@@ -312,7 +315,8 @@ fun SummarySection(
     }
     val description = summaryDescription(kind, mode, summary)
 
-    Section(stringResource(R.string.analysis_summary_title), modifier.semantics { contentDescription = description }) {
+    val title = stringResource(if (yearly) R.string.analysis_year_summary_title else R.string.analysis_summary_title)
+    Section(title, modifier.semantics { contentDescription = description }) {
         Column(verticalArrangement = Arrangement.spacedBy(SummaryLineGap)) {
             Text(
                 Money.formatSigned(headline),
@@ -321,13 +325,17 @@ fun SummarySection(
                 color = deltaColor(headline, CategoryKind.INCOME),
             )
             Text(
-                stringResource(R.string.analysis_vs_last_month_percent, Money.formatSigned(kind.deltaAmount), kind.deltaPercent),
+                stringResource(
+                    if (yearly) R.string.analysis_vs_last_year_percent else R.string.analysis_vs_last_month_percent,
+                    Money.formatSigned(kind.deltaAmount),
+                    kind.deltaPercent,
+                ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = deltaColor(kind.deltaAmount, kindType),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            SummaryLine(stringResource(R.string.analysis_avg_per_day, Money.formatSigned(perPeriod)))
+            SummaryLine(stringResource(if (yearly) R.string.analysis_avg_per_month else R.string.analysis_avg_per_day, Money.formatSigned(perPeriod)))
             // Transfers arrive with the raw-trade stage; the line keeps its height until then.
             SummaryLine(stringResource(R.string.analysis_transfer_line, transfers?.let { Money.format(it) } ?: "—"))
         }
@@ -372,6 +380,7 @@ private fun DailyLines(
     zero: Boolean,
     animate: Boolean,
     modifier: Modifier,
+    xLabels: List<String>?,
 ) {
     Section(title, modifier.semantics { contentDescription = description }) {
         if (lines.isEmpty()) {
@@ -387,6 +396,7 @@ private fun DailyLines(
                 Modifier.fillMaxWidth().height(BalanceHeight),
                 focusedId = focus.rootId,
                 onFocus = focus::toggle,
+                xLabels = xLabels,
             )
             AccountLegend(lines, focus.rootId, focus::toggle)
         }
@@ -450,16 +460,33 @@ internal fun AccountLegend(lines: List<BalanceLine>, focusedId: Long? = null, on
 
 /** The account balance charts' lines, one per account; all of them may be switched off. */
 @Composable
-fun BalanceDaysSection(title: String, lines: List<BalanceLine>, daysInMonth: Int, zero: Boolean, animate: Boolean, modifier: Modifier = Modifier) {
+fun BalanceDaysSection(
+    title: String,
+    lines: List<BalanceLine>,
+    daysInMonth: Int,
+    zero: Boolean,
+    animate: Boolean,
+    modifier: Modifier = Modifier,
+    /** A name per point, for a line per month of a year; null labels the days. */
+    xLabels: List<String>? = null,
+) {
     val description = stringResource(R.string.analysis_cd_daily_lines, title, lines.size)
-    DailyLines(title, description, lines, daysInMonth, zero, animate, modifier)
+    DailyLines(title, description, lines, daysInMonth, zero, animate, modifier, xLabels)
 }
 
 /** Month-end balances of the last months, stacked per month in the accounts' own order. */
 @Composable
-fun BalanceMonthsSection(title: String, lines: List<BalanceLine>, months: List<Int>, animate: Boolean, modifier: Modifier = Modifier) {
+fun BalanceMonthsSection(
+    title: String,
+    lines: List<BalanceLine>,
+    months: List<Int>,
+    animate: Boolean,
+    modifier: Modifier = Modifier,
+    /** A bar's name in place of its month's, for the bars of the last years. */
+    barLabels: List<String>? = null,
+) {
     val names = stringArrayResource(R.array.month_abbrev)
-    val labels = remember(months, names) { months.map { names[(it % 100) - 1] } }
+    val labels = barLabels ?: remember(months, names) { months.map { names[(it % 100) - 1] } }
     val description = stringResource(R.string.analysis_cd_daily_lines, title, lines.size)
     Section(title, modifier.semantics { contentDescription = description }) {
         if (lines.isEmpty()) {

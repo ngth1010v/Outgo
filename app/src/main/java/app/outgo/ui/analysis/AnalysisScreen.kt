@@ -70,6 +70,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -90,15 +91,15 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 /**
- * One flat pager: every year's months, then that year's page (for now a "Coming soon" note). Only
+ * One flat pager: every year's months, then that year's page. Only
  * three pages are ever composed (`beyondViewportPageCount = 1`) and the ViewModel keeps the last
  * five months' results, so swiping back to a page already seen renders straight from cache with no
  * skeleton.
  *
  * Every month page shows the same chart list, each card at a height that does not depend on the
- * data (see [chartHeight]). The month pages follow one scroll position ([ScrollAnchor]): a swipe or
- * a caret lands on the next month with the same chart in the same place, and stepping over a year
- * page keeps that position.
+ * data (see [chartHeight]); the year pages share a list of their own. The month pages follow one
+ * scroll position ([ScrollAnchor]) and the year pages another: a swipe or a caret lands on the next
+ * month with the same chart in the same place, and stepping over a year page keeps that position.
  */
 @Composable
 fun AnalysisScreen(
@@ -136,6 +137,7 @@ fun AnalysisScreen(
         pageCount = { pages.size },
     )
     val monthAnchor = remember { ScrollAnchor() }
+    val yearAnchor = remember { ScrollAnchor() }
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
     val snackbar = remember { SnackbarHostState() }
@@ -188,7 +190,10 @@ fun AnalysisScreen(
                     val listState = rememberSyncedListState(monthAnchor) { pages.getOrNull(pagerState.settledPage) == page }
                     ProvideInsightFormats { MonthPage(page, listState, state, viewModel, onDeleted, actions) }
                 }
-                is AnalysisPage.Year -> ComingSoonPage()
+                is AnalysisPage.Year -> {
+                    val listState = rememberSyncedListState(yearAnchor) { pages.getOrNull(pagerState.settledPage) == page }
+                    ProvideInsightFormats { YearPage(page, listState, state, viewModel, onDeleted, actions) }
+                }
             }
         }
     }
@@ -600,15 +605,18 @@ private fun ChartCell(type: ChartType, short: Boolean, onClick: () -> Unit, onLo
  */
 @Composable
 private fun shortChartName(type: ChartType): String {
+    val name = type.name.removePrefix("YEAR_")
     val kind = when {
-        type.name.startsWith("ACCOUNT_") -> R.string.analysis_short_account
-        type.name.startsWith("SUBACCOUNT_") -> R.string.analysis_short_subaccount
-        type.name.startsWith("EXPENSE_") -> R.string.analysis_short_expense
+        name.startsWith("ACCOUNT_") -> R.string.analysis_short_account
+        name.startsWith("SUBACCOUNT_") -> R.string.analysis_short_subaccount
+        name.startsWith("EXPENSE_") -> R.string.analysis_short_expense
         else -> R.string.analysis_short_income
     }
     val chart = when {
-        type.name.endsWith("_DAILY") -> R.string.analysis_short_daily
-        type.name.endsWith("_SHARE") -> R.string.analysis_short_share
+        name.endsWith("_DAILY") -> R.string.analysis_short_daily
+        name.endsWith("_MONTHLY") -> R.string.analysis_short_monthly
+        name.endsWith("_SHARE") -> R.string.analysis_short_share
+        name.endsWith("_YEARS") -> R.string.analysis_short_years
         else -> R.string.analysis_short_months
     }
     return stringResource(kind) + "\n" + stringResource(chart)
@@ -637,6 +645,25 @@ private fun chartName(type: ChartType): String = if (type.insight != null) insig
         ChartType.INCOME_SUBCATEGORY_SHARE -> R.string.analysis_income_subcategory_share_title
         ChartType.INCOME_CATEGORY_MONTHS -> R.string.analysis_income_category_months_title
         ChartType.INCOME_SUBCATEGORY_MONTHS -> R.string.analysis_income_subcategory_months_title
+        ChartType.YEAR_SUMMARY -> R.string.analysis_year_summary_title
+        ChartType.YEAR_ACCOUNT_MONTHLY -> R.string.analysis_year_account_monthly_title
+        ChartType.YEAR_SUBACCOUNT_MONTHLY -> R.string.analysis_year_subaccount_monthly_title
+        ChartType.YEAR_ACCOUNT_SHARE -> R.string.analysis_year_account_share_title
+        ChartType.YEAR_SUBACCOUNT_SHARE -> R.string.analysis_year_subaccount_share_title
+        ChartType.YEAR_ACCOUNT_YEARS -> R.string.analysis_year_account_years_title
+        ChartType.YEAR_SUBACCOUNT_YEARS -> R.string.analysis_year_subaccount_years_title
+        ChartType.YEAR_EXPENSE_CATEGORY_MONTHLY -> R.string.analysis_year_expense_category_monthly_title
+        ChartType.YEAR_EXPENSE_SUBCATEGORY_MONTHLY -> R.string.analysis_year_expense_subcategory_monthly_title
+        ChartType.YEAR_EXPENSE_CATEGORY_SHARE -> R.string.analysis_year_expense_category_share_title
+        ChartType.YEAR_EXPENSE_SUBCATEGORY_SHARE -> R.string.analysis_year_expense_subcategory_share_title
+        ChartType.YEAR_EXPENSE_CATEGORY_YEARS -> R.string.analysis_year_expense_category_years_title
+        ChartType.YEAR_EXPENSE_SUBCATEGORY_YEARS -> R.string.analysis_year_expense_subcategory_years_title
+        ChartType.YEAR_INCOME_CATEGORY_MONTHLY -> R.string.analysis_year_income_category_monthly_title
+        ChartType.YEAR_INCOME_SUBCATEGORY_MONTHLY -> R.string.analysis_year_income_subcategory_monthly_title
+        ChartType.YEAR_INCOME_CATEGORY_SHARE -> R.string.analysis_year_income_category_share_title
+        ChartType.YEAR_INCOME_SUBCATEGORY_SHARE -> R.string.analysis_year_income_subcategory_share_title
+        ChartType.YEAR_INCOME_CATEGORY_YEARS -> R.string.analysis_year_income_category_years_title
+        ChartType.YEAR_INCOME_SUBCATEGORY_YEARS -> R.string.analysis_year_income_subcategory_years_title
         else -> 0
     },
 )
@@ -756,29 +783,85 @@ private fun CategoryCard(card: ChartCard, height: Dp, data: Stage<CategoryCharts
 
 // ------------------------------------------------------------------ year page
 
-/** The year page has no charts yet. */
+/**
+ * The year's own chart list. Its cards are the month cards drawn from the year's data: Accounts
+ * and Categories from [YearUi], Trades, Savings and Budgets from the insight maps under the year's
+ * page key.
+ */
 @Composable
-private fun ComingSoonPage() {
-    Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                painter = painterResource(R.drawable.ph_calendar_dots),
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(40.dp),
-            )
-            Spacer(Modifier.height(12.dp))
-            Text(stringResource(R.string.analysis_coming_soon), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(4.dp))
-            Text(
-                stringResource(R.string.analysis_year_coming_soon),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
+private fun YearPage(
+    page: AnalysisPage.Year,
+    listState: LazyListState,
+    state: AnalysisUiState,
+    viewModel: AnalysisViewModel,
+    onDeleted: (LayoutSlot, Int, ChartCard) -> Unit,
+    actions: InsightActions,
+) {
+    val data = state.years[page.year] ?: Stage.Loading
+    val animate = rememberIntroAnimation(page, data, viewModel)
+
+    LoadTradesAfterFirstFrame(page, viewModel)
+
+    val cards = state.layouts[LayoutSlot.YEAR] ?: return
+    ChartList(page.key, LayoutSlot.YEAR, cards, state, listState, viewModel, onDeleted) { card ->
+        val height = chartContentHeight(card.type)
+        val base = card.type.base ?: card.type
+        when {
+            base == ChartType.SUMMARY -> StageSection(data.map { it.summary }, chartName(card.type), height) {
+                SummarySection(it, card.mode, data.dataOrNull?.transfers, yearly = true)
+            }
+            base in MonthBalanceCharts -> YearLinesCard(card, height, data.map { it.balances }, state.accountTree, page.key, animate)
+            base in MonthCategoryGroupCharts -> YearLinesCard(card, height, data.map { it.categories }, treeOf(card.type, state), page.key, animate)
+            card.type.insight != null -> InsightCard(card, height, state, page.key, animate, actions)
         }
     }
 }
+
+/** The inner data of a loaded stage, or [Stage.Empty] where it is null. */
+private inline fun <T, R> Stage<T>.map(inner: (T) -> R?): Stage<R> = when (this) {
+    is Stage.Loading -> Stage.Loading
+    is Stage.Empty -> Stage.Empty
+    is Stage.Ready -> inner(data)?.let { Stage.Ready(it) } ?: Stage.Empty
+}
+
+/**
+ * A year Accounts or Categories chart, drawn by its month chart's section: a line per month of
+ * the year, the year's pie, or a bar per year. Categories without money in the window are left out.
+ */
+@Composable
+private fun YearLinesCard(card: ChartCard, height: Dp, data: Stage<YearLinesUi>, tree: List<AccountNode>, key: Int, animate: Boolean) {
+    val title = chartName(card.type)
+    val category = card.type.categoryKind != null
+    val groups = remember(tree, card.accountId, card.type, card.hidden) {
+        balanceGroups(tree, card.accountId, card.type.hasParent).filter { it.first.id !in card.hidden }
+    }
+    fun List<BalanceLine>.kept() = if (category) filter { line -> line.values.any { it != 0L } } else this
+    val months = stringArrayResource(R.array.month_abbrev).let { names -> remember(*names) { names.toList() } }
+    StageSection(data, title, height) { year ->
+        val name = card.type.name
+        when {
+            name.endsWith("_MONTHLY") -> {
+                val lines = remember(year, groups) {
+                    if (year.months.isEmpty()) emptyList() else sumLines(year.monthly, groups, year.months.size).kept()
+                }
+                BalanceDaysSection(title, lines, MONTHS_IN_YEAR, card.zero, animate, xLabels = months)
+            }
+            name.endsWith("_SHARE") -> {
+                val selection = remember(key, card.id) { AnalysisSelection() }
+                val rows = remember(year, groups) {
+                    buildShare(sumLines(year.share, groups, 2).kept(), groups.associate { it.first.id to it.first })
+                }
+                BalanceShareSection(title, rows, selection, animate, card.type.categoryKind ?: CategoryKind.INCOME)
+            }
+            else -> {
+                val lines = remember(year, groups) { sumLines(year.yearly, groups, year.years.size).kept() }
+                BalanceMonthsSection(title, lines, emptyList(), animate, barLabels = year.years.map { it.toString() })
+            }
+        }
+    }
+}
+
+private const val MONTHS_IN_YEAR = 12
 
 // ---------------------------------------------------------------------- shared
 

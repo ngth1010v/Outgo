@@ -78,7 +78,7 @@ internal fun daysCounted(month: Int, zone: ZoneId, nowMillis: Long): Int {
 internal fun percentChange(current: Long, previous: Long): Int =
     if (previous == 0L) current.sign * 100 else ((current - previous) * 100 / abs(previous)).toInt()
 
-private fun kindSummary(current: List<MonthCategoryTotal>, previous: List<MonthCategoryTotal>, periods: Int): KindSummary {
+internal fun kindSummary(current: List<MonthCategoryTotal>, previous: List<MonthCategoryTotal>, periods: Int): KindSummary {
     val total = current.sumOf { it.total }
     val prev = previous.sumOf { it.total }
     return KindSummary(

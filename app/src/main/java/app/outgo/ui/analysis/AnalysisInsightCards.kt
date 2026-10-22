@@ -104,6 +104,19 @@ fun insightContentHeight(type: ChartType): Dp {
 @Composable
 fun insightChartName(type: ChartType): String = stringResource(
     when (type) {
+        ChartType.YEAR_TRADE_WEEK -> R.string.analysis_year_trade_week_title
+        ChartType.YEAR_TRADE_SIZES -> R.string.analysis_year_trade_sizes_title
+        ChartType.YEAR_TRADE_TOP -> R.string.analysis_year_trade_top_title
+        ChartType.YEAR_TRADE_FREQUENCY -> R.string.analysis_year_trade_frequency_title
+        ChartType.YEAR_TRADE_TRANSFERS -> R.string.analysis_year_trade_transfers_title
+        ChartType.YEAR_SAVING_PACE -> R.string.analysis_year_saving_pace_title
+        ChartType.YEAR_SAVING_HISTORY -> R.string.analysis_year_saving_history_title
+        ChartType.YEAR_SAVING_RATE -> R.string.analysis_year_saving_rate_title
+        ChartType.YEAR_SAVING_SOURCES -> R.string.analysis_year_saving_sources_title
+        ChartType.YEAR_BUDGET_TOTALS -> R.string.analysis_year_budget_totals_title
+        ChartType.YEAR_BUDGET_HISTORY -> R.string.analysis_year_budget_history_title
+        ChartType.YEAR_BUDGET_COVERAGE -> R.string.analysis_year_budget_coverage_title
+        ChartType.YEAR_BUDGET_REACHED -> R.string.analysis_year_budget_reached_title
         ChartType.TRADE_CALENDAR -> R.string.analysis_trade_calendar_title
         ChartType.TRADE_WEEK -> R.string.analysis_trade_week_title
         ChartType.TRADE_SIZES -> R.string.analysis_trade_sizes_title
@@ -142,10 +155,12 @@ class InsightActions(val openTrade: (Long) -> Unit, val openDay: (HistoryType, L
 @Composable
 fun InsightCard(card: ChartCard, height: Dp, state: AnalysisUiState, month: Int, animate: Boolean, actions: InsightActions) {
     val title = insightChartName(card.type)
+    // A year chart is its month chart drawn from the year's data; [month] is then the year's `yyyy00`.
+    val type = card.type.base ?: card.type
     when (card.type.insight) {
         InsightGroup.TRADES -> StageSection(state.monthTradeInsights[month] ?: Stage.Loading, title, height) { data ->
             Section(title) {
-                when (card.type) {
+                when (type) {
                     ChartType.TRADE_CALENDAR -> CalendarCard(card, data, actions, animate)
                     ChartType.TRADE_WEEK -> WeekCard(card, data, animate)
                     ChartType.TRADE_SIZES -> SizesCard(card, data, animate)
@@ -157,7 +172,7 @@ fun InsightCard(card: ChartCard, height: Dp, state: AnalysisUiState, month: Int,
         }
         InsightGroup.SAVINGS -> StageSection(state.monthSavingsInsights[month] ?: Stage.Loading, title, height) { data ->
             Section(title) {
-                when (card.type) {
+                when (type) {
                     ChartType.SAVING_PACE -> SavingPaceCard(data, animate)
                     ChartType.SAVING_BURNUP -> SavingBurnupCard(card, data, animate)
                     ChartType.SAVING_HISTORY -> SavingHistoryCard(card, data)
@@ -168,12 +183,12 @@ fun InsightCard(card: ChartCard, height: Dp, state: AnalysisUiState, month: Int,
         }
         InsightGroup.BUDGETS -> StageSection(state.monthBudgetInsights[month] ?: Stage.Loading, title, height) { data ->
             Section(title) {
-                when (card.type) {
+                when (type) {
                     ChartType.BUDGET_FORECAST -> BudgetForecastCard(data, animate)
                     ChartType.BUDGET_BURNDOWN -> BudgetBurndownCard(card, data, animate)
                     ChartType.BUDGET_HISTORY -> BudgetHistoryCard(card, data)
                     ChartType.BUDGET_WATERFALL -> BudgetWaterfallCard(card, data, animate)
-                    ChartType.BUDGET_COVERAGE -> BudgetCoverageCard(data, animate)
+                    ChartType.BUDGET_COVERAGE -> BudgetCoverageCard(data, animate, yearly = card.type.base != null)
                     else -> BudgetReachedCard(data)
                 }
             }
@@ -620,7 +635,8 @@ private fun MonthGrid(
                             .clickable { pick.toggle(row.ref.id, i) },
                         contentAlignment = Alignment.Center,
                     ) {
-                        if (cell != null && cellText != null) {
+                        // Twelve columns leave no room for a percentage either: the colour tells it.
+                        if (cell != null && cellText != null && months.size <= 6) {
                             Text(cellText(cell), style = MaterialTheme.typography.labelSmall, maxLines = 1, color = MaterialTheme.colorScheme.onSurface)
                         }
                     }
@@ -717,8 +733,11 @@ private fun stepLabel(kind: StepKind): String = stringResource(
 private fun stepLabels(): Map<StepKind, String> = StepKind.entries.associateWith { stepLabel(it) }
 
 @Composable
-private fun Waterfall(steps: List<WaterfallStep>, color: Int, rows: Int, animate: Boolean) {
-    val names = stepLabels()
+private fun Waterfall(steps: List<WaterfallStep>, color: Int, rows: Int, animate: Boolean, yearly: Boolean = false) {
+    val names = stepLabels().let { labels ->
+        if (!yearly) labels
+        else labels + mapOf(StepKind.OPENING to stringResource(R.string.analysis_step_year_opening), StepKind.CLOSING to stringResource(R.string.analysis_step_year_closing))
+    }
     WaterfallChart(
         steps,
         label = { names.getValue(it) },
@@ -736,7 +755,7 @@ private fun SavingSourcesCard(card: ChartCard, data: SavingsInsightUi, animate: 
     val steps = ref?.let { data.sources[it.id] } ?: return Empty(stringResource(R.string.analysis_no_savings), WaterfallRowHeight * SAVING_STEPS)
     // Nothing in, nothing out, nothing held: no story to tell.
     if (steps.all { it.amount == 0L }) return Empty(height = WaterfallRowHeight * SAVING_STEPS)
-    Waterfall(steps, ref.color, SAVING_STEPS, animate)
+    Waterfall(steps, ref.color, SAVING_STEPS, animate, yearly = card.type.base != null)
 }
 
 // ================================================================= BUDGETS
@@ -819,7 +838,7 @@ private fun BudgetWaterfallCard(card: ChartCard, data: BudgetsInsightUi, animate
 }
 
 @Composable
-private fun BudgetCoverageCard(data: BudgetsInsightUi, animate: Boolean) {
+private fun BudgetCoverageCard(data: BudgetsInsightUi, animate: Boolean, yearly: Boolean) {
     if (data.coverage.all { line -> line.values.all { it == 0L } }) return Empty(height = BalanceHeight)
     val inside = MaterialTheme.colorScheme.primary
     val outside = BudgetWarningYellow
@@ -833,9 +852,10 @@ private fun BudgetCoverageCard(data: BudgetsInsightUi, animate: Boolean) {
     val lines = remember(data.coverage, names, colors) { data.coverage.mapIndexed { i, l -> l.copy(name = names[i], color = colors[i]) } }
     StackedBalanceBars(lines, monthLabels(data.historyMonths), introProgress(animate), Modifier.fillMaxWidth().height(BalanceHeight))
     AccountLegend(lines)
-    val inMonth = lines[0].values.last()
-    val all = lines.sumOf { it.values.last() }
-    DetailLine(stringResource(R.string.analysis_cover_share, percent(inMonth, all)))
+    // The year page's line covers the whole year, the month page's the month.
+    val inBudget = if (yearly) lines[0].values.sum() else lines[0].values.last()
+    val all = lines.sumOf { if (yearly) it.values.sum() else it.values.last() }
+    DetailLine(stringResource(if (yearly) R.string.analysis_cover_share_year else R.string.analysis_cover_share, percent(inBudget, all)))
 }
 
 @Composable

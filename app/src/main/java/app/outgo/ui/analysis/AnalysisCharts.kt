@@ -480,13 +480,16 @@ fun DailyBalanceChart(
     pad: Boolean = true,
     focusedId: Long? = null,
     onFocus: ((Long?) -> Unit)? = null,
+    /** One name per point (a year's months) in place of the day numbers. */
+    xLabels: List<String>? = null,
 ) {
     val gridColor = MaterialTheme.colorScheme.outlineVariant
     val axisColor = MaterialTheme.colorScheme.onSurfaceVariant
     val style = MaterialTheme.typography.labelSmall
     val measurer = rememberTextMeasurer()
-    val xTicks = remember(daysInMonth, style) {
-        axisDays(daysInMonth, 7).map { day -> day to measurer.measure(String.format(Locale.US, "%02d", day), style) }
+    val xText: (Int) -> String = { i -> xLabels?.getOrNull(i) ?: String.format(Locale.US, "%02d", i + 1) }
+    val xTicks = remember(daysInMonth, style, xLabels) {
+        axisDays(daysInMonth, if (xLabels != null) 6 else 7).map { day -> day to measurer.measure(xText(day - 1), style) }
     }
     var height by remember { mutableIntStateOf(0) }
     val values = remember(lines) { lines.flatMap { it.values } }
@@ -557,9 +560,7 @@ fun DailyBalanceChart(
         if (gapColors != null && lines.size >= 2) {
             drawGap(lines[0].values, lines[1].values, ::x, ::y, gapColors.first, gapColors.second)
         }
-        drawBalanceLines(lines, points, scrub, progress(), focus, look, plotWidth, plotHeight) {
-            String.format(Locale.US, "%02d", it + 1)
-        }
+        drawBalanceLines(lines, points, scrub, progress(), focus, look, plotWidth, plotHeight, xText)
     }
 }
 

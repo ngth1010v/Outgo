@@ -15,19 +15,24 @@ import app.outgo.domain.CategoryKind
 /** [icon] must be unique among the charts one [LayoutSlot] offers. */
 enum class ChartType(
     @DrawableRes val icon: Int,
-    val hasMode: Boolean = true,
+    /**
+     * Year page charts only: the month chart this one is drawn like. A year chart takes its chips
+     * from it and is drawn by the same card, from the year's data.
+     */
+    val base: ChartType? = null,
+    val hasMode: Boolean = base?.hasMode ?: true,
     /** A chart whose value axis can be pinned to reach 0; see [ChartCard.zero]. */
-    val hasZero: Boolean = false,
+    val hasZero: Boolean = base?.hasZero ?: false,
     /** Picks one parent account ([ChartCard.accountId]) and draws its subaccounts. */
-    val hasParent: Boolean = false,
+    val hasParent: Boolean = base?.hasParent ?: false,
     /** Each account (category) it draws can be switched off ([ChartCard.hidden]). */
-    val hasToggles: Boolean = false,
+    val hasToggles: Boolean = base?.hasToggles ?: false,
     /** A Categories-group chart of this [CategoryKind]; its [hasParent] picks a parent category. */
-    val categoryKind: Int? = null,
+    val categoryKind: Int? = base?.categoryKind,
     /** A Trades, Savings or Budgets chart: the data it is drawn from. */
-    val insight: InsightGroup? = null,
+    val insight: InsightGroup? = base?.insight,
     /** Picks one savings account or budget ([ChartCard.accountId]) and draws only that one. */
-    val pick: Pick? = null,
+    val pick: Pick? = base?.pick,
 ) {
     // Accounts, month pages only. "Account" charts add each parent's subaccounts up; "subaccount"
     // charts draw the subaccounts of one picked parent.
@@ -103,6 +108,52 @@ enum class ChartType(
     // Other
     /** Month totals, the change since last month, the daily average and the month's transfers. */
     SUMMARY(R.drawable.ph_receipt),
+
+    // Year page. Accounts: month-end balance through the year, the year-end pie (change since the
+    // year before), and year-end balances of the last [YEAR_COUNT] years.
+    YEAR_ACCOUNT_MONTHLY(R.drawable.ph_presentation_chart, ACCOUNT_DAILY),
+    YEAR_SUBACCOUNT_MONTHLY(R.drawable.ph_chart_scatter, SUBACCOUNT_DAILY),
+    YEAR_ACCOUNT_SHARE(R.drawable.ph_chart_pie, ACCOUNT_SHARE),
+    YEAR_SUBACCOUNT_SHARE(R.drawable.ph_chart_polar, SUBACCOUNT_SHARE),
+    YEAR_ACCOUNT_YEARS(R.drawable.ph_stack, ACCOUNT_MONTHS),
+    YEAR_SUBACCOUNT_YEARS(R.drawable.ph_stack_simple, SUBACCOUNT_MONTHS),
+
+    // Year page, Categories: year-to-date totals month by month, the year's pie (change since the
+    // same months of the year before), and the totals of the last [YEAR_COUNT] years.
+    YEAR_EXPENSE_CATEGORY_MONTHLY(R.drawable.ph_shopping_cart, EXPENSE_CATEGORY_DAILY),
+    YEAR_EXPENSE_SUBCATEGORY_MONTHLY(R.drawable.ph_shopping_cart_simple, EXPENSE_SUBCATEGORY_DAILY),
+    YEAR_EXPENSE_CATEGORY_SHARE(R.drawable.ph_shopping_bag, EXPENSE_CATEGORY_SHARE),
+    YEAR_EXPENSE_SUBCATEGORY_SHARE(R.drawable.ph_shopping_bag_open, EXPENSE_SUBCATEGORY_SHARE),
+    YEAR_EXPENSE_CATEGORY_YEARS(R.drawable.ph_basket, EXPENSE_CATEGORY_MONTHS),
+    YEAR_EXPENSE_SUBCATEGORY_YEARS(R.drawable.ph_storefront, EXPENSE_SUBCATEGORY_MONTHS),
+    YEAR_INCOME_CATEGORY_MONTHLY(R.drawable.ph_hand_coins, INCOME_CATEGORY_DAILY),
+    YEAR_INCOME_SUBCATEGORY_MONTHLY(R.drawable.ph_hand_deposit, INCOME_SUBCATEGORY_DAILY),
+    YEAR_INCOME_CATEGORY_SHARE(R.drawable.ph_piggy_bank, INCOME_CATEGORY_SHARE),
+    YEAR_INCOME_SUBCATEGORY_SHARE(R.drawable.ph_vault, INCOME_SUBCATEGORY_SHARE),
+    YEAR_INCOME_CATEGORY_YEARS(R.drawable.ph_money_wavy, INCOME_CATEGORY_MONTHS),
+    YEAR_INCOME_SUBCATEGORY_YEARS(R.drawable.ph_currency_circle_dollar, INCOME_SUBCATEGORY_MONTHS),
+
+    // Year page, Trades: the month charts over the whole year (the frequency chart over its months).
+    YEAR_TRADE_WEEK(R.drawable.ic_chart_week_clock, TRADE_WEEK),
+    YEAR_TRADE_SIZES(R.drawable.ic_chart_sizes, TRADE_SIZES),
+    YEAR_TRADE_TOP(R.drawable.ic_chart_top, TRADE_TOP),
+    YEAR_TRADE_FREQUENCY(R.drawable.ic_chart_frequency, TRADE_FREQUENCY),
+    YEAR_TRADE_TRANSFERS(R.drawable.ic_chart_flow, TRADE_TRANSFERS),
+
+    // Year page, Savings: the year's targets added up, and the year's months.
+    YEAR_SAVING_PACE(R.drawable.ic_chart_saving_pace, SAVING_PACE),
+    YEAR_SAVING_HISTORY(R.drawable.ic_chart_saving_streak, SAVING_HISTORY),
+    YEAR_SAVING_RATE(R.drawable.ic_chart_saving_rate, SAVING_RATE),
+    YEAR_SAVING_SOURCES(R.drawable.ic_chart_saving_sources, SAVING_SOURCES),
+
+    // Year page, Budgets: the year's limits added up, and the year's months.
+    YEAR_BUDGET_TOTALS(R.drawable.ic_chart_budget_forecast, BUDGET_FORECAST),
+    YEAR_BUDGET_HISTORY(R.drawable.ic_chart_budget_grid, BUDGET_HISTORY),
+    YEAR_BUDGET_COVERAGE(R.drawable.ic_chart_coverage, BUDGET_COVERAGE),
+    YEAR_BUDGET_REACHED(R.drawable.ic_chart_reached, BUDGET_REACHED),
+
+    // Year page, Other.
+    YEAR_SUMMARY(R.drawable.ph_receipt, SUMMARY),
 }
 
 /**
@@ -115,7 +166,7 @@ data class ChartGroup(@StringRes val title: Int, val charts: List<ChartType>, va
  * One saved list. [charts] is the first-run layout; [groups] is what the "+" sheet offers, and
  * holds the same charts. [legacy] are the rows of the older per-tab lists (Categories, then
  * Accounts) with their own first-run layouts, which a list never saved in this form is built from.
- * The year page has no list of its own yet ("Coming soon"), so its old rows are no longer read.
+ * The year list is saved under a key of its own: the older year rows held charts it no longer has.
  */
 enum class LayoutSlot(
     val settingKey: String,
@@ -170,6 +221,50 @@ enum class LayoutSlot(
             "analysis_layout_month_accounts" to emptyList(),
         ),
     ),
+    YEAR(
+        "analysis_layout_year_v2",
+        YearCharts,
+        listOf(
+            ChartGroup(
+                R.string.analysis_group_accounts,
+                emptyList(),
+                listOf(
+                    ChartGroup(
+                        R.string.analysis_sub_balance,
+                        listOf(
+                            ChartType.YEAR_ACCOUNT_MONTHLY, ChartType.YEAR_ACCOUNT_SHARE, ChartType.YEAR_ACCOUNT_YEARS,
+                            ChartType.YEAR_SUBACCOUNT_MONTHLY, ChartType.YEAR_SUBACCOUNT_SHARE, ChartType.YEAR_SUBACCOUNT_YEARS,
+                        ),
+                    ),
+                ),
+            ),
+            ChartGroup(
+                R.string.analysis_group_categories,
+                emptyList(),
+                listOf(
+                    ChartGroup(
+                        R.string.analysis_sub_category,
+                        listOf(
+                            ChartType.YEAR_EXPENSE_CATEGORY_MONTHLY, ChartType.YEAR_EXPENSE_CATEGORY_SHARE, ChartType.YEAR_EXPENSE_CATEGORY_YEARS,
+                            ChartType.YEAR_INCOME_CATEGORY_MONTHLY, ChartType.YEAR_INCOME_CATEGORY_SHARE, ChartType.YEAR_INCOME_CATEGORY_YEARS,
+                        ),
+                    ),
+                    ChartGroup(
+                        R.string.analysis_sub_subcategory,
+                        listOf(
+                            ChartType.YEAR_EXPENSE_SUBCATEGORY_MONTHLY, ChartType.YEAR_EXPENSE_SUBCATEGORY_SHARE, ChartType.YEAR_EXPENSE_SUBCATEGORY_YEARS,
+                            ChartType.YEAR_INCOME_SUBCATEGORY_MONTHLY, ChartType.YEAR_INCOME_SUBCATEGORY_SHARE, ChartType.YEAR_INCOME_SUBCATEGORY_YEARS,
+                        ),
+                    ),
+                ),
+            ),
+            ChartGroup(R.string.analysis_group_trades, YearTradeCharts),
+            ChartGroup(R.string.analysis_group_savings, YearSavingCharts),
+            ChartGroup(R.string.analysis_group_budgets, YearBudgetCharts),
+            ChartGroup(R.string.analysis_group_other, listOf(ChartType.YEAR_SUMMARY)),
+        ),
+        emptyList(),
+    ),
     ;
 
     /**
@@ -196,6 +291,29 @@ val BudgetCharts
         ChartType.BUDGET_FORECAST, ChartType.BUDGET_BURNDOWN, ChartType.BUDGET_HISTORY,
         ChartType.BUDGET_WATERFALL, ChartType.BUDGET_COVERAGE, ChartType.BUDGET_REACHED,
     )
+
+val YearTradeCharts
+    get() = listOf(
+        ChartType.YEAR_TRADE_WEEK, ChartType.YEAR_TRADE_SIZES, ChartType.YEAR_TRADE_TOP,
+        ChartType.YEAR_TRADE_FREQUENCY, ChartType.YEAR_TRADE_TRANSFERS,
+    )
+
+val YearSavingCharts
+    get() = listOf(ChartType.YEAR_SAVING_PACE, ChartType.YEAR_SAVING_HISTORY, ChartType.YEAR_SAVING_RATE, ChartType.YEAR_SAVING_SOURCES)
+
+val YearBudgetCharts
+    get() = listOf(ChartType.YEAR_BUDGET_TOTALS, ChartType.YEAR_BUDGET_HISTORY, ChartType.YEAR_BUDGET_COVERAGE, ChartType.YEAR_BUDGET_REACHED)
+
+/** The year list's first-run layout: every year chart, in the "+" sheet's group order. */
+val YearCharts
+    get() = listOf(
+        ChartType.YEAR_ACCOUNT_MONTHLY, ChartType.YEAR_SUBACCOUNT_MONTHLY, ChartType.YEAR_ACCOUNT_SHARE,
+        ChartType.YEAR_SUBACCOUNT_SHARE, ChartType.YEAR_ACCOUNT_YEARS, ChartType.YEAR_SUBACCOUNT_YEARS,
+        ChartType.YEAR_EXPENSE_CATEGORY_MONTHLY, ChartType.YEAR_EXPENSE_SUBCATEGORY_MONTHLY, ChartType.YEAR_EXPENSE_CATEGORY_SHARE,
+        ChartType.YEAR_EXPENSE_SUBCATEGORY_SHARE, ChartType.YEAR_EXPENSE_CATEGORY_YEARS, ChartType.YEAR_EXPENSE_SUBCATEGORY_YEARS,
+        ChartType.YEAR_INCOME_CATEGORY_MONTHLY, ChartType.YEAR_INCOME_SUBCATEGORY_MONTHLY, ChartType.YEAR_INCOME_CATEGORY_SHARE,
+        ChartType.YEAR_INCOME_SUBCATEGORY_SHARE, ChartType.YEAR_INCOME_CATEGORY_YEARS, ChartType.YEAR_INCOME_SUBCATEGORY_YEARS,
+    ) + YearTradeCharts + YearSavingCharts + YearBudgetCharts + ChartType.YEAR_SUMMARY
 
 /** This group's charts and those of its sub-groups, at any depth. */
 fun ChartGroup.allCharts(): List<ChartType> = charts + sub.flatMap { it.allCharts() }
@@ -274,7 +392,8 @@ fun decodeLayout(value: String?, defaults: List<ChartType>, offered: Set<ChartTy
  * Accounts lists joined in that order, each falling back to its own first-run layout.
  */
 inline fun decodeSlot(slot: LayoutSlot, read: (String) -> String?): List<ChartCard> {
-    read(slot.settingKey)?.let { return decodeLayout(it, slot.charts, slot.offered) }
+    val own = read(slot.settingKey)
+    if (own != null || slot.legacy.isEmpty()) return decodeLayout(own, slot.charts, slot.offered)
     return slot.legacy.flatMap { (key, defaults) -> decodeLayout(read(key), defaults, slot.offered) }
 }
 
