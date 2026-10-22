@@ -936,7 +936,7 @@ flowchart LR
 
 ### 7.6 Analysis
 
-Chỉ là màn giữ chỗ ("Sắp ra mắt"). Bảng `category_month_stat` đã sẵn sàng cho biểu đồ tròn và so sánh tháng về sau, không cần đổi schema.
+Mỗi tháng một trang, mỗi năm một trang. Trang năm có danh sách biểu đồ riêng (`LayoutSlot.YEAR`, lưu ở `analysis_layout_year_v2`) với đúng các nhóm của trang tháng (Accounts, Categories, Trades, Savings, Budgets, Other). Mỗi biểu đồ năm (`ChartType.YEAR_*`) trỏ tới biểu đồ tháng cùng dạng qua `base` và dùng lại card đó, chỉ đổi dữ liệu: Accounts/Categories từ `AnalysisYear.kt`, Trades/Savings/Budgets từ các hàm dựng của trang tháng chạy trên các tháng của năm.
 
 ### 7.7 Setting
 

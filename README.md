@@ -85,7 +85,7 @@ Open the app and you are already on the "add expense" screen. Log a purchase in 
 
 <img src="docs/analysis.png" align="right" width="240" alt="Analysis" />
 
-- **One page per month and one per year**, swiped through or stepped with the year and month pickers in the top bar. Swipe right off December to reach that year's page, which says **Coming soon** for now.
+- **One page per month and one per year**, swiped through or stepped with the year and month pickers in the top bar. Swipe right off December to reach that year's page: its own chart list with the same sections as the month pages (Accounts, Categories, Trades, Savings, Budgets, Other), 32 charts drawn from the year's months.
 - **Your own layout:** every month page is the same list of chart cards you arrange. Long-press a card to lift it, drag it to a new place and let go. To remove a card, drag it to the right edge: a red strip opens as your finger gets close, and dropping on it removes the card (with **Undo**).
 - **Add chart:** the button at the bottom of the list opens a sheet of the charts on offer, grouped (Accounts, Categories, Other) and shown with icons. The layout is saved in the database so it travels with backups.
 - **Accounts:** balances by day, a breakdown pie of month-end balances, and the last 5 months stacked — for each parent account (its subaccounts added up) or for the subaccounts of one parent you pick. Each account can be switched off on its card.
