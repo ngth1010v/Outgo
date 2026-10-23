@@ -402,7 +402,7 @@ private fun ChartList(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             items(cards, key = { it.id }, contentType = { it.type }) { card ->
-                val action: (@Composable () -> Unit)? = if (card.type.hasMode || card.type.hasZero || card.type.hasParent || card.type.hasToggles || card.type.pick != null) {
+                val action: (@Composable () -> Unit)? = if (card.type.hasMode || card.type.hasParent || card.type.hasToggles || card.type.pick != null) {
                     { CardChips(card, state, month) { viewModel.updateCard(slot, it) } }
                 } else {
                     null
@@ -470,10 +470,6 @@ private fun CardChips(card: ChartCard, state: AnalysisUiState, month: Int, onCha
         }
         if (card.type.hasMode) {
             ChoiceChip(modeLabel(card.mode), AnalysisMode.entries.map { it to modeLabel(it) }) { onChange(card.copy(mode = it)) }
-        }
-        if (card.type.hasZero) {
-            val options = listOf(false to stringResource(R.string.analysis_axis_fit), true to stringResource(R.string.analysis_axis_zero))
-            ChoiceChip(options.first { it.first == card.zero }.second, options) { onChange(card.copy(zero = it)) }
         }
     }
 }
@@ -617,6 +613,9 @@ private fun shortChartName(type: ChartType): String {
         else -> R.string.analysis_short_income
     }
     val chart = when {
+        type.count && name.endsWith("_DAILY") -> R.string.analysis_short_count_daily
+        type.count && name.endsWith("_MONTHLY") -> R.string.analysis_short_count_monthly
+        type.count -> R.string.analysis_short_count_share
         name.endsWith("_DAILY") -> R.string.analysis_short_daily
         name.endsWith("_MONTHLY") -> R.string.analysis_short_monthly
         name.endsWith("_SHARE") -> R.string.analysis_short_share
@@ -649,6 +648,22 @@ private fun chartName(type: ChartType): String = if (type.insight != null) insig
         ChartType.INCOME_SUBCATEGORY_SHARE -> R.string.analysis_income_subcategory_share_title
         ChartType.INCOME_CATEGORY_MONTHS -> R.string.analysis_income_category_months_title
         ChartType.INCOME_SUBCATEGORY_MONTHS -> R.string.analysis_income_subcategory_months_title
+        ChartType.EXPENSE_CATEGORY_COUNT_DAILY -> R.string.analysis_expense_category_count_daily_title
+        ChartType.EXPENSE_SUBCATEGORY_COUNT_DAILY -> R.string.analysis_expense_subcategory_count_daily_title
+        ChartType.EXPENSE_CATEGORY_COUNT_SHARE -> R.string.analysis_expense_category_count_share_title
+        ChartType.EXPENSE_SUBCATEGORY_COUNT_SHARE -> R.string.analysis_expense_subcategory_count_share_title
+        ChartType.INCOME_CATEGORY_COUNT_DAILY -> R.string.analysis_income_category_count_daily_title
+        ChartType.INCOME_SUBCATEGORY_COUNT_DAILY -> R.string.analysis_income_subcategory_count_daily_title
+        ChartType.INCOME_CATEGORY_COUNT_SHARE -> R.string.analysis_income_category_count_share_title
+        ChartType.INCOME_SUBCATEGORY_COUNT_SHARE -> R.string.analysis_income_subcategory_count_share_title
+        ChartType.YEAR_EXPENSE_CATEGORY_COUNT_MONTHLY -> R.string.analysis_year_expense_category_count_monthly_title
+        ChartType.YEAR_EXPENSE_SUBCATEGORY_COUNT_MONTHLY -> R.string.analysis_year_expense_subcategory_count_monthly_title
+        ChartType.YEAR_EXPENSE_CATEGORY_COUNT_SHARE -> R.string.analysis_year_expense_category_count_share_title
+        ChartType.YEAR_EXPENSE_SUBCATEGORY_COUNT_SHARE -> R.string.analysis_year_expense_subcategory_count_share_title
+        ChartType.YEAR_INCOME_CATEGORY_COUNT_MONTHLY -> R.string.analysis_year_income_category_count_monthly_title
+        ChartType.YEAR_INCOME_SUBCATEGORY_COUNT_MONTHLY -> R.string.analysis_year_income_subcategory_count_monthly_title
+        ChartType.YEAR_INCOME_CATEGORY_COUNT_SHARE -> R.string.analysis_year_income_category_count_share_title
+        ChartType.YEAR_INCOME_SUBCATEGORY_COUNT_SHARE -> R.string.analysis_year_income_subcategory_count_share_title
         ChartType.YEAR_SUMMARY -> R.string.analysis_year_summary_title
         ChartType.YEAR_ACCOUNT_MONTHLY -> R.string.analysis_year_account_monthly_title
         ChartType.YEAR_SUBACCOUNT_MONTHLY -> R.string.analysis_year_subaccount_monthly_title
@@ -698,7 +713,7 @@ private fun MonthPage(
             }
             in MonthBalanceCharts ->
                 BalanceCard(card, height, state.monthBalances[month] ?: Stage.Loading, state.accountTree, month, animate)
-            in MonthCategoryGroupCharts ->
+            in MonthCategoryGroupCharts, in MonthCategoryCountCharts ->
                 CategoryCard(card, height, state.monthCategories[month] ?: Stage.Loading, treeOf(card.type, state), month, animate)
             // Every chart a list can hold is one of the above; decodeLayout drops the rest.
             else -> if (card.type.insight != null) InsightCard(card, height, state, month, animate, actions)
@@ -724,7 +739,7 @@ private fun BalanceCard(card: ChartCard, height: Dp, accounts: Stage<BalancesUi>
                     val length = data.daily.lines.maxOfOrNull { it.start + it.values.size } ?: 0
                     if (length == 0) emptyList() else sumLines(data.daily.lines, groups, length)
                 }
-                BalanceDaysSection(title, lines, data.daily.daysInMonth, card.zero, animate)
+                BalanceDaysSection(title, lines, data.daily.daysInMonth, animate)
             }
             ChartType.ACCOUNT_SHARE, ChartType.SUBACCOUNT_SHARE -> {
                 val selection = remember(month, card.id) { AnalysisSelection() }
@@ -755,25 +770,27 @@ private fun CategoryCard(card: ChartCard, height: Dp, data: Stage<CategoryCharts
     val groups = remember(tree, card.accountId, card.type, card.hidden) {
         balanceGroups(tree, card.accountId, card.type.hasParent).filter { it.first.id !in card.hidden }
     }
+    val counts = card.type.count
     StageSection(data, title, height) { charts ->
-        when (card.type) {
-            ChartType.EXPENSE_CATEGORY_DAILY, ChartType.EXPENSE_SUBCATEGORY_DAILY,
-            ChartType.INCOME_CATEGORY_DAILY, ChartType.INCOME_SUBCATEGORY_DAILY -> {
-                val lines = remember(charts, groups) {
-                    val length = charts.daily.maxOfOrNull { it.start + it.values.size } ?: 0
-                    if (length == 0) emptyList() else sumLines(charts.daily, groups, length).filter { line -> line.values.any { it != 0L } }
+        val name = card.type.name
+        when {
+            name.endsWith("_DAILY") -> {
+                val daily = if (counts) charts.dailyCount else charts.daily
+                val lines = remember(daily, groups) {
+                    val length = daily.maxOfOrNull { it.start + it.values.size } ?: 0
+                    if (length == 0) emptyList() else sumLines(daily, groups, length).filter { line -> line.values.any { it != 0L } }
                 }
-                BalanceDaysSection(title, lines, charts.daysInMonth, card.zero, animate)
+                BalanceDaysSection(title, lines, charts.daysInMonth, animate, counts = counts)
             }
-            ChartType.EXPENSE_CATEGORY_SHARE, ChartType.EXPENSE_SUBCATEGORY_SHARE,
-            ChartType.INCOME_CATEGORY_SHARE, ChartType.INCOME_SUBCATEGORY_SHARE -> {
+            name.endsWith("_SHARE") -> {
                 val selection = remember(month, card.id) { AnalysisSelection() }
-                val rows = remember(charts, groups) {
+                val monthly = if (counts) charts.monthlyCount else charts.monthly
+                val rows = remember(monthly, charts.months, groups) {
                     // This month and the one before; a category at 0 in both has nothing to show.
-                    val lines = sumLines(charts.monthly, groups, charts.months.size).map { it.copy(values = it.values.takeLast(2)) }
+                    val lines = sumLines(monthly, groups, charts.months.size).map { it.copy(values = it.values.takeLast(2)) }
                     buildShare(lines.filter { line -> line.values.any { it != 0L } }, groups.associate { it.first.id to it.first })
                 }
-                BalanceShareSection(title, rows, selection, animate, kind)
+                BalanceShareSection(title, rows, selection, animate, kind, counts = counts)
             }
             else -> {
                 val lines = remember(charts, groups) {
@@ -816,6 +833,7 @@ private fun YearPage(
             }
             base in MonthBalanceCharts -> YearLinesCard(card, height, data.map { it.balances }, state.accountTree, page.key, animate)
             base in MonthCategoryGroupCharts -> YearLinesCard(card, height, data.map { it.categories }, treeOf(card.type, state), page.key, animate)
+            base in MonthCategoryCountCharts -> YearLinesCard(card, height, data.map { it.categoryCounts }, treeOf(card.type, state), page.key, animate)
             card.type.insight != null -> InsightCard(card, height, state, page.key, animate, actions)
         }
     }
@@ -848,14 +866,14 @@ private fun YearLinesCard(card: ChartCard, height: Dp, data: Stage<YearLinesUi>,
                 val lines = remember(year, groups) {
                     if (year.months.isEmpty()) emptyList() else sumLines(year.monthly, groups, year.months.size).kept()
                 }
-                BalanceDaysSection(title, lines, MONTHS_IN_YEAR, card.zero, animate, xLabels = months)
+                BalanceDaysSection(title, lines, MONTHS_IN_YEAR, animate, xLabels = months, counts = card.type.count)
             }
             name.endsWith("_SHARE") -> {
                 val selection = remember(key, card.id) { AnalysisSelection() }
                 val rows = remember(year, groups) {
                     buildShare(sumLines(year.share, groups, 2).kept(), groups.associate { it.first.id to it.first })
                 }
-                BalanceShareSection(title, rows, selection, animate, card.type.categoryKind ?: CategoryKind.INCOME)
+                BalanceShareSection(title, rows, selection, animate, card.type.categoryKind ?: CategoryKind.INCOME, counts = card.type.count)
             }
             else -> {
                 val lines = remember(year, groups) { sumLines(year.yearly, groups, year.years.size).kept() }

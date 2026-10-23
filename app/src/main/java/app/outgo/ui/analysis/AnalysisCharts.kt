@@ -129,10 +129,11 @@ private val AxisGap = 4.dp
 
 /**
  * Compact value-axis labels ("1.5M") for [values], measured once per list, never per frame.
- * A negative value is labelled with its sign, for the lower half of a diverging chart.
+ * A negative value is labelled with its sign, for the lower half of a diverging chart. With
+ * [counts] the values are plain numbers (trade counts), not money.
  */
 @Composable
-private fun rememberAxisLabels(values: List<Long>): List<Pair<Long, TextLayoutResult>> {
+private fun rememberAxisLabels(values: List<Long>, counts: Boolean = false): List<Pair<Long, TextLayoutResult>> {
     val style = MaterialTheme.typography.labelSmall
     val measurer = rememberTextMeasurer()
     val units = Triple(
@@ -140,7 +141,7 @@ private fun rememberAxisLabels(values: List<Long>): List<Pair<Long, TextLayoutRe
         stringResource(R.string.unit_million),
         stringResource(R.string.unit_billion),
     )
-    return remember(values, style, units) { values.map { it to measurer.measure(compactAmount(it, units), style) } }
+    return remember(values, style, units, counts) { values.map { it to measurer.measure(if (counts) it.toString() else compactAmount(it, units), style) } }
 }
 
 /** Width the value-axis labels take on the right of the plot, gap included. */
@@ -294,7 +295,7 @@ private fun DrawScope.drawHover(
     point: Offset,
     color: Color,
     xText: String,
-    value: Long,
+    valueText: String,
     plotWidth: Float,
     plotHeight: Float,
 ) {
@@ -311,7 +312,7 @@ private fun DrawScope.drawHover(
         drawText(label, look.text, Offset(left + padX, top + padY))
     }
     // Right-aligned to the edge, so an amount wider than the axis labels grows over the plot.
-    val valueLabel = look.measurer.measure(Money.groupThousands(value), look.style)
+    val valueLabel = look.measurer.measure(valueText, look.style)
     val valueHeight = valueLabel.size.height + padY * 2
     pill(
         valueLabel,
@@ -429,6 +430,7 @@ private fun DrawScope.drawBalanceLines(
     plotWidth: Float,
     plotHeight: Float,
     xText: (Int) -> String,
+    valueText: (Long) -> String,
 ) {
     val focused = focus?.line ?: -1
     // Only a full focus locks the hover; a fading one lets it pick any line again.
@@ -456,7 +458,7 @@ private fun DrawScope.drawBalanceLines(
         drawFocus(focus, points[focused].last(), Color(lines[focused].color), plotWidth)
     }
     hit?.let {
-        drawHover(look, points[it.line][it.point], Color(lines[it.line].color), xText(it.point + lines[it.line].start), lines[it.line].values[it.point], plotWidth, plotHeight)
+        drawHover(look, points[it.line][it.point], Color(lines[it.line].color), xText(it.point + lines[it.line].start), valueText(lines[it.line].values[it.point]), plotWidth, plotHeight)
     }
 }
 
@@ -482,6 +484,8 @@ fun DailyBalanceChart(
     onFocus: ((Long?) -> Unit)? = null,
     /** One name per point (a year's months) in place of the day numbers. */
     xLabels: List<String>? = null,
+    /** The values are trade counts: plain numbers, not money. */
+    counts: Boolean = false,
 ) {
     val gridColor = MaterialTheme.colorScheme.outlineVariant
     val axisColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -494,9 +498,10 @@ fun DailyBalanceChart(
     var height by remember { mutableIntStateOf(0) }
     val values = remember(lines) { lines.flatMap { it.values } }
     val axis = rememberValueAxis(values, zero, height, xTicks.firstOrNull()?.second?.size?.height ?: 0, pad)
-    val yTicks = rememberAxisLabels(axis.ticks)
+    val yTicks = rememberAxisLabels(axis.ticks, counts)
     val scrub = remember { Scrub() }
     val look = rememberHoverLook()
+    val valueText: (Long) -> String = if (counts) { v -> v.toString() } else { v -> Money.groupThousands(v) }
 
     val geometry = remember { LineGeometry() }
     val shown = remember { ShownFocus() }
@@ -509,8 +514,8 @@ fun DailyBalanceChart(
         stringResource(R.string.unit_million),
         stringResource(R.string.unit_billion),
     )
-    val focusLabel = remember(lines, shownIndex, style, units) {
-        lines.getOrNull(shownIndex)?.values?.lastOrNull()?.let { measurer.measure(compactAmount(it, units), style) }
+    val focusLabel = remember(lines, shownIndex, style, units, counts) {
+        lines.getOrNull(shownIndex)?.values?.lastOrNull()?.let { measurer.measure(if (counts) it.toString() else compactAmount(it, units), style) }
     }
     val focusText = remember(lines, shownIndex) {
         val color = lines.getOrNull(shownIndex)?.let { Color(it.color) } ?: Color.Black
@@ -560,7 +565,7 @@ fun DailyBalanceChart(
         if (gapColors != null && lines.size >= 2) {
             drawGap(lines[0].values, lines[1].values, ::x, ::y, gapColors.first, gapColors.second)
         }
-        drawBalanceLines(lines, points, scrub, progress(), focus, look, plotWidth, plotHeight, xText)
+        drawBalanceLines(lines, points, scrub, progress(), focus, look, plotWidth, plotHeight, xText, valueText)
     }
 }
 
@@ -684,7 +689,7 @@ fun StackedBalanceBars(lines: List<BalanceLine>, labels: List<String>, progress:
         }
         hovered?.let { m ->
             val total = lines.sumOf { it.values.getOrElse(m) { 0L } }
-            drawHover(look, Offset(m * slot + slot / 2f, y(total)), axisColor, labels[m], total, plotWidth, plotHeight)
+            drawHover(look, Offset(m * slot + slot / 2f, y(total)), axisColor, labels[m], Money.groupThousands(total), plotWidth, plotHeight)
         }
     }
 }

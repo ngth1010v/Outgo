@@ -76,10 +76,18 @@ data class ShareRow(
  * One month of the Categories group, both kinds, one line per category as stored (a subcategory,
  * or a parent that holds trades itself); a card adds them up per [AccountNode] with [sumLines].
  * [daily] runs up each one's month-to-date total, the live month stopping at today; [monthly]
- * holds each one's total in every month of [months], the page's own month last.
+ * holds each one's total in every month of [months], the page's own month last. [dailyCount] and
+ * [monthlyCount] are the same for the number of trades instead of the money.
  */
 @Immutable
-data class CategoryChartsUi(val daysInMonth: Int, val daily: List<BalanceLine>, val months: List<Int>, val monthly: List<BalanceLine>)
+data class CategoryChartsUi(
+    val daysInMonth: Int,
+    val daily: List<BalanceLine>,
+    val months: List<Int>,
+    val monthly: List<BalanceLine>,
+    val dailyCount: List<BalanceLine> = emptyList(),
+    val monthlyCount: List<BalanceLine> = emptyList(),
+)
 
 /** One account's balance at the end of each month of [BalanceTrendUi.months]. */
 @Immutable

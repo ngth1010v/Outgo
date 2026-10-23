@@ -320,6 +320,7 @@ class AnalysisViewModel(
                     transfers.sumOf { it.total },
                     buildYearBalances(flows, opening, year, last, names),
                     buildYearCategories(categoryTotals, year, last),
+                    buildYearCategories(categoryTotals, year, last) { it.tradeCount.toLong() },
                 )
             }
             yearCache[year] = if (ui.summary == null && ui.balances == null && ui.categories == null) Stage.Empty else Stage.Ready(ui)

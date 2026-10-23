@@ -48,7 +48,14 @@ data class YearLinesUi(
 
 /** A year page's own data; a null group had nothing to show. */
 @Immutable
-data class YearUi(val summary: SummaryUi?, val transfers: Long, val balances: YearLinesUi?, val categories: YearLinesUi?)
+data class YearUi(
+    val summary: SummaryUi?,
+    val transfers: Long,
+    val balances: YearLinesUi?,
+    val categories: YearLinesUi?,
+    /** [categories] counting trades instead of money. */
+    val categoryCounts: YearLinesUi? = null,
+)
 
 /**
  * The year's totals against the same months of the year before (the whole year once it is over),
@@ -96,26 +103,31 @@ fun buildYearBalances(
 /**
  * Category totals for [year] up to [lastMonth]: year-to-date month by month, this year against the
  * same months of the year before, and the last [YEAR_COUNT] years. [totals] must cover those years.
- * Null when no category has money in them.
+ * Null when no category has money in them. [value] picks what is added up: the money, or the trade count.
  */
-fun buildYearCategories(totals: List<CategoryMonthTotal>, year: Int, lastMonth: Int): YearLinesUi? {
-    val inRange = totals.filter { it.monthKey <= lastMonth && it.total != 0L }
+fun buildYearCategories(
+    totals: List<CategoryMonthTotal>,
+    year: Int,
+    lastMonth: Int,
+    value: (CategoryMonthTotal) -> Long = { it.total },
+): YearLinesUi? {
+    val inRange = totals.filter { it.monthKey <= lastMonth && value(it) != 0L }
     if (inRange.isEmpty()) return null
     val months = monthsBetween(year * 100 + 1, lastMonth)
     val years = (year - YEAR_COUNT + 1..year).toList()
     val byCategory = inRange.groupBy { it.categoryId }
     fun line(id: Long, values: List<Long>) = BalanceLine(id, "", OTHER_COLOR, values)
     val monthly = byCategory.map { (id, rows) ->
-        val perMonth = rows.groupBy { it.monthKey }.mapValues { (_, r) -> r.sumOf { it.total } }
+        val perMonth = rows.groupBy { it.monthKey }.mapValues { (_, r) -> r.sumOf(value) }
         var running = 0L
         line(id, months.map { m -> running += perMonth[m] ?: 0L; running })
     }
     val share = byCategory.map { (id, rows) ->
-        val previous = rows.filter { it.monthKey / 100 == year - 1 && it.monthKey % 100 <= lastMonth % 100 }.sumOf { it.total }
-        line(id, listOf(previous, rows.filter { it.monthKey / 100 == year }.sumOf { it.total }))
+        val previous = rows.filter { it.monthKey / 100 == year - 1 && it.monthKey % 100 <= lastMonth % 100 }.sumOf(value)
+        line(id, listOf(previous, rows.filter { it.monthKey / 100 == year }.sumOf(value)))
     }
     val yearly = byCategory.map { (id, rows) ->
-        val perYear = rows.groupBy { it.monthKey / 100 }.mapValues { (_, r) -> r.sumOf { it.total } }
+        val perYear = rows.groupBy { it.monthKey / 100 }.mapValues { (_, r) -> r.sumOf(value) }
         line(id, years.map { perYear[it] ?: 0L })
     }
     return YearLinesUi(months, monthly, share, years, yearly)

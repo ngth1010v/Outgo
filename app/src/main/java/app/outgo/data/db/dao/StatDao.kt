@@ -24,7 +24,7 @@ interface StatDao {
     /** Analysis category charts: one row per (month, category as stored, never rolled up) in range. */
     @Query(
         """
-        SELECT category_id AS categoryId, month_key AS monthKey, total
+        SELECT category_id AS categoryId, month_key AS monthKey, total, trade_count AS tradeCount
         FROM category_month_stat
         WHERE month_key BETWEEN :fromMonth AND :toMonth
         """,

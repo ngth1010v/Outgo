@@ -28,8 +28,8 @@ data class MonthCategoryTotal(
     val total: Long,
 )
 
-/** One category's total in one month, straight from `category_month_stat`. */
-data class CategoryMonthTotal(val categoryId: Long, val monthKey: Int, val total: Long)
+/** One category's total and trade count in one month, straight from `category_month_stat`. */
+data class CategoryMonthTotal(val categoryId: Long, val monthKey: Int, val total: Long, val tradeCount: Int = 0)
 
 /** Spend of one LIMIT budget (its category plus children) in one month. */
 data class BudgetMonthSpend(

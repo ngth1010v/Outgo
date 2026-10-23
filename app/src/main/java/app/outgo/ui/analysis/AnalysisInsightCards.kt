@@ -1,6 +1,7 @@
 package app.outgo.ui.analysis
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -46,8 +47,10 @@ import app.outgo.ui.theme.BudgetWarningYellow
 import app.outgo.ui.theme.ExpenseRed
 import app.outgo.ui.theme.IncomeGreen
 import app.outgo.util.Money
+import app.outgo.util.MonthKey
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -293,6 +296,7 @@ private fun CalendarCard(card: ChartCard, data: TradesInsightUi, actions: Insigh
         onSelect = { selected = if (it == selected) null else it },
         progress = introProgress(animate),
         modifier = Modifier.fillMaxWidth().height(CalendarHeight),
+        today = remember(data.month) { LocalDate.now().takeIf { it.year * 100 + it.monthValue == data.month }?.dayOfMonth },
     )
     val signed: (Long) -> String = { if (card.mode == AnalysisMode.EXPENSE) Money.formatSigned(-it) else Money.formatSigned(it) }
     val day = selected
@@ -332,6 +336,8 @@ private fun WeekCard(card: ChartCard, data: TradesInsightUi, animate: Boolean) {
         onSelect = { selected = if (it == selected) null else it },
         progress = introProgress(animate),
         modifier = Modifier.fillMaxWidth().height(CalendarHeight),
+        // A weekday and hour, not a date: marked on every page.
+        now = remember { LocalDateTime.now().let { (it.dayOfWeek.value - 1) * DAY_SLOTS + it.hour / (24 / DAY_SLOTS) } },
     )
     val weekdays = stringArrayResource(R.array.weekday_abbrev)
     fun slotName(i: Int): String {
@@ -594,54 +600,76 @@ private fun MonthGrid(
     detail: (GridRow, Int, GridCell?) -> String,
     pick: CellPick,
 ) {
-    val labels = monthLabels(months)
+    // Month numbers, so six and twelve columns read alike.
+    val labels = remember(months) { months.map { (it % 100).toString() } }
+    val current = remember { MonthKey.current() }
+    val nowBorder = MaterialTheme.colorScheme.onSurface
     val nameWidth = 84.dp
     val tailWidth = 40.dp
     val rowHeight = gridRowHeight()
     val empty = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f)
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Spacer(Modifier.width(nameWidth))
-        labels.forEach {
-            // Twelve columns leave no room for a whole name: their first letter.
-            Text(
-                if (months.size > 6) it.take(1) else it,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                modifier = Modifier.weight(1f),
-            )
-        }
-        Text(tailTitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.End, maxLines = 1, modifier = Modifier.width(tailWidth))
-    }
-    Column(modifier = Modifier.fillMaxWidth().height(rowHeight * GRID_ROWS_SHOWN).verticalScroll(rememberScrollState())) {
-        rows.forEach { row ->
-            Row(modifier = Modifier.fillMaxWidth().height(rowHeight), verticalAlignment = Alignment.CenterVertically) {
-                Row(modifier = Modifier.width(nameWidth), verticalAlignment = Alignment.CenterVertically) {
-                    IconView(iconId = row.ref.iconId, size = 18.dp, color = row.ref.color, circle = false)
-                    Spacer(Modifier.width(4.dp))
-                    Text(row.ref.name, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(end = 4.dp))
+    val headerHeight = lineOf(MaterialTheme.typography.labelSmall)
+    // The header and the rows in one box, so the current month's cells get one border over the column.
+    Box(modifier = Modifier.fillMaxWidth()) {
+        Column(verticalArrangement = Arrangement.spacedBy(GapDp)) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.width(nameWidth))
+                labels.forEach {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f),
+                    )
                 }
-                row.cells.forEachIndexed { i, cell ->
-                    val selected = pick.row == row.ref.id && pick.column == i
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .padding(1.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(if (cell == null) empty else cellColor(cell))
-                            .then(if (selected) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)) else Modifier)
-                            .clickable { pick.toggle(row.ref.id, i) },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        // Twelve columns leave no room for a percentage either: the colour tells it.
-                        if (cell != null && cellText != null && months.size <= 6) {
-                            Text(cellText(cell), style = MaterialTheme.typography.labelSmall, maxLines = 1, color = MaterialTheme.colorScheme.onSurface)
+                Text(tailTitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.End, maxLines = 1, modifier = Modifier.width(tailWidth))
+            }
+            Column(modifier = Modifier.fillMaxWidth().height(rowHeight * GRID_ROWS_SHOWN).verticalScroll(rememberScrollState())) {
+                rows.forEach { row ->
+                    Row(modifier = Modifier.fillMaxWidth().height(rowHeight), verticalAlignment = Alignment.CenterVertically) {
+                        Row(modifier = Modifier.width(nameWidth), verticalAlignment = Alignment.CenterVertically) {
+                            IconView(iconId = row.ref.iconId, size = 18.dp, color = row.ref.color, circle = false)
+                            Spacer(Modifier.width(4.dp))
+                            Text(row.ref.name, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(end = 4.dp))
                         }
+                        row.cells.forEachIndexed { i, cell ->
+                            val selected = pick.row == row.ref.id && pick.column == i
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .padding(1.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(if (cell == null) empty else cellColor(cell))
+                                    .then(if (selected) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)) else Modifier)
+                                    .clickable { pick.toggle(row.ref.id, i) },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                // Twelve columns leave no room for a percentage either: the colour tells it.
+                                if (cell != null && cellText != null && months.size <= 6) {
+                                    Text(cellText(cell), style = MaterialTheme.typography.labelSmall, maxLines = 1, color = MaterialTheme.colorScheme.onSurface)
+                                }
+                            }
+                        }
+                        Text(tail(row), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium, textAlign = TextAlign.End, maxLines = 1, modifier = Modifier.width(tailWidth))
                     }
                 }
-                Text(tail(row), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium, textAlign = TextAlign.End, maxLines = 1, modifier = Modifier.width(tailWidth))
+            }
+        }
+        val column = months.indexOf(current)
+        if (column >= 0 && rows.isNotEmpty()) {
+            // The cells only, not the month number over them; down to the last row shown, not the
+            // empty space under a short list.
+            val height = rowHeight * minOf(rows.size, GRID_ROWS_SHOWN)
+            Row(modifier = Modifier.fillMaxWidth().padding(top = headerHeight + GapDp).height(height)) {
+                Spacer(Modifier.width(nameWidth))
+                months.indices.forEach { i ->
+                    val edge = if (i == column) Modifier.border(NowStroke, nowBorder, RoundedCornerShape(5.dp)) else Modifier
+                    Box(Modifier.weight(1f).fillMaxHeight().then(edge))
+                }
+                Spacer(Modifier.width(tailWidth))
             }
         }
     }

@@ -91,10 +91,14 @@ fun chartContentHeight(type: ChartType): Dp {
         ChartType.ACCOUNT_DAILY, ChartType.SUBACCOUNT_DAILY, ChartType.ACCOUNT_MONTHS, ChartType.SUBACCOUNT_MONTHS,
         ChartType.EXPENSE_CATEGORY_DAILY, ChartType.EXPENSE_SUBCATEGORY_DAILY, ChartType.EXPENSE_CATEGORY_MONTHS,
         ChartType.EXPENSE_SUBCATEGORY_MONTHS, ChartType.INCOME_CATEGORY_DAILY, ChartType.INCOME_SUBCATEGORY_DAILY,
-        ChartType.INCOME_CATEGORY_MONTHS, ChartType.INCOME_SUBCATEGORY_MONTHS ->
+        ChartType.INCOME_CATEGORY_MONTHS, ChartType.INCOME_SUBCATEGORY_MONTHS,
+        ChartType.EXPENSE_CATEGORY_COUNT_DAILY, ChartType.EXPENSE_SUBCATEGORY_COUNT_DAILY,
+        ChartType.INCOME_CATEGORY_COUNT_DAILY, ChartType.INCOME_SUBCATEGORY_COUNT_DAILY ->
             BalanceHeight + SectionGap + small
         ChartType.ACCOUNT_SHARE, ChartType.SUBACCOUNT_SHARE, ChartType.EXPENSE_CATEGORY_SHARE, ChartType.EXPENSE_SUBCATEGORY_SHARE,
-        ChartType.INCOME_CATEGORY_SHARE, ChartType.INCOME_SUBCATEGORY_SHARE -> ShareHeight
+        ChartType.INCOME_CATEGORY_SHARE, ChartType.INCOME_SUBCATEGORY_SHARE,
+        ChartType.EXPENSE_CATEGORY_COUNT_SHARE, ChartType.EXPENSE_SUBCATEGORY_COUNT_SHARE,
+        ChartType.INCOME_CATEGORY_COUNT_SHARE, ChartType.INCOME_SUBCATEGORY_COUNT_SHARE -> ShareHeight
         else -> insightContentHeight(type.base ?: type)
     }
 }
@@ -399,10 +403,10 @@ private fun DailyLines(
     description: String,
     lines: List<BalanceLine>,
     daysInMonth: Int,
-    zero: Boolean,
     animate: Boolean,
     modifier: Modifier,
     xLabels: List<String>?,
+    counts: Boolean,
 ) {
     Section(title, modifier.semantics { contentDescription = description }) {
         if (lines.isEmpty()) {
@@ -413,12 +417,13 @@ private fun DailyLines(
             DailyBalanceChart(
                 lines,
                 daysInMonth,
-                zero,
+                zero = true,
                 introProgress(animate),
                 Modifier.fillMaxWidth().height(BalanceHeight),
                 focusedId = focus.rootId,
                 onFocus = focus::toggle,
                 xLabels = xLabels,
+                counts = counts,
             )
             AccountLegend(lines, focus.rootId, focus::toggle)
         }
@@ -480,20 +485,23 @@ internal fun AccountLegend(lines: List<BalanceLine>, focusedId: Long? = null, on
 
 // ------------------------------------------------------------ account balances
 
-/** The account balance charts' lines, one per account; all of them may be switched off. */
+/**
+ * The account balance charts' lines, one per account; all of them may be switched off. The value
+ * axis always takes in 0. With [counts] the values are trade counts, not money.
+ */
 @Composable
 fun BalanceDaysSection(
     title: String,
     lines: List<BalanceLine>,
     daysInMonth: Int,
-    zero: Boolean,
     animate: Boolean,
     modifier: Modifier = Modifier,
     /** A name per point, for a line per month of a year; null labels the days. */
     xLabels: List<String>? = null,
+    counts: Boolean = false,
 ) {
     val description = stringResource(R.string.analysis_cd_daily_lines, title, lines.size)
-    DailyLines(title, description, lines, daysInMonth, zero, animate, modifier, xLabels)
+    DailyLines(title, description, lines, daysInMonth, animate, modifier, xLabels, counts)
 }
 
 /** Month-end balances of the last months, stacked per month in the accounts' own order. */
@@ -534,6 +542,8 @@ fun BalanceShareSection(
     /** Which way a change counts as good: a balance or income going up is, an expense going up isn't. */
     kind: Int = CategoryKind.INCOME,
     modifier: Modifier = Modifier,
+    /** The rows are trade counts, not money. */
+    counts: Boolean = false,
 ) {
     val description = stringResource(R.string.analysis_cd_daily_lines, title, rows.size)
     val scroll = rememberScrollState()
@@ -558,7 +568,7 @@ fun BalanceShareSection(
                 )
                 Spacer(Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f).fillMaxHeight().verticalScroll(scroll)) {
-                    rows.forEach { ShareRowItem(it, selection, kind) }
+                    rows.forEach { ShareRowItem(it, selection, kind, counts) }
                 }
             }
         }
@@ -566,7 +576,7 @@ fun BalanceShareSection(
 }
 
 @Composable
-private fun ShareRowItem(row: ShareRow, selection: AnalysisSelection, kind: Int) {
+private fun ShareRowItem(row: ShareRow, selection: AnalysisSelection, kind: Int, counts: Boolean) {
     // Only the row whose selected-ness actually flips recomposes on a tap.
     val selected by remember(row.id) { derivedStateOf { selection.rootId == row.id } }
     val background by animateColorAsState(
@@ -596,9 +606,15 @@ private fun ShareRowItem(row: ShareRow, selection: AnalysisSelection, kind: Int)
         }
         Spacer(Modifier.width(4.dp))
         Column(horizontalAlignment = Alignment.End) {
-            Text(Money.format(row.amount), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, maxLines = 1)
             Text(
-                "${Money.formatSignedNoCurrency(row.delta)} (${signedPercent(row.deltaPercent)})",
+                if (counts) stringResource(R.string.analysis_trades_count, row.amount.toInt()) else Money.format(row.amount),
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+            )
+            val delta = if (counts) (if (row.delta > 0) "+${row.delta}" else "${row.delta}") else Money.formatSignedNoCurrency(row.delta)
+            Text(
+                "$delta (${signedPercent(row.deltaPercent)})",
                 style = MaterialTheme.typography.labelSmall,
                 color = deltaColor(row.delta, kind),
                 maxLines = 1,

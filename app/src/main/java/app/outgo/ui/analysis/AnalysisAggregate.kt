@@ -310,23 +310,27 @@ fun buildCategoryCharts(
     val daysInMonth = yearMonthOf(month).lengthOfMonth()
     val lastDay = daysCounted(month, zone, nowMillis).coerceAtMost(daysInMonth)
     val perDay = HashMap<Long, LongArray>()
+    val perDayCount = HashMap<Long, LongArray>()
     rows.forEach { row ->
         val id = row.categoryId ?: return@forEach
         val at = Instant.ofEpochMilli(row.occurredAt).atZone(zone)
         if (at.year * 100 + at.monthValue != month) return@forEach
         perDay.getOrPut(id) { LongArray(daysInMonth) }[at.dayOfMonth - 1] += row.amount
+        perDayCount.getOrPut(id) { LongArray(daysInMonth) }[at.dayOfMonth - 1] += 1
     }
-    val daily = perDay.map { (id, days) ->
+    fun runningLines(perId: Map<Long, LongArray>) = perId.map { (id, days) ->
         var running = 0L
         BalanceLine(id, "", OTHER_COLOR, (0 until lastDay).map { day -> running += days[day]; running })
     }
     val months = MonthKey.lastN(month, BALANCE_MONTH_COUNT)
     val index = months.withIndex().associate { (i, m) -> m to i }
     val perMonth = HashMap<Long, LongArray>()
+    val perMonthCount = HashMap<Long, LongArray>()
     totals.forEach { total ->
         val i = index[total.monthKey] ?: return@forEach
         perMonth.getOrPut(total.categoryId) { LongArray(months.size) }[i] += total.total
+        perMonthCount.getOrPut(total.categoryId) { LongArray(months.size) }[i] += total.tradeCount.toLong()
     }
-    val monthly = perMonth.map { (id, values) -> BalanceLine(id, "", OTHER_COLOR, values.asList()) }
-    return CategoryChartsUi(daysInMonth, daily, months, monthly)
+    fun monthLines(perId: Map<Long, LongArray>) = perId.map { (id, values) -> BalanceLine(id, "", OTHER_COLOR, values.asList()) }
+    return CategoryChartsUi(daysInMonth, runningLines(perDay), months, monthLines(perMonth), runningLines(perDayCount), monthLines(perMonthCount))
 }

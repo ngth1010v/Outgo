@@ -53,6 +53,9 @@ private val Gap = 4.dp
 private val CellRadius = CornerRadius(6f)
 private val Dash = PathEffect.dashPathEffect(floatArrayOf(8f, 8f))
 
+/** The border of the cell holding the current day, slot or month; thinner than a selection's. */
+internal val NowStroke = 1.5.dp
+
 /** The value of [value] on a 0..1 heat scale against [max]: square-rooted, so small days still show. */
 private fun heat(value: Long, max: Long): Float = if (max <= 0L || value == 0L) 0f else sqrt(abs(value).toFloat() / max).coerceIn(0f, 1f)
 
@@ -127,7 +130,8 @@ private fun DrawScope.drawTopPill(lines: List<TextLayoutResult>, x: Float, fill:
 /**
  * The month as a Monday-first calendar of six week rows, each day shaded by [values] (red for
  * money out, green for money in; with [diverging] the sign picks). A tap hands the day (1-based)
- * to [onSelect], or null off the days; the [selected] day is ringed.
+ * to [onSelect], or null off the days; the [selected] day is ringed, and [today] (when the month
+ * is the current one) has a thin neutral border.
  */
 @Composable
 fun CalendarHeatmap(
@@ -140,6 +144,7 @@ fun CalendarHeatmap(
     onSelect: (Int?) -> Unit,
     progress: () -> Float,
     modifier: Modifier = Modifier,
+    today: Int? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
     val style = MaterialTheme.typography.labelSmall
@@ -183,6 +188,7 @@ fun CalendarHeatmap(
             val color = if (diverging) (if (value >= 0) IncomeGreen else ExpenseRed) else base
             val cell = Size(cellW - inset * 2, cellH - inset * 2)
             drawRoundRect(heatColor(color, t, empty), Offset(left, y), cell, CellRadius)
+            if (today == d + 1) drawRoundRect(scheme.onSurface, Offset(left, y), cell, CellRadius, style = Stroke(NowStroke.toPx()))
             if (selected == d + 1) drawRoundRect(scheme.primary, Offset(left, y), cell, CellRadius, style = Stroke(2.dp.toPx()))
             val number = numbers[d]
             drawText(number, heatText(t, scheme.onSurfaceVariant), Offset(left + (cell.width - number.size.width) / 2f, y + (cell.height - number.size.height) / 2f))
@@ -194,10 +200,19 @@ fun CalendarHeatmap(
 
 /**
  * Seven weekday rows (Monday first) of [DAY_SLOTS] four-hour cells, shaded by [grid]'s amounts in
- * [base]. A tap hands the cell's index (weekday * [DAY_SLOTS] + slot) to [onSelect].
+ * [base]. A tap hands the cell's index (weekday * [DAY_SLOTS] + slot) to [onSelect]. The cell
+ * of [now] (same index) has a thin neutral border.
  */
 @Composable
-fun WeekHeatmap(grid: WeekGridUi, base: Color, selected: Int?, onSelect: (Int?) -> Unit, progress: () -> Float, modifier: Modifier = Modifier) {
+fun WeekHeatmap(
+    grid: WeekGridUi,
+    base: Color,
+    selected: Int?,
+    onSelect: (Int?) -> Unit,
+    progress: () -> Float,
+    modifier: Modifier = Modifier,
+    now: Int? = null,
+) {
     val scheme = MaterialTheme.colorScheme
     val style = MaterialTheme.typography.labelSmall
     val measurer = rememberTextMeasurer()
@@ -235,6 +250,7 @@ fun WeekHeatmap(grid: WeekGridUi, base: Color, selected: Int?, onSelect: (Int?) 
                 val topLeft = Offset(left + c * cellW + inset, r * cellH + inset)
                 val cell = Size(cellW - inset * 2, cellH - inset * 2)
                 drawRoundRect(heatColor(base, t, empty), topLeft, cell, CellRadius)
+                if (now == r * DAY_SLOTS + c) drawRoundRect(scheme.onSurface, topLeft, cell, CellRadius, style = Stroke(NowStroke.toPx()))
                 if (selected == r * DAY_SLOTS + c) drawRoundRect(scheme.primary, topLeft, cell, CellRadius, style = Stroke(2.dp.toPx()))
             }
         }

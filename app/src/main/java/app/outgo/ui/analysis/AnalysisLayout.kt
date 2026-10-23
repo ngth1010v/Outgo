@@ -21,8 +21,6 @@ enum class ChartType(
      */
     val base: ChartType? = null,
     val hasMode: Boolean = base?.hasMode ?: true,
-    /** A chart whose value axis can be pinned to reach 0; see [ChartCard.zero]. */
-    val hasZero: Boolean = base?.hasZero ?: false,
     /** Picks one parent account ([ChartCard.accountId]) and draws its subaccounts. */
     val hasParent: Boolean = base?.hasParent ?: false,
     /** Each account (category) it draws can be switched off ([ChartCard.hidden]). */
@@ -33,12 +31,14 @@ enum class ChartType(
     val insight: InsightGroup? = base?.insight,
     /** Picks one savings account or budget ([ChartCard.accountId]) and draws only that one. */
     val pick: Pick? = base?.pick,
+    /** A Categories-group chart that counts trades instead of adding up their money. */
+    val count: Boolean = base?.count ?: false,
 ) {
     // Accounts, month pages only. "Account" charts add each parent's subaccounts up; "subaccount"
     // charts draw the subaccounts of one picked parent.
     /** End-of-day balance, one line per account. */
-    ACCOUNT_DAILY(R.drawable.ph_presentation_chart, hasMode = false, hasZero = true, hasToggles = true),
-    SUBACCOUNT_DAILY(R.drawable.ph_chart_scatter, hasMode = false, hasZero = true, hasParent = true, hasToggles = true),
+    ACCOUNT_DAILY(R.drawable.ph_presentation_chart, hasMode = false, hasToggles = true),
+    SUBACCOUNT_DAILY(R.drawable.ph_chart_scatter, hasMode = false, hasParent = true, hasToggles = true),
     /** Pie of the balances at the end of the month, with each one's change since the month before. */
     ACCOUNT_SHARE(R.drawable.ph_chart_pie, hasMode = false, hasToggles = true),
     SUBACCOUNT_SHARE(R.drawable.ph_chart_polar, hasMode = false, hasParent = true, hasToggles = true),
@@ -50,20 +50,32 @@ enum class ChartType(
     // kind. "Category" charts add each parent's subcategories up; "subcategory" charts draw the
     // subcategories of one picked parent.
     /** Month-to-date total, one line per category. */
-    EXPENSE_CATEGORY_DAILY(R.drawable.ph_shopping_cart, hasMode = false, hasZero = true, hasToggles = true, categoryKind = CategoryKind.EXPENSE),
-    EXPENSE_SUBCATEGORY_DAILY(R.drawable.ph_shopping_cart_simple, hasMode = false, hasZero = true, hasParent = true, hasToggles = true, categoryKind = CategoryKind.EXPENSE),
+    EXPENSE_CATEGORY_DAILY(R.drawable.ph_shopping_cart, hasMode = false, hasToggles = true, categoryKind = CategoryKind.EXPENSE),
+    EXPENSE_SUBCATEGORY_DAILY(R.drawable.ph_shopping_cart_simple, hasMode = false, hasParent = true, hasToggles = true, categoryKind = CategoryKind.EXPENSE),
     /** Pie of the month's totals, with each one's change since the month before. */
     EXPENSE_CATEGORY_SHARE(R.drawable.ph_shopping_bag, hasMode = false, hasToggles = true, categoryKind = CategoryKind.EXPENSE),
     EXPENSE_SUBCATEGORY_SHARE(R.drawable.ph_shopping_bag_open, hasMode = false, hasParent = true, hasToggles = true, categoryKind = CategoryKind.EXPENSE),
     /** Stacked totals of the last [BALANCE_MONTH_COUNT] months. */
     EXPENSE_CATEGORY_MONTHS(R.drawable.ph_basket, hasMode = false, hasToggles = true, categoryKind = CategoryKind.EXPENSE),
     EXPENSE_SUBCATEGORY_MONTHS(R.drawable.ph_storefront, hasMode = false, hasParent = true, hasToggles = true, categoryKind = CategoryKind.EXPENSE),
-    INCOME_CATEGORY_DAILY(R.drawable.ph_hand_coins, hasMode = false, hasZero = true, hasToggles = true, categoryKind = CategoryKind.INCOME),
-    INCOME_SUBCATEGORY_DAILY(R.drawable.ph_hand_deposit, hasMode = false, hasZero = true, hasParent = true, hasToggles = true, categoryKind = CategoryKind.INCOME),
+    INCOME_CATEGORY_DAILY(R.drawable.ph_hand_coins, hasMode = false, hasToggles = true, categoryKind = CategoryKind.INCOME),
+    INCOME_SUBCATEGORY_DAILY(R.drawable.ph_hand_deposit, hasMode = false, hasParent = true, hasToggles = true, categoryKind = CategoryKind.INCOME),
     INCOME_CATEGORY_SHARE(R.drawable.ph_piggy_bank, hasMode = false, hasToggles = true, categoryKind = CategoryKind.INCOME),
     INCOME_SUBCATEGORY_SHARE(R.drawable.ph_vault, hasMode = false, hasParent = true, hasToggles = true, categoryKind = CategoryKind.INCOME),
     INCOME_CATEGORY_MONTHS(R.drawable.ph_money_wavy, hasMode = false, hasToggles = true, categoryKind = CategoryKind.INCOME),
     INCOME_SUBCATEGORY_MONTHS(R.drawable.ph_currency_circle_dollar, hasMode = false, hasParent = true, hasToggles = true, categoryKind = CategoryKind.INCOME),
+
+    // Categories group, trade counts: the by-day and breakdown charts counting trades.
+    /** Month-to-date trade count, one line per category. */
+    EXPENSE_CATEGORY_COUNT_DAILY(R.drawable.ic_chart_count_line_expense, hasMode = false, hasToggles = true, categoryKind = CategoryKind.EXPENSE, count = true),
+    EXPENSE_SUBCATEGORY_COUNT_DAILY(R.drawable.ic_chart_count_lines_expense, hasMode = false, hasParent = true, hasToggles = true, categoryKind = CategoryKind.EXPENSE, count = true),
+    /** Pie of the month's trade counts, with each one's change since the month before. */
+    EXPENSE_CATEGORY_COUNT_SHARE(R.drawable.ic_chart_count_pie_expense, hasMode = false, hasToggles = true, categoryKind = CategoryKind.EXPENSE, count = true),
+    EXPENSE_SUBCATEGORY_COUNT_SHARE(R.drawable.ic_chart_count_slices_expense, hasMode = false, hasParent = true, hasToggles = true, categoryKind = CategoryKind.EXPENSE, count = true),
+    INCOME_CATEGORY_COUNT_DAILY(R.drawable.ic_chart_count_line_income, hasMode = false, hasToggles = true, categoryKind = CategoryKind.INCOME, count = true),
+    INCOME_SUBCATEGORY_COUNT_DAILY(R.drawable.ic_chart_count_lines_income, hasMode = false, hasParent = true, hasToggles = true, categoryKind = CategoryKind.INCOME, count = true),
+    INCOME_CATEGORY_COUNT_SHARE(R.drawable.ic_chart_count_pie_income, hasMode = false, hasToggles = true, categoryKind = CategoryKind.INCOME, count = true),
+    INCOME_SUBCATEGORY_COUNT_SHARE(R.drawable.ic_chart_count_slices_income, hasMode = false, hasParent = true, hasToggles = true, categoryKind = CategoryKind.INCOME, count = true),
 
     // Trades, month pages only: how and when money moves, whatever its category.
     /** The month as a calendar, each day shaded by what went out (or came in, or the net). */
@@ -133,6 +145,16 @@ enum class ChartType(
     YEAR_INCOME_CATEGORY_YEARS(R.drawable.ph_money_wavy, INCOME_CATEGORY_MONTHS),
     YEAR_INCOME_SUBCATEGORY_YEARS(R.drawable.ph_currency_circle_dollar, INCOME_SUBCATEGORY_MONTHS),
 
+    // Year page, Categories trade counts: year-to-date counts month by month, and the year's pie.
+    YEAR_EXPENSE_CATEGORY_COUNT_MONTHLY(R.drawable.ic_chart_count_line_expense, EXPENSE_CATEGORY_COUNT_DAILY),
+    YEAR_EXPENSE_SUBCATEGORY_COUNT_MONTHLY(R.drawable.ic_chart_count_lines_expense, EXPENSE_SUBCATEGORY_COUNT_DAILY),
+    YEAR_EXPENSE_CATEGORY_COUNT_SHARE(R.drawable.ic_chart_count_pie_expense, EXPENSE_CATEGORY_COUNT_SHARE),
+    YEAR_EXPENSE_SUBCATEGORY_COUNT_SHARE(R.drawable.ic_chart_count_slices_expense, EXPENSE_SUBCATEGORY_COUNT_SHARE),
+    YEAR_INCOME_CATEGORY_COUNT_MONTHLY(R.drawable.ic_chart_count_line_income, INCOME_CATEGORY_COUNT_DAILY),
+    YEAR_INCOME_SUBCATEGORY_COUNT_MONTHLY(R.drawable.ic_chart_count_lines_income, INCOME_SUBCATEGORY_COUNT_DAILY),
+    YEAR_INCOME_CATEGORY_COUNT_SHARE(R.drawable.ic_chart_count_pie_income, INCOME_CATEGORY_COUNT_SHARE),
+    YEAR_INCOME_SUBCATEGORY_COUNT_SHARE(R.drawable.ic_chart_count_slices_income, INCOME_SUBCATEGORY_COUNT_SHARE),
+
     // Year page, Trades: the month charts over the whole year (the frequency chart over its months).
     YEAR_TRADE_WEEK(R.drawable.ic_chart_week_clock, TRADE_WEEK),
     YEAR_TRADE_SIZES(R.drawable.ic_chart_sizes, TRADE_SIZES),
@@ -200,6 +222,8 @@ enum class LayoutSlot(
                         listOf(
                             ChartType.EXPENSE_CATEGORY_DAILY, ChartType.EXPENSE_CATEGORY_SHARE, ChartType.EXPENSE_CATEGORY_MONTHS,
                             ChartType.INCOME_CATEGORY_DAILY, ChartType.INCOME_CATEGORY_SHARE, ChartType.INCOME_CATEGORY_MONTHS,
+                            ChartType.EXPENSE_CATEGORY_COUNT_DAILY, ChartType.EXPENSE_CATEGORY_COUNT_SHARE,
+                            ChartType.INCOME_CATEGORY_COUNT_DAILY, ChartType.INCOME_CATEGORY_COUNT_SHARE,
                         ),
                     ),
                     ChartGroup(
@@ -207,6 +231,8 @@ enum class LayoutSlot(
                         listOf(
                             ChartType.EXPENSE_SUBCATEGORY_DAILY, ChartType.EXPENSE_SUBCATEGORY_SHARE, ChartType.EXPENSE_SUBCATEGORY_MONTHS,
                             ChartType.INCOME_SUBCATEGORY_DAILY, ChartType.INCOME_SUBCATEGORY_SHARE, ChartType.INCOME_SUBCATEGORY_MONTHS,
+                            ChartType.EXPENSE_SUBCATEGORY_COUNT_DAILY, ChartType.EXPENSE_SUBCATEGORY_COUNT_SHARE,
+                            ChartType.INCOME_SUBCATEGORY_COUNT_DAILY, ChartType.INCOME_SUBCATEGORY_COUNT_SHARE,
                         ),
                     ),
                 ),
@@ -247,6 +273,8 @@ enum class LayoutSlot(
                         listOf(
                             ChartType.YEAR_EXPENSE_CATEGORY_MONTHLY, ChartType.YEAR_EXPENSE_CATEGORY_SHARE, ChartType.YEAR_EXPENSE_CATEGORY_YEARS,
                             ChartType.YEAR_INCOME_CATEGORY_MONTHLY, ChartType.YEAR_INCOME_CATEGORY_SHARE, ChartType.YEAR_INCOME_CATEGORY_YEARS,
+                            ChartType.YEAR_EXPENSE_CATEGORY_COUNT_MONTHLY, ChartType.YEAR_EXPENSE_CATEGORY_COUNT_SHARE,
+                            ChartType.YEAR_INCOME_CATEGORY_COUNT_MONTHLY, ChartType.YEAR_INCOME_CATEGORY_COUNT_SHARE,
                         ),
                     ),
                     ChartGroup(
@@ -254,6 +282,8 @@ enum class LayoutSlot(
                         listOf(
                             ChartType.YEAR_EXPENSE_SUBCATEGORY_MONTHLY, ChartType.YEAR_EXPENSE_SUBCATEGORY_SHARE, ChartType.YEAR_EXPENSE_SUBCATEGORY_YEARS,
                             ChartType.YEAR_INCOME_SUBCATEGORY_MONTHLY, ChartType.YEAR_INCOME_SUBCATEGORY_SHARE, ChartType.YEAR_INCOME_SUBCATEGORY_YEARS,
+                            ChartType.YEAR_EXPENSE_SUBCATEGORY_COUNT_MONTHLY, ChartType.YEAR_EXPENSE_SUBCATEGORY_COUNT_SHARE,
+                            ChartType.YEAR_INCOME_SUBCATEGORY_COUNT_MONTHLY, ChartType.YEAR_INCOME_SUBCATEGORY_COUNT_SHARE,
                         ),
                     ),
                 ),
@@ -340,6 +370,17 @@ val MonthCategoryGroupCharts
         ChartType.INCOME_SUBCATEGORY_SHARE, ChartType.INCOME_CATEGORY_MONTHS, ChartType.INCOME_SUBCATEGORY_MONTHS,
     )
 
+/**
+ * The Categories group's trade-count charts. Not in any first-run layout: the "+" sheet adds them.
+ * Drawn by the same card as [MonthCategoryGroupCharts].
+ */
+val MonthCategoryCountCharts
+    get() = listOf(
+        ChartType.EXPENSE_CATEGORY_COUNT_DAILY, ChartType.EXPENSE_SUBCATEGORY_COUNT_DAILY, ChartType.EXPENSE_CATEGORY_COUNT_SHARE,
+        ChartType.EXPENSE_SUBCATEGORY_COUNT_SHARE, ChartType.INCOME_CATEGORY_COUNT_DAILY, ChartType.INCOME_SUBCATEGORY_COUNT_DAILY,
+        ChartType.INCOME_CATEGORY_COUNT_SHARE, ChartType.INCOME_SUBCATEGORY_COUNT_SHARE,
+    )
+
 /** Set once [MonthCategoryGroupCharts] were put into the saved month list (or a fresh one started with them). */
 const val MONTH_CATEGORY_ADDED_KEY = "analysis_layout_month_category_added"
 
@@ -354,20 +395,18 @@ data class ChartCard(
      * parent category; null follows the first one.
      */
     val accountId: Long? = null,
-    /** Only for [ChartType.hasZero]: the value axis always takes in 0, instead of fitting the data. */
-    val zero: Boolean = false,
     /** Only for [ChartType.hasToggles]: the accounts (categories) switched off, so one added later shows. */
     val hidden: List<Long> = emptyList(),
 )
 
 /**
- * `TYPE.MODE.accountId.zero.ids.month.hidden` per card, `;`-separated; zero is `0` when on, empty when
- * off, hidden is `,`-separated. ids and month belonged to the removed budget and savings charts and
- * are always written empty, so hidden keeps its place. Older versions read the first parts and
- * ignore the rest.
+ * `TYPE.MODE.accountId.zero.ids.month.hidden` per card, `;`-separated; hidden is `,`-separated. zero
+ * belonged to the removed "Auto / With 0" axis chip (every axis now takes in 0), ids and month to
+ * the removed budget and savings charts: all three are always written empty, so hidden keeps its
+ * place. Older versions read the first parts and ignore the rest.
  */
 fun encodeLayout(cards: List<ChartCard>): String = cards.joinToString(";") {
-    "${it.type.name}.${it.mode.name}.${it.accountId ?: ""}.${if (it.zero) "0" else ""}..." + it.hidden.joinToString(",")
+    "${it.type.name}.${it.mode.name}.${it.accountId ?: ""}...." + it.hidden.joinToString(",")
 }
 
 /**
@@ -381,7 +420,7 @@ fun decodeLayout(value: String?, defaults: List<ChartType>, offered: Set<ChartTy
         val type = ChartType.entries.firstOrNull { it.name == parts[0] && it in offered } ?: return@mapNotNull null
         val mode = AnalysisMode.entries.firstOrNull { it.name == parts.getOrNull(1) } ?: AnalysisMode.ALL
         ChartCard(
-            0, type, mode, parts.getOrNull(2)?.toLongOrNull(), parts.getOrNull(3) == "0",
+            0, type, mode, parts.getOrNull(2)?.toLongOrNull(),
             parts.getOrNull(6)?.split(',')?.mapNotNull { it.toLongOrNull() }.orEmpty(),
         )
     }
