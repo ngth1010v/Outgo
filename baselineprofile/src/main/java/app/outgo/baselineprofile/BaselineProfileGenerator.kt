@@ -50,8 +50,10 @@ internal fun MacrobenchmarkScope.animationJourney() {
         Thread.sleep(700)
     }
 
-    // Every bottom-bar destination, left to right and back.
+    // Every bottom-bar destination, left to right and back. The Add tab opens the keyboard over
+    // the bar, so it is closed before each tap.
     for (tab in listOf("Home", "Accounts", "Categories", "Add", "Analysis", "History", "Settings", "Home")) {
+        hideKeyboard()
         tap(By.desc(tab))
     }
 
@@ -112,6 +114,14 @@ private fun MacrobenchmarkScope.openMonthPicker() {
     }
 }
 
+/** Closes the soft keyboard if it is up (Back would leave the app when it isn't). */
+private fun MacrobenchmarkScope.hideKeyboard() {
+    if ("mInputShown=true" in device.executeShellCommand("dumpsys input_method")) {
+        device.pressBack()
+        device.waitForIdle()
+    }
+}
+
 private fun MacrobenchmarkScope.flingDownAndUp() {
     for (direction in listOf(Direction.DOWN, Direction.UP)) {
         // The list can be recomposed (a page settling in) between finding and flinging it; find it again.
@@ -128,10 +138,12 @@ private fun MacrobenchmarkScope.flingDownAndUp() {
 }
 
 private fun MacrobenchmarkScope.tap(selector: BySelector) {
+    // Only Outgo's own views: the Add tab opens the keyboard, whose gear is also "Settings".
+    val own = selector.pkg(PACKAGE)
     // A node found mid-animation can be recycled before the click lands; look it up again.
     for (attempt in 1..3) {
         try {
-            device.wait(Until.findObject(selector), TIMEOUT)?.click()
+            device.wait(Until.findObject(own), TIMEOUT)?.click()
             break
         } catch (_: StaleObjectException) {
             device.waitForIdle()
