@@ -1,45 +1,31 @@
 # PROCESS
 
-**Status:** DONE
-**Started:** 2026-10-23
-**Last updated:** 2026-10-23
+**Status:** IN_PROGRESS
+**Started:** 2026-10-23 22:00
+**Last updated:** 2026-10-23 22:00
 
 ## Task
-User asked:
-- add 'number of decimal places' input in setting screen; money always shows n decimals even if zero (decimal=2 -> "1.00$")
-- analysis screen: 'month'/'year' button top-right height x0.7
-- edit category/sub-category and edit account/sub-account screens: equal gaps between save/cancel/delete buttons (reduce cancel–delete gap); all toggles same size (= current small one)
-- home screen: budget section 'Add budget' button only when no budget, shown as a row; saving section: 'Add saving' button with same logic
-- "if you have something not sure -> ask me for confirm"
+User: "bump the version; commit all changes; build and release a new version; rewrite a README.md
+(you can use emulator to create gif/pic); commit and push all changes".
 
 ## Plan
-1. [x] Explore code
-2. [x] Decimal places setting
-3. [x] Analysis toggle height
-4. [x] Edit screens buttons/toggles
-5. [x] Home budget/saving add rows
-6. [x] Build (assembleDebug passes)
-7. [x] Check on emulator (mdn_test): setting row, Home decimals, Analysis switch, editor buttons/toggles OK
+1. [ ] Bump app/build.gradle.kts 4.17.0 (46) -> 4.18.0 (47); commit with PROCESS.md
+2. [ ] build.bat release, verify signing cert ad5e3f, gh release v4.18.0 with Outgo.apk
+3. [ ] Screenshots/GIF from emulator (mdn_test) into docs/; rewrite README.md
+4. [ ] Commit + push (main + tag)
+
+Changes since v4.17.0: draft list on Add screen (66c4ebe), swipe undo snackbar (111f548),
+amount cursor follows taps (61f4d7c). No schema change.
 
 ## Done
-- Money.kt: `decimals` snapshot state (0..2, default 0), `groupThousands` always writes n decimals (rounded half-up), `inputText` rounds + trims trailing zeros, `cleanInput` caps typed decimals at n (drops separator at 0).
-- SettingKeys.DECIMALS, SettingRepository.observeDecimals/setDecimals, CurrencyPrefs mirror, OutgoApp loads/observes, SettingViewModel + SettingScreen row + OptionSheet, strings `setting_decimals` (en/vi).
-- AnalysisScreen: mode switch row `.height(28.dp)`.
-- EditorScaffold.DeleteButton spacer 24 -> 8dp (also affects Trade edit, same shared order).
-- SectionSwitch moved from CategoryScreen.kt to component/SwitchField.kt; SwitchField now uses it (small 0.75 switch).
-- Home: Add budget = PlusRow card only when no budgets (removed `home_no_budgets` string); Savings section always shown, PlusRow "Add saving" when empty -> SavingAccountSheet -> Routes.accountEdit(id, savings=true) -> AccountEditScreen(openSavings) makes it savings, turns this month's target on, focuses target.
-
 ## Doing now
-- Nothing
-
+- step 1
 ## Not done yet
-- Nothing (Add-saving flow not clicked through on emulator: test data already has savings)
-
+- steps 2-4
 ## Tests / verification
 | Case | How | Result |
 |------|-----|--------|
-| builds | `gradlew assembleDebug` | pass |
+| release build | build.bat release | not run |
 
 ## Notes for resuming
-- User decisions: decimals range 0/1/2 (display only, storage stays hundredths), default 0; 'Add saving' = pick-existing-account sheet then open account editor with Savings preset.
-- Baseline profile not regenerated (needs API 33+ emulator run of :app:generateBaselineProfile).
+- See memory build-env-windows-gotchas (JAVA_HOME = ~/.gradle/jdks/eclipse_adoptium-21..., clear NoDefaultCurrentDirectoryInExePath).
