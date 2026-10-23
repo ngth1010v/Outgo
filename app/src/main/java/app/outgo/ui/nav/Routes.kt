@@ -23,6 +23,11 @@ object Routes {
     const val TRADE_EDIT_PATTERN = "trade/edit/{tradeId}"
     fun tradeEdit(tradeId: Long) = "trade/edit/$tradeId"
 
+    /** The draft list (Add screen's "Draft (n)"), and the editor of one of its transactions. */
+    const val DRAFTS = "drafts"
+    const val DRAFT_EDIT_PATTERN = "drafts/edit/{draftId}"
+    fun draftEdit(draftId: Long) = "drafts/edit/$draftId"
+
     /**
      * Account editor: [id] edits that account, else [parentId] creates a subaccount, else a parent.
      * 0 = unset. [savings] opens it as a savings account with this month's target on (Home's "Add saving").

@@ -37,6 +37,7 @@ import app.outgo.ui.analysis.AnalysisScreen
 import app.outgo.ui.balance.BalanceScreen
 import app.outgo.ui.category.CategoryScreen
 import app.outgo.ui.component.LeaveGuard
+import app.outgo.ui.draft.DraftListScreen
 import app.outgo.ui.component.LocalLeaveGuard
 import app.outgo.ui.component.LocalSwipeParent
 import app.outgo.ui.component.rememberSwipeLevel
@@ -173,6 +174,22 @@ fun OutgoRoot(openSetting: Boolean = false) {
                     TradeScreen(editingTradeId = tradeId, onClose = { navController.popBackStack() })
                 }
 
+                composable(Routes.DRAFTS) {
+                    DraftListScreen(
+                        // Only while it is on the stack: it can close itself and be closed by Back at once.
+                        onBack = { navController.popBackStack(Routes.DRAFTS, inclusive = true) },
+                        onOpenDraft = { draftId -> navController.navigate(Routes.draftEdit(draftId)) },
+                    )
+                }
+
+                composable(
+                    route = Routes.DRAFT_EDIT_PATTERN,
+                    arguments = listOf(navArgument("draftId") { type = NavType.LongType }),
+                ) { entry ->
+                    val draftId = entry.arguments?.getLong("draftId") ?: return@composable
+                    TradeScreen(editingTradeId = null, editingDraftId = draftId, onClose = { navController.popBackStack() })
+                }
+
                 composable(
                     route = Routes.ACCOUNT_EDIT_PATTERN,
                     arguments = listOf(
@@ -213,7 +230,12 @@ fun OutgoRoot(openSetting: Boolean = false) {
 @Composable
 private fun TabContent(route: String, shown: Boolean, navController: NavHostController) {
     when (route) {
-        Routes.TRADE -> TradeScreen(editingTradeId = null, onClose = {}, visible = shown)
+        Routes.TRADE -> TradeScreen(
+            editingTradeId = null,
+            onClose = {},
+            visible = shown,
+            onOpenDrafts = { navController.navigate(Routes.DRAFTS) { launchSingleTop = true } },
+        )
         Routes.HOME -> HomeScreen(
             onAddBudget = { id -> navController.navigate(Routes.categoryEdit(id, budget = true)) },
             onAddSaving = { id -> navController.navigate(Routes.accountEdit(id, savings = true)) },

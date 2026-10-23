@@ -679,4 +679,40 @@
     <string name="analysis_info_year_budget_reached_about">For each budget, the day of the month it went over its limit, in each month of the year.</string>
     <string name="analysis_step_year_opening">Start of year</string>
     <string name="analysis_step_year_closing">End of year</string>
+    <!-- Draft list: transactions added on the Add screen to save later, all at once -->
+    <string name="draft_add">Add to draft</string>
+    <string name="draft_view">Draft (%1$d) ›</string>
+    <string name="draft_added">Added to draft</string>
+    <string name="draft_edit_title">Edit draft</string>
+    <string name="draft_remove">Remove from draft</string>
+    <string name="draft_remove_confirm_title">Remove this transaction from the draft?</string>
+    <string name="draft_list_title">Draft (%1$d)</string>
+    <string name="draft_continue">Continue adding</string>
+    <string name="draft_clear">Clear draft</string>
+    <string name="draft_push">Save to history (%1$d)</string>
+    <string name="draft_clear_confirm_title">Clear the draft?</string>
+    <plurals name="draft_clear_confirm_message">
+        <item quantity="one">%1$d transaction will be removed. This can\'t be undone.</item>
+        <item quantity="other">%1$d transactions will be removed. This can\'t be undone.</item>
+    </plurals>
+    <string name="draft_push_confirm_title">Some drafts can\'t be saved</string>
+    <plurals name="draft_push_confirm_message">
+        <item quantity="one">%1$d transaction can\'t be saved and will stay in the draft. Save the other %2$d to history?</item>
+        <item quantity="other">%1$d transactions can\'t be saved and will stay in the draft. Save the other %2$d to history?</item>
+    </plurals>
+    <string name="draft_push_confirm">Save the rest</string>
+    <plurals name="draft_pushed">
+        <item quantity="one">Saved %1$d transaction</item>
+        <item quantity="other">Saved %1$d transactions</item>
+    </plurals>
+    <plurals name="draft_invalid_count">
+        <item quantity="one">%1$d transaction can\'t be saved: edit or remove it</item>
+        <item quantity="other">%1$d transactions can\'t be saved: edit or remove them</item>
+    </plurals>
+    <string name="history_deleted_category">Deleted category</string>
+    <string name="history_deleted_account">Deleted account</string>
+    <string name="draft_problem_account">Its account was archived or deleted</string>
+    <string name="draft_problem_to_account">Its \"To\" account was archived or deleted</string>
+    <string name="draft_problem_category">Its category was archived or deleted</string>
+    <string name="draft_problem_budget">Its budget\'s category was archived or deleted</string>
 </resources>

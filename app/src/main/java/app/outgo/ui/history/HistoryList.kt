@@ -8,6 +8,12 @@ import app.outgo.ui.theme.PendingContainer
 import app.outgo.ui.theme.WarningDarkYellow
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.graphics.Color
+import app.outgo.ui.component.WarningBadge
+import app.outgo.ui.theme.WarningContainer
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -99,6 +105,10 @@ internal fun LazyListScope.historyItems(
     onRetry: ((TradeEntity) -> Unit)? = null,
     /** Adjustments labelled "Opening balance" (see [HistoryUiState.openingIds]). */
     openingIds: Set<Long> = emptySet(),
+    /** The draft list: an "x" on each row removes it. Null: no "x". */
+    onRemove: ((Long) -> Unit)? = null,
+    /** By trade id: why the row can't be saved, shown as a warning row (the draft list). */
+    warnings: Map<Long, String> = emptyMap(),
 ) {
     items(
         items = items,
@@ -111,7 +121,7 @@ internal fun LazyListScope.historyItems(
                 is HistoryListItem.Row -> "history_row"
             }
         },
-    ) { item -> HistoryItem(item, categoriesById, accountsById, onOpenTrade, rowModifier, onRetry, openingIds) }
+    ) { item -> HistoryItem(item, categoriesById, accountsById, onOpenTrade, rowModifier, onRetry, openingIds, onRemove, warnings) }
 }
 
 internal fun historyItemKey(item: HistoryListItem): String = when (item) {
@@ -133,6 +143,8 @@ internal fun HistoryItem(
     modifier: Modifier = Modifier,
     onRetry: ((TradeEntity) -> Unit)? = null,
     openingIds: Set<Long> = emptySet(),
+    onRemove: ((Long) -> Unit)? = null,
+    warnings: Map<Long, String> = emptyMap(),
 ) {
     when (item) {
         is HistoryListItem.Header -> Row(
@@ -182,6 +194,8 @@ internal fun HistoryItem(
             modifier = modifier,
             onRetry = onRetry,
             opening = item.trade.id in openingIds,
+            onRemove = onRemove?.let { remove -> { remove(item.trade.id) } },
+            warning = warnings[item.trade.id],
             )
         }
     }
@@ -202,6 +216,86 @@ private fun TradeRow(
     onRetry: ((TradeEntity) -> Unit)? = null,
     /** An account's opening balance, not a later adjustment (see [TradeDao.openingAdjustmentIds]). */
     opening: Boolean = false,
+    /** A draft's "x": removes it from the draft list. */
+    onRemove: (() -> Unit)? = null,
+    /** Why the draft can't be saved: the row turns into a warning row. */
+    warning: String? = null,
+) {
+    if (onRemove == null) {
+        TradeRowContent(trade, category, fromPath, budgetPath, toBudget, toBudgetPath, fromAccount, toAccount, onClick, modifier, onRetry, opening)
+        return
+    }
+    // A draft: a rounded row with its remove button as a darker strip at the end, full height. One
+    // that needs attention is tinted and badged like Balance's and Categories' warning rows.
+    val shape = RoundedCornerShape(12.dp)
+    // A normal draft takes the Analysis cards' color: the background, a touch darker.
+    val rowColor = if (warning != null) {
+        WarningContainer
+    } else {
+        androidx.compose.ui.graphics.lerp(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.onBackground, 0.035f)
+    }
+    val stripColor = if (warning != null) {
+        androidx.compose.ui.graphics.lerp(WarningContainer, Color.Black, 0.08f)
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    Box(modifier.fillMaxWidth().padding(vertical = if (warning != null) 4.dp else 2.dp)) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
+                .clip(shape)
+                .background(rowColor),
+        ) {
+            Column(Modifier.weight(1f).padding(start = 12.dp, end = 8.dp)) {
+                TradeRowContent(
+                    trade, category, fromPath, budgetPath, toBudget, toBudgetPath, fromAccount, toAccount, onClick,
+                    Modifier, onRetry, opening,
+                )
+                if (warning != null) {
+                    Text(
+                        warning,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = WarningDarkYellow,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                }
+            }
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .background(stripColor)
+                    .clickable(onClick = onRemove)
+                    .padding(horizontal = 8.4.dp),
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ph_x),
+                    contentDescription = stringResource(R.string.draft_remove),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+        if (warning != null) WarningBadge(contentDescription = null)
+    }
+}
+
+@Composable
+private fun TradeRowContent(
+    trade: TradeEntity,
+    category: CategoryEntity?,
+    fromPath: String,
+    budgetPath: String?,
+    toBudget: CategoryEntity?,
+    toBudgetPath: String?,
+    fromAccount: AccountEntity?,
+    toAccount: AccountEntity?,
+    onClick: (() -> Unit)?,
+    modifier: Modifier,
+    onRetry: ((TradeEntity) -> Unit)?,
+    opening: Boolean,
 ) {
     val isTransfer = trade.type == TradeType.TRANSFER
     val pending = trade.pendingAmount
@@ -240,7 +334,15 @@ private fun TradeRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 (if (isTransfer) toAccount?.name else category?.name)
-                    ?: stringResource(if (opening) R.string.history_opening_balance else R.string.history_adjustment_note),
+                    ?: stringResource(
+                        when {
+                            // Only a draft can name what is gone: a saved trade's category and accounts can't be deleted.
+                            isTransfer -> R.string.history_deleted_account
+                            !TradeType.isAdjustment(trade.type) -> R.string.history_deleted_category
+                            opening -> R.string.history_opening_balance
+                            else -> R.string.history_adjustment_note
+                        },
+                    ),
                 style = MaterialTheme.typography.bodyLarge,
             )
             if (!trade.note.isNullOrBlank()) {

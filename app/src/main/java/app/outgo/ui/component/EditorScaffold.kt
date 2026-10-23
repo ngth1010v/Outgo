@@ -109,7 +109,7 @@ fun EditorButtons(onSave: () -> Unit, saveEnabled: Boolean, onCancel: () -> Unit
 
 /** The red Delete, with its bin icon, below an editor's other buttons (the same 8dp gap as between them). */
 @Composable
-fun DeleteButton(onClick: () -> Unit) {
+fun DeleteButton(onClick: () -> Unit, label: String = stringResource(R.string.common_delete)) {
     Spacer(Modifier.height(8.dp))
     OutlinedButton(
         onClick = onClick,
@@ -118,6 +118,6 @@ fun DeleteButton(onClick: () -> Unit) {
     ) {
         Icon(painterResource(R.drawable.ph_trash), contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(8.dp))
-        Text(stringResource(R.string.common_delete), color = MaterialTheme.colorScheme.error)
+        Text(label, color = MaterialTheme.colorScheme.error)
     }
 }

@@ -3,6 +3,7 @@ package app.outgo.di
 import android.content.Context
 import app.outgo.data.backup.BackupManager
 import app.outgo.data.db.OutgoDatabase
+import app.outgo.data.draft.DraftStore
 import app.outgo.data.icon.IconStore
 import app.outgo.data.repo.AccountRepository
 import app.outgo.data.repo.BudgetRepository
@@ -35,6 +36,9 @@ class AppContainer(private val context: Context) {
     }
 
     val settingRepository: SettingRepository by lazy { SettingRepository(context, database.settingDao()) }
+
+    /** The draft list: in memory only, see [DraftStore]. */
+    val draftStore: DraftStore by lazy { DraftStore() }
 
     val statDao get() = database.statDao()
 

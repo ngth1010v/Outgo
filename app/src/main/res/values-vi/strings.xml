@@ -665,4 +665,36 @@
     <string name="analysis_info_year_budget_reached_about">Với mỗi ngân sách, ngày trong tháng bị vượt hạn mức, ở từng tháng của năm.</string>
     <string name="analysis_step_year_opening">Đầu năm</string>
     <string name="analysis_step_year_closing">Cuối năm</string>
+    <!-- Draft list: transactions added on the Add screen to save later, all at once -->
+    <string name="draft_add">Thêm vào nháp</string>
+    <string name="draft_view">Nháp (%1$d) ›</string>
+    <string name="draft_added">Đã thêm vào nháp</string>
+    <string name="draft_edit_title">Sửa giao dịch nháp</string>
+    <string name="draft_remove">Xoá khỏi nháp</string>
+    <string name="draft_remove_confirm_title">Xoá giao dịch này khỏi nháp?</string>
+    <string name="draft_list_title">Nháp (%1$d)</string>
+    <string name="draft_continue">Thêm tiếp</string>
+    <string name="draft_clear">Xoá nháp</string>
+    <string name="draft_push">Lưu vào lịch sử (%1$d)</string>
+    <string name="draft_clear_confirm_title">Xoá toàn bộ nháp?</string>
+    <plurals name="draft_clear_confirm_message">
+        <item quantity="other">%1$d giao dịch sẽ bị xoá. Không thể hoàn tác.</item>
+    </plurals>
+    <string name="draft_push_confirm_title">Một số giao dịch nháp không lưu được</string>
+    <plurals name="draft_push_confirm_message">
+        <item quantity="other">%1$d giao dịch không lưu được và sẽ ở lại trong nháp. Lưu %2$d giao dịch còn lại vào lịch sử?</item>
+    </plurals>
+    <string name="draft_push_confirm">Lưu phần còn lại</string>
+    <plurals name="draft_pushed">
+        <item quantity="other">Đã lưu %1$d giao dịch</item>
+    </plurals>
+    <plurals name="draft_invalid_count">
+        <item quantity="other">%1$d giao dịch không lưu được: hãy sửa hoặc xoá</item>
+    </plurals>
+    <string name="history_deleted_category">Danh mục đã xoá</string>
+    <string name="history_deleted_account">Tài khoản đã xoá</string>
+    <string name="draft_problem_account">Tài khoản đã bị lưu trữ hoặc xoá</string>
+    <string name="draft_problem_to_account">Tài khoản nhận đã bị lưu trữ hoặc xoá</string>
+    <string name="draft_problem_category">Danh mục đã bị ẩn hoặc xoá</string>
+    <string name="draft_problem_budget">Danh mục của ngân sách đã bị ẩn hoặc xoá</string>
 </resources>

@@ -121,13 +121,30 @@ import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit, visible: Boolean = true) {
+fun TradeScreen(
+    editingTradeId: Long?,
+    onClose: () -> Unit,
+    visible: Boolean = true,
+    /** Edits this transaction of the draft list instead of a saved one. */
+    editingDraftId: Long? = null,
+    /** The Add screen's "Draft (n)" button. */
+    onOpenDrafts: () -> Unit = {},
+) {
     val container = LocalAppContainer.current
     val viewModel: TradeViewModel = viewModel(
-        key = "trade-$editingTradeId",
+        key = "trade-$editingTradeId-$editingDraftId",
         factory = viewModelFactory {
             initializer {
-                TradeViewModel(container.categoryRepository, container.accountRepository, container.tradeRepository, container.budgetRepository, container.settingRepository, editingTradeId)
+                TradeViewModel(
+                    container.categoryRepository,
+                    container.accountRepository,
+                    container.tradeRepository,
+                    container.budgetRepository,
+                    container.settingRepository,
+                    container.draftStore,
+                    editingTradeId,
+                    editingDraftId,
+                )
             }
         },
     )
@@ -163,7 +180,7 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit, visible: Boolean = t
     val amountFocus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     LaunchedEffect(visible) {
-        if (!visible || editingTradeId != null) return@LaunchedEffect
+        if (!visible || editingTradeId != null || editingDraftId != null) return@LaunchedEffect
         withFrameNanos { }
         val now = viewModel.state.value
         if (now.amount > 0 && PredictField.AMOUNT !in now.predicted) return@LaunchedEffect
@@ -212,6 +229,8 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit, visible: Boolean = t
     }
     val savedLabel = stringResource(R.string.trade_saved)
     val undoLabel = stringResource(R.string.trade_undo)
+    val draftedLabel = stringResource(R.string.draft_added)
+    val resources = LocalContext.current.resources
     // The save button's sideways shake, in dp, played once per save tapped with errors.
     val saveShake = remember { Animatable(0f) }
     LaunchedEffect(state.invalidSaveCount) {
@@ -238,6 +257,15 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit, visible: Boolean = t
                         viewModel.undo(event.tradeId)
                     }
                 }
+                is TradeEvent.Drafted -> {
+                    val result = snackbarHostState.showSnackbar(draftedLabel, actionLabel = undoLabel, duration = SnackbarDuration.Short)
+                    if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) {
+                        viewModel.undoDraft(event.draftId)
+                    }
+                }
+                is TradeEvent.Pushed -> scope.launch {
+                    snackbarHostState.showSnackbar(resources.getQuantityString(R.plurals.draft_pushed, event.count, event.count))
+                }
                 TradeEvent.SavedAndClose, TradeEvent.DeletedAndClose -> onClose()
                 is TradeEvent.Error -> scope.launch { snackbarHostState.showSnackbar(event.message) }
             }
@@ -255,7 +283,11 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit, visible: Boolean = t
                 .padding(start = 16.dp, top = if (state.isEditing) 16.dp else 36.dp, end = 16.dp, bottom = 16.dp),
         ) {
             if (state.isEditing) {
-                EditorTitle(stringResource(R.string.trade_edit_title), onBack = cancel, modifier = Modifier.padding(bottom = 12.dp))
+                EditorTitle(
+                    stringResource(if (state.isDraftEdit) R.string.draft_edit_title else R.string.trade_edit_title),
+                    onBack = cancel,
+                    modifier = Modifier.padding(bottom = 12.dp),
+                )
             }
             ExpenseIncomeToggle(type = state.type, onTypeChange = viewModel::onTypeChange, enabled = !state.isEditing)
             Box {
@@ -267,6 +299,7 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit, visible: Boolean = t
                     onSeeAll = { showAllCategories = true },
                     onClose = cancel,
                     onDelete = { showDeleteConfirm = true },
+                    onOpenDrafts = onOpenDrafts,
                     saveShake = shake,
                     modifier = modifier,
                 )
@@ -297,7 +330,18 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit, visible: Boolean = t
         )
     }
 
-    if (showDeleteConfirm) {
+    if (showDeleteConfirm && state.isDraftEdit) {
+        // Not in the balances yet: removing a draft needs no warning, just the question.
+        ConfirmDialog(
+            title = stringResource(R.string.draft_remove_confirm_title),
+            message = "",
+            onConfirm = {
+                showDeleteConfirm = false
+                viewModel.deleteEditingTrade()
+            },
+            onDismiss = { showDeleteConfirm = false },
+        )
+    } else if (showDeleteConfirm) {
         ConfirmDialog(
             title = stringResource(R.string.history_delete_confirm_title),
             // Allowed, but said first: deleting (an income, say) takes this account below 0.
@@ -326,6 +370,7 @@ private fun TradeForm(
     onSeeAll: () -> Unit,
     onClose: () -> Unit,
     onDelete: () -> Unit,
+    onOpenDrafts: () -> Unit,
     saveShake: () -> Float,
     modifier: Modifier = Modifier,
 ) {
@@ -482,25 +527,47 @@ private fun TradeForm(
             return@Column
         }
 
-        // Always tappable: a save with errors marks them and shakes the button instead.
-        androidx.compose.material3.Button(
+        // Always tappable: a save with errors marks them and shakes the buttons instead.
+        @Composable
+        fun saveButton(modifier: Modifier) = androidx.compose.material3.Button(
             onClick = viewModel::save,
             enabled = !state.isSaving,
-            modifier = Modifier
-                .offset { IntOffset(saveShake().dp.roundToPx(), 0) }
-                .fillMaxWidth()
-                .height(52.dp),
+            modifier = modifier.height(52.dp),
         ) {
-            Text(stringResource(R.string.common_save), fontWeight = FontWeight.Bold)
+            // With a draft list started, Save adds to it too (see TradeViewModel.save).
+            Text(
+                stringResource(if (state.drafting) R.string.draft_add else R.string.common_save),
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+            )
         }
 
-        // The editors' shared order (see EditorScaffold): Save, Cancel, then Delete.
         if (state.isEditing) {
+            saveButton(Modifier.offset { IntOffset(saveShake().dp.roundToPx(), 0) }.fillMaxWidth())
+            // The editors' shared order (see EditorScaffold): Save, Cancel, then Delete.
             Spacer(Modifier.height(8.dp))
             OutlinedButton(onClick = onClose, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.common_cancel))
             }
-            DeleteButton(onClick = onDelete)
+            if (state.isDraftEdit) DeleteButton(onClick = onDelete, label = stringResource(R.string.draft_remove)) else DeleteButton(onClick = onDelete)
+        } else {
+            // [Add to draft] [Save], or, with a draft list started, [Draft (n) ›] [Add to draft].
+            Row(
+                modifier = Modifier.offset { IntOffset(saveShake().dp.roundToPx(), 0) }.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(
+                    onClick = if (state.drafting) onOpenDrafts else viewModel::addToDraft,
+                    enabled = !state.isSaving,
+                    modifier = Modifier.weight(1f).height(52.dp),
+                ) {
+                    Text(
+                        if (state.drafting) stringResource(R.string.draft_view, state.draftCount) else stringResource(R.string.draft_add),
+                        maxLines = 1,
+                    )
+                }
+                saveButton(Modifier.weight(1f))
+            }
         }
     }
 }

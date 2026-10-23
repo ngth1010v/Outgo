@@ -19,6 +19,10 @@ interface TradeDao {
     @Insert
     suspend fun insert(trade: TradeEntity): Long
 
+    /** In one transaction: all saved or none. */
+    @Insert
+    suspend fun insertAll(trades: List<TradeEntity>): List<Long>
+
     @Update
     suspend fun update(trade: TradeEntity)
 

@@ -27,6 +27,7 @@ Open the app and you are already on the "add expense" screen. Log a purchase in 
 - **Expense, Income and Transfer** use the same form. Swipe left or right to switch between them.
 - **Smart category grid:** one row shows your 5 most recent categories, and one row shows your 5 most used. Most entries take one tap. **All ›** opens the full category list, which you can search.
 - Pick the account, date, time and an optional note. After you tap **Save**, the form resets and a snackbar offers **Undo**.
+- **Draft list:** tap **Add to draft** to collect several transactions (expenses, incomes and transfers mixed) before saving them. While the draft has items, both buttons add to it, and **Draft (n) ›** opens the list: edit a row, remove it with **x**, **Clear draft**, or **Save to history** in one go. Drafts that point to a deleted or archived account or category are flagged and stay behind. The draft lives in memory only: it is gone when the app is closed.
 
 <br clear="right" />
 

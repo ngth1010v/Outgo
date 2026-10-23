@@ -39,25 +39,33 @@ class TradeRepository(private val tradeDao: TradeDao) {
 
     suspend fun insert(draft: TradeDraft): Long = withContext(Dispatchers.IO) {
         require(draft.amount > 0) { "amount must be > 0" }
-        val now = System.currentTimeMillis()
-        tradeDao.insert(
-            TradeEntity(
-                type = draft.type,
-                amount = draft.amount,
-                accountId = draft.accountId,
-                categoryId = draft.categoryId,
-                toAccountId = draft.toAccountId,
-                occurredAt = draft.occurredAt,
-                monthKey = MonthKey.of(draft.occurredAt),
-                note = draft.note?.takeIf { it.isNotBlank() },
-                createdAt = now,
-                updatedAt = now,
-                budgetExempt = draft.budgetExempt,
-                savingExempt = draft.savingExempt,
-                toCategoryId = draft.toCategoryId,
-            ),
-        ).also { signalChange() }
+        tradeDao.insert(draft.toEntity(System.currentTimeMillis())).also { signalChange() }
     }
+
+    /** Saves the draft list's transactions in one transaction: all of them or, on an error, none. */
+    suspend fun insertAll(drafts: List<TradeDraft>) = withContext(Dispatchers.IO) {
+        if (drafts.isEmpty()) return@withContext
+        require(drafts.all { it.amount > 0 }) { "amount must be > 0" }
+        val now = System.currentTimeMillis()
+        tradeDao.insertAll(drafts.map { it.toEntity(now) })
+        signalChange()
+    }
+
+    private fun TradeDraft.toEntity(now: Long) = TradeEntity(
+        type = type,
+        amount = amount,
+        accountId = accountId,
+        categoryId = categoryId,
+        toAccountId = toAccountId,
+        occurredAt = occurredAt,
+        monthKey = MonthKey.of(occurredAt),
+        note = note?.takeIf { it.isNotBlank() },
+        createdAt = now,
+        updatedAt = now,
+        budgetExempt = budgetExempt,
+        savingExempt = savingExempt,
+        toCategoryId = toCategoryId,
+    )
 
     suspend fun update(id: Long, draft: TradeDraft) = withContext(Dispatchers.IO) {
         require(draft.amount > 0) { "amount must be > 0" }

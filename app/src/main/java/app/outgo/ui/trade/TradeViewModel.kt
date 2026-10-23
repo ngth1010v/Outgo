@@ -6,6 +6,7 @@ import app.outgo.data.db.entity.AccountEntity
 import app.outgo.data.db.entity.CategoryEntity
 import app.outgo.data.db.entity.TradeEntity
 import app.outgo.data.db.dao.BudgetWithProgress
+import app.outgo.data.draft.DraftStore
 import app.outgo.data.repo.AccountRepository
 import app.outgo.data.repo.BudgetRepository
 import app.outgo.data.repo.CategoryRepository
@@ -45,6 +46,10 @@ data class TradeUiState(
     val isLoading: Boolean = true,
     val isSaving: Boolean = false,
     val editingTradeId: Long? = null,
+    /** Editing a transaction of the draft list (see [DraftStore]), not a saved one. */
+    val editingDraftId: Long? = null,
+    /** How many transactions the draft list holds: the Add screen's buttons follow it. */
+    val draftCount: Int = 0,
     /** The edited trade as loaded: its balance moves are undone by the save, see [overdrawnBySave]. */
     val original: TradeEntity? = null,
     /** The edited trade is an automatic budget-offset transfer: it follows its budget, so it is read-only. */
@@ -67,7 +72,10 @@ data class TradeUiState(
     /** The whole note once [noteSuffix] is taken. */
     val noteAccepted: String = "",
 ) {
-    val isEditing: Boolean get() = editingTradeId != null
+    val isEditing: Boolean get() = editingTradeId != null || editingDraftId != null
+    val isDraftEdit: Boolean get() = editingDraftId != null
+    /** The Add screen with a draft list started: both its buttons add to the draft. */
+    val drafting: Boolean get() = !isEditing && draftCount > 0
     val picker: CategoryPicker get() = pickers[type] ?: CategoryPicker(emptyList(), emptyList())
     val isTransfer: Boolean get() = type == TradeType.TRANSFER
     /** What keeps the trade from being saved. */
@@ -190,6 +198,8 @@ internal fun balanceMoves(type: Int, amount: Long, accountId: Long, toAccountId:
 
 sealed interface TradeEvent {
     data class Saved(val tradeId: Long) : TradeEvent
+    data class Drafted(val draftId: Long) : TradeEvent
+    data class Pushed(val count: Int) : TradeEvent
     data object SavedAndClose : TradeEvent
     data object DeletedAndClose : TradeEvent
     data class Error(val message: String) : TradeEvent
@@ -201,11 +211,13 @@ class TradeViewModel(
     private val tradeRepository: TradeRepository,
     private val budgetRepository: BudgetRepository,
     private val settingRepository: SettingRepository,
+    private val draftStore: DraftStore,
     editingTradeId: Long? = null,
+    editingDraftId: Long? = null,
 ) : ViewModel() {
 
     /** The form as the user filled it; [state] is it with the predictions filled in. */
-    private var raw = TradeUiState(editingTradeId = editingTradeId)
+    private var raw = TradeUiState(editingTradeId = editingTradeId, editingDraftId = editingDraftId)
     private val _state = MutableStateFlow(raw)
     val state: StateFlow<TradeUiState> = _state.asStateFlow()
 
@@ -230,11 +242,26 @@ class TradeViewModel(
             accountRepository.observeActive().collect { accounts -> edit { it.copy(accounts = accounts) } }
         }
 
+        if (editingTradeId == null && editingDraftId == null) {
+            viewModelScope.launch {
+                draftStore.drafts.collect { list -> edit { it.copy(draftCount = list.size) } }
+            }
+            viewModelScope.launch {
+                draftStore.pushed.collect { count ->
+                    // The pushed trades count in the quick picks and predictions now.
+                    loadPickers()
+                    loadPredictionData()
+                    _events.emit(TradeEvent.Pushed(count))
+                }
+            }
+        }
+
         viewModelScope.launch {
             if (editingTradeId != null) loadForEdit(editingTradeId)
+            if (editingDraftId != null) loadDraftForEdit(editingDraftId)
             loadPickers()
             edit { it.copy(isLoading = false) }
-            if (editingTradeId == null) {
+            if (editingTradeId == null && editingDraftId == null) {
                 loadPredictionData()
                 launch {
                     combine(settingRepository.observePredictEnabled(), settingRepository.observePredictMinConfidence(), ::Pair)
@@ -270,6 +297,28 @@ class TradeViewModel(
                 occurredAt = trade.occurredAt,
                 note = trade.note.orEmpty(),
                 locked = trade.offsetMonth != null,
+                budgetExempt = trade.budgetExempt,
+                savingExempt = trade.savingExempt,
+                toBudget = trade.toCategoryId?.let { id -> categoryRepository.findById(id) },
+            )
+        }
+    }
+
+    /** A draft has no "original": nothing of it is in the balances yet. */
+    private suspend fun loadDraftForEdit(draftId: Long) {
+        val trade = draftStore.find(draftId)?.trade ?: return
+        val category = trade.categoryId?.let { categoryRepository.findById(it) }
+        val parent = category?.parentId?.let { categoryRepository.findById(it) }
+        edit {
+            it.copy(
+                type = trade.type,
+                amount = trade.amount,
+                selectedCategory = category,
+                selectedParentCategory = parent,
+                selectedAccountId = trade.accountId,
+                selectedToAccountId = trade.toAccountId,
+                occurredAt = trade.occurredAt,
+                note = trade.note.orEmpty(),
                 budgetExempt = trade.budgetExempt,
                 savingExempt = trade.savingExempt,
                 toBudget = trade.toCategoryId?.let { id -> categoryRepository.findById(id) },
@@ -490,14 +539,14 @@ class TradeViewModel(
         edit { it.copy(note = note.take(100)) }
     }
 
-    fun save() {
-        val s = _state.value
-        if (s.isSaving || s.locked) return
+    /** The form as a trade to save, or null (with its errors marked) when it can't be saved. */
+    private fun validDraft(s: TradeUiState): TradeDraft? {
+        if (s.isSaving || s.locked) return null
         if (!s.isValid) {
             edit { it.copy(showErrors = true, invalidSaveCount = it.invalidSaveCount + 1) }
-            return
+            return null
         }
-        val draft = TradeDraft(
+        return TradeDraft(
             type = s.type,
             amount = s.amount,
             accountId = s.selectedAccountId!!,
@@ -511,6 +560,29 @@ class TradeViewModel(
             savingExempt = s.effectiveSavingExempt,
             toCategoryId = s.effectiveToBudget?.id,
         )
+    }
+
+    /** The Add screen's "Add to draft": the form goes to the draft list, not the database. */
+    fun addToDraft() {
+        val s = _state.value
+        if (s.isEditing) return
+        val draft = validDraft(s) ?: return
+        val id = draftStore.add(draft)
+        lastDrafted = id to s
+        resetForm()
+        _events.tryEmit(TradeEvent.Drafted(id))
+    }
+
+    fun save() {
+        val s = _state.value
+        // A started draft list takes every new trade: Save never writes to the database by accident.
+        if (s.drafting) return addToDraft()
+        val draft = validDraft(s) ?: return
+        if (s.isDraftEdit) {
+            draftStore.update(s.editingDraftId!!, draft)
+            _events.tryEmit(TradeEvent.SavedAndClose)
+            return
+        }
         viewModelScope.launch {
             edit { it.copy(isSaving = true) }
             try {
@@ -533,6 +605,11 @@ class TradeViewModel(
     }
 
     fun deleteEditingTrade() {
+        _state.value.editingDraftId?.let { draftId ->
+            draftStore.remove(draftId)
+            _events.tryEmit(TradeEvent.DeletedAndClose)
+            return
+        }
         val id = _state.value.editingTradeId ?: return
         if (_state.value.locked) return
         viewModelScope.launch {
@@ -544,36 +621,49 @@ class TradeViewModel(
     /** The trade saved last and the form as it was when saved, for [undo]. */
     private var lastSaved: Pair<Long, TradeUiState>? = null
 
+    /** The draft added last and the form as it was then, for [undoDraft]. */
+    private var lastDrafted: Pair<Long, TradeUiState>? = null
+
+    /** Takes a draft just added out of the list and puts it back into the form. */
+    fun undoDraft(draftId: Long) {
+        val saved = lastDrafted?.takeIf { it.first == draftId }?.second
+        lastDrafted = null
+        draftStore.remove(draftId)
+        if (saved != null) restoreForm(saved)
+    }
+
     /** Deletes a trade just saved and puts what it was saved with back into the form, to fix and save again. */
     fun undo(tradeId: Long) {
         val saved = lastSaved?.takeIf { it.first == tradeId }?.second
         lastSaved = null
-        if (saved != null) {
-            edit {
-                it.copy(
-                    type = saved.type,
-                    amount = saved.amount,
-                    selectedCategory = saved.selectedCategory,
-                    selectedParentCategory = saved.selectedParentCategory,
-                    selectedAccountId = saved.selectedAccountId,
-                    selectedToAccountId = saved.selectedToAccountId,
-                    occurredAt = saved.occurredAt,
-                    occurredAtPicked = saved.occurredAtPicked,
-                    note = saved.note,
-                    budgetExempt = saved.budgetExempt,
-                    savingExempt = saved.savingExempt,
-                    toBudget = saved.toBudget,
-                    showErrors = false,
-                    // What was saved, predictions included, is the user's input now.
-                    touched = saved.touched + saved.predicted,
-                )
-            }
-        }
+        if (saved != null) restoreForm(saved)
         viewModelScope.launch {
             tradeRepository.delete(tradeId)
             // Its category's use count and last use went back with it.
             loadPickers()
             loadPredictionData()
+        }
+    }
+
+    private fun restoreForm(saved: TradeUiState) {
+        edit {
+            it.copy(
+                type = saved.type,
+                amount = saved.amount,
+                selectedCategory = saved.selectedCategory,
+                selectedParentCategory = saved.selectedParentCategory,
+                selectedAccountId = saved.selectedAccountId,
+                selectedToAccountId = saved.selectedToAccountId,
+                occurredAt = saved.occurredAt,
+                occurredAtPicked = saved.occurredAtPicked,
+                note = saved.note,
+                budgetExempt = saved.budgetExempt,
+                savingExempt = saved.savingExempt,
+                toBudget = saved.toBudget,
+                showErrors = false,
+                // What was saved, predictions included, is the user's input now.
+                touched = saved.touched + saved.predicted,
+            )
         }
     }
 
