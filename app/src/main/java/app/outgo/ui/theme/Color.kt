@@ -35,3 +35,20 @@ val OnPendingContainer = Color(0xFF7A5800)
 val WarningContainer: Color
     @androidx.compose.runtime.Composable
     get() = androidx.compose.ui.graphics.lerp(androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant, Color(0xFFFFD54F), 0.3f)
+
+/**
+ * Behind cards and list rows (Analysis charts, budgets, savings, categories, accounts): a shade
+ * off the page background, in both themes, so they read as cards.
+ */
+val CardColor: Color
+    @androidx.compose.runtime.Composable
+    get() = androidx.compose.ui.graphics.lerp(
+        androidx.compose.material3.MaterialTheme.colorScheme.background,
+        androidx.compose.material3.MaterialTheme.colorScheme.onBackground,
+        0.035f,
+    )
+
+/** Behind a [CardColor] row with a warning (overspent budget, negative balance): a pale amber tint of it. */
+val WarningCardColor: Color
+    @androidx.compose.runtime.Composable
+    get() = androidx.compose.ui.graphics.lerp(CardColor, Color(0xFFFFD54F), 0.2f)

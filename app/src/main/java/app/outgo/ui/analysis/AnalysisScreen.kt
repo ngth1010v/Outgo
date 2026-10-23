@@ -16,7 +16,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.style.Hyphens
@@ -89,6 +88,7 @@ import app.outgo.ui.LocalAppContainer
 import app.outgo.ui.component.reorderableItem
 import app.outgo.ui.component.rememberReorderState
 import app.outgo.ui.nav.HistoryType
+import app.outgo.ui.theme.CardColor
 import app.outgo.ui.theme.ExpenseRed
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
@@ -350,10 +350,9 @@ private val DeleteZoneWidth = 45.dp
 /** A thin hint of the zone while the finger is still far from it. */
 private val DeleteZoneCollapsed = 6.dp
 
-/** A shade off the page background, in both themes, so cards read as cards. */
+/** Shared with the budget, savings, category and account rows. */
 @Composable
-private fun cardColor(): Color =
-    lerp(MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.onBackground, 0.035f)
+private fun cardColor(): Color = CardColor
 
 /**
  * One page's cards. A long press lifts a card (see [rememberReorderState]); dropping it with the

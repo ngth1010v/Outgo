@@ -21,7 +21,8 @@ import app.outgo.R
 import app.outgo.data.db.dao.AccountWithProgress
 import app.outgo.data.db.dao.BudgetWithProgress
 import app.outgo.ui.LocalAppContainer
-import app.outgo.ui.theme.WarningContainer
+import app.outgo.ui.theme.CardColor
+import app.outgo.ui.theme.WarningCardColor
 import app.outgo.util.Money
 
 /**
@@ -43,7 +44,7 @@ data class SavingDraftChange(val savedAfter: Long, val addedByDay: List<Long>)
 fun BudgetCard(budget: BudgetWithProgress, draft: BudgetDraftChange? = null) {
     val over = (draft?.spentAfter ?: budget.spent) > (draft?.limitAfter ?: budget.effectiveLimit)
     Box {
-        Card(colors = if (over) CardDefaults.cardColors(containerColor = WarningContainer) else CardDefaults.cardColors()) {
+        Card(colors = CardDefaults.cardColors(containerColor = if (over) WarningCardColor else CardColor)) {
             BudgetRow(budget, modifier = Modifier.padding(12.dp), draft = draft)
         }
         if (over) WarningBadge(stringResource(R.string.category_over_budget_warning))
@@ -53,7 +54,7 @@ fun BudgetCard(budget: BudgetWithProgress, draft: BudgetDraftChange? = null) {
 /** A savings account's card, as Home lists them; [draft] as in [BudgetCard]. */
 @Composable
 fun SavingsCard(row: AccountWithProgress, draft: SavingDraftChange? = null) {
-    Card { SavingsAccountRow(row, modifier = Modifier.padding(12.dp), draft = draft) }
+    Card(colors = CardDefaults.cardColors(containerColor = CardColor)) { SavingsAccountRow(row, modifier = Modifier.padding(12.dp), draft = draft) }
 }
 
 /**

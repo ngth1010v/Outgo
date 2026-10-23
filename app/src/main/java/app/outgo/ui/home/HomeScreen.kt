@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
@@ -64,6 +65,7 @@ import app.outgo.R
 import app.outgo.ui.LocalAppContainer
 import app.outgo.ui.component.BudgetCard
 import app.outgo.ui.component.SavingsCard
+import app.outgo.ui.theme.CardColor
 import app.outgo.ui.theme.WarningDarkYellow
 import app.outgo.util.Money
 
@@ -137,7 +139,7 @@ fun HomeScreen(onAddBudget: (categoryId: Long) -> Unit = {}, onAddSaving: (accou
                         Text(stringResource(R.string.home_budgets), style = MaterialTheme.typography.titleMedium)
                         // Adding one is offered only while there is none; later ones are added from the Category tab.
                         if (state.budgets.isEmpty()) {
-                            Card { PlusRow(stringResource(R.string.home_add_budget), onClick = { pickBudget = true }) }
+                            Card(colors = CardDefaults.cardColors(containerColor = CardColor)) { PlusRow(stringResource(R.string.home_add_budget), onClick = { pickBudget = true }) }
                         } else {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 state.budgets.forEach { budget -> BudgetCard(budget) }
@@ -151,7 +153,7 @@ fun HomeScreen(onAddBudget: (categoryId: Long) -> Unit = {}, onAddSaving: (accou
                         Text(stringResource(R.string.home_savings), style = MaterialTheme.typography.titleMedium)
                         // Like the budgets: adding one is offered only while there is none; later ones from the Balance tab.
                         if (state.savingsAccounts.isEmpty()) {
-                            Card { PlusRow(stringResource(R.string.home_add_saving), onClick = { pickSaving = true }) }
+                            Card(colors = CardDefaults.cardColors(containerColor = CardColor)) { PlusRow(stringResource(R.string.home_add_saving), onClick = { pickSaving = true }) }
                         } else {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 state.savingsAccounts.forEach { account -> SavingsCard(account) }

@@ -77,7 +77,8 @@ import app.outgo.ui.component.MonthPicker
 import app.outgo.ui.component.SwitchField
 import app.outgo.ui.component.TreeList
 import app.outgo.ui.component.WarningBadge
-import app.outgo.ui.theme.WarningContainer
+import app.outgo.ui.theme.CardColor
+import app.outgo.ui.theme.WarningCardColor
 import app.outgo.ui.component.savingsProgressColor
 import app.outgo.ui.component.savingsProgressText
 import app.outgo.util.Money
@@ -170,7 +171,7 @@ private fun AccountRow(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (warn) WarningContainer else MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+            .background(if (warn) WarningCardColor else CardColor, RoundedCornerShape(12.dp))
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         Row(
