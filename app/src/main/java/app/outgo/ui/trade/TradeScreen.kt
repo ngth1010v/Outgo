@@ -551,11 +551,13 @@ private fun TradeForm(
             }
             if (state.isDraftEdit) DeleteButton(onClick = onDelete, label = stringResource(R.string.draft_remove)) else DeleteButton(onClick = onDelete)
         } else {
-            // [Add to draft] [Save], or, with a draft list started, [Draft (n) ›] [Add to draft].
+            // [Add to draft] [Save], or, with a draft list started, [Add to draft] [Draft (n)]
+            // (the filled one being Save, which then adds to the list).
             Row(
                 modifier = Modifier.offset { IntOffset(saveShake().dp.roundToPx(), 0) }.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                if (state.drafting) saveButton(Modifier.weight(1f))
                 OutlinedButton(
                     onClick = if (state.drafting) onOpenDrafts else viewModel::addToDraft,
                     enabled = !state.isSaving,
@@ -566,7 +568,7 @@ private fun TradeForm(
                         maxLines = 1,
                     )
                 }
-                saveButton(Modifier.weight(1f))
+                if (!state.drafting) saveButton(Modifier.weight(1f))
             }
         }
     }

@@ -5,17 +5,15 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.TextFieldValue
 import app.outgo.util.Money
 
 /**
  * An outlined amount input: [text] is as [Money.cleanInput] writes it (grouped, up to
- * [Money.decimals] decimals), and [Money.parseInput] turns it into an amount. The cursor stays at the end, like the
- * Trade screen's amount: regrouping changes the text's length, and a cursor left where the
- * keyboard had it would put the next digit or decimal separator in the middle of the number.
+ * [Money.decimals] decimals), and [Money.parseInput] turns it into an amount. The cursor works
+ * like the Trade screen's amount (see [MoneyInputCursor]): focusing puts it at the end, a tap
+ * while focused puts it where tapped, and it keeps its place among the digits when they regroup.
  */
 @Composable
 fun MoneyTextField(
@@ -27,15 +25,19 @@ fun MoneyTextField(
     isError: Boolean = false,
     supportingText: (@Composable () -> Unit)? = null,
 ) {
+    val cursor = rememberMoneyInputCursor()
     OutlinedTextField(
-        value = TextFieldValue(text, selection = TextRange(text.length)),
-        onValueChange = { onTextChange(Money.cleanInput(text, it.text)) },
+        value = cursor.value(text),
+        onValueChange = { new ->
+            val cleaned = cursor.onValueChange(text, new)
+            if (cleaned != text) onTextChange(cleaned)
+        },
         label = { Text(label, maxLines = 1) },
         enabled = enabled,
         isError = isError,
         supportingText = supportingText,
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
-        modifier = modifier,
+        modifier = modifier.then(cursor.modifier { text }),
     )
 }

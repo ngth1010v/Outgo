@@ -25,11 +25,9 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import app.outgo.ui.theme.ExpenseRed
 import app.outgo.ui.theme.IncomeGreen
@@ -41,7 +39,8 @@ import app.outgo.util.Money
  * Expense/Income/Transfer, never negative (the sign always comes from the
  * Expense/Income toggle, not the number itself). Takes up to two decimals.
  * A tap anywhere on its row (the currency symbol, the empty space beside it)
- * focuses it, not just on the digits.
+ * focuses it, not just on the digits. Focusing it puts the cursor at the end; a tap while
+ * focused puts it where tapped (see [MoneyInputCursor]).
  */
 @Composable
 fun AmountField(
@@ -59,6 +58,7 @@ fun AmountField(
     // amount set from outside (cleared after a save, put back by Undo) or a new number format.
     var typed by remember { mutableStateOf(Money.inputText(amount)) }
     val text = if (Money.parseInput(typed) == amount) typed else Money.inputText(amount)
+    val cursor = rememberMoneyInputCursor()
     val style = MaterialTheme.typography.headlineLarge.copy(
         color = color,
         fontWeight = FontWeight.Bold,
@@ -81,10 +81,13 @@ fun AmountField(
             Box {
                 if (text.isEmpty()) Text(if (predicted > 0) Money.inputText(predicted) else "0", style = style.copy(color = placeholderColor))
                 BasicTextField(
-                    value = TextFieldValue(text = text, selection = TextRange(text.length)),
-                    onValueChange = {
-                        typed = Money.cleanInput(text, it.text)
-                        onAmountChange(Money.parseInput(typed))
+                    value = cursor.value(text),
+                    onValueChange = { new ->
+                        val cleaned = cursor.onValueChange(text, new)
+                        if (cleaned != text) {
+                            typed = cleaned
+                            onAmountChange(Money.parseInput(typed))
+                        }
                     },
                     textStyle = style,
                     singleLine = true,
@@ -94,7 +97,8 @@ fun AmountField(
                     keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                     modifier = Modifier
                         .width(IntrinsicSize.Min)
-                        .focusRequester(focusRequester),
+                        .focusRequester(focusRequester)
+                        .then(cursor.modifier { text }),
                 )
             }
             // No gap: amounts are always written "<money><currency>", see Money.format.
