@@ -2,60 +2,81 @@
 
 # Outgo
 
-**A lightweight, fast-starting expense tracker for Android.**
+**A small, fast, offline expense tracker for Android.**
 
-Open the app and you are already on the "add expense" screen. Log a purchase in a few taps.
+Open the app and you are already on the "add expense" screen.<br>
+Type the amount, tap a category, save. That's it.
 
 [![Latest release](https://img.shields.io/github/v/release/ngth1010v/Outgo)](https://github.com/ngth1010v/Outgo/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Android 11+](https://img.shields.io/badge/Android-11%2B-3DDC84?logo=android&logoColor=white)
 ![Kotlin + Jetpack Compose](https://img.shields.io/badge/Kotlin-Jetpack%20Compose-7F52FF?logo=kotlin&logoColor=white)
 
-<img src="docs/add.png" width="30%" alt="Add screen" />&nbsp;
-<img src="docs/home.png" width="30%" alt="Home screen" />&nbsp;
-<img src="docs/analysis.png" width="30%" alt="Analysis screen" />
+<img src="docs/add.png" width="24%" alt="Add screen" />&nbsp;
+<img src="docs/home.png" width="24%" alt="Home screen" />&nbsp;
+<img src="docs/analysis-categories.png" width="24%" alt="Analysis screen" />&nbsp;
+<img src="docs/history.png" width="24%" alt="History screen" />
+
+**[⬇ Download the latest APK](https://github.com/ngth1010v/Outgo/releases/latest)**
 
 </div>
+
+## Why Outgo
+
+- **Built for logging fast.** The app opens on the add screen, so a purchase takes a few taps.
+- **Private.** No account, no network, no ads. Your data stays on your phone.
+- **One file holds everything.** Back up and restore with a single `.sqlite` file.
+- **Light.** About 4 MB, starts quickly, and stays smooth on older phones.
+- **English and Vietnamese.**
 
 ## Features
 
 ### Quick entry
 
-<img src="docs/add.png" align="right" width="240" alt="Add an expense" />
+<img src="docs/add-expense.gif" align="right" width="240" alt="Logging a coffee in a few taps" />
 
-- **The app opens on the add screen.** You do not have to go through a dashboard to log an expense.
-- **Expense, Income and Transfer** use the same form. Swipe left or right to switch between them.
-- **Smart category grid:** one row shows your 5 most recent categories, and one row shows your 5 most used. Most entries take one tap. **All ›** opens the full category list, which you can search.
-- Pick the account, date, time and an optional note. After you tap **Save**, the form resets and a snackbar offers **Undo**.
-- **Draft list:** tap **Add to draft** to collect several transactions (expenses, incomes and transfers mixed) before saving them. While the draft has items, both buttons add to it, and **Draft (n) ›** opens the list: edit a row, remove it with **x**, **Clear draft**, or **Save to history** in one go. Drafts that point to a deleted or archived account or category are flagged and stay behind. The draft lives in memory only: it is gone when the app is closed.
+- **Expense, Income and Transfer** share one form. Swipe left or right to switch.
+- **Smart category grid:** one row shows your 5 most recent categories, one row your 5 most used. Most entries need one tap. **All ›** opens the full list, which you can search.
+- **Predictions:** empty fields are guessed from your past transactions and shown faded. Tap a field to clear its guess. You can turn this off or set how sure a guess must be.
+- Pick the account, date, time and an optional note. After **Save** the form resets, and a snackbar offers **Undo**. Swipe the snackbar away to dismiss it.
+- The amount cursor goes where you tap, so you can fix one digit in the middle of a number.
 
 <br clear="right" />
 
-### Home dashboard
+### Draft list
+
+<img src="docs/draft.png" align="right" width="240" alt="Draft list with three transactions" />
+
+Back from a trip with a stack of receipts? Collect them first, save them together.
+
+- Tap **Add to draft** instead of **Save**. While the draft has items, the buttons become **Add to draft** and **Draft (n) ›**, so nothing goes to History by accident.
+- Expenses, incomes and transfers can be mixed.
+- In the list: tap a row to edit it, **x** to remove it, **Clear draft**, or **Save to history** to save everything at once.
+- Drafts that point to a deleted or archived account or category are flagged and stay in the list.
+- The draft lives in memory only. It is gone when the app is closed.
+
+<br clear="right" />
+
+### Home
 
 <img src="docs/home.png" align="right" width="240" alt="Home dashboard" />
 
-- **Available, savings and total balance** at a glance.
-- **Budgets** for this month: amount spent, amount remaining or over, and the change against last month. They are listed in the same order as your categories.
-- **Savings** progress toward each savings account's monthly target, in the same order as your accounts.
-- Tap any budget or savings progress bar to open its **pace panel**: what is left per remaining day, and a chart of this month's running total against a straight line to the limit or target. The gap between the two lines is shaded green when you are on track and red when you are not.
-- **History** grouped by day with daily totals. You can filter by Expense, Income or Transfer. Tap a transaction to edit it or delete it.
+- **Free, budgets, savings, available and total balance** at a glance. Tap the ⓘ next to one to see how it is calculated, or the eye to hide it.
+- **Budgets** for this month: amount spent, left or over, and the change against last month. A warning shows when your available money can't cover what your budgets still need.
+- **Savings** progress toward each savings account's monthly target.
+- Tap a budget or savings bar to open its **pace panel**: what is left per remaining day, and this month's running total against a straight line to the limit or target. The gap is shaded green when you are on track and red when you are not.
 
 <br clear="right" />
-
-<p align="center">
-  <img src="docs/history.png" width="240" alt="Transaction history" />
-</p>
 
 ### Accounts and savings
 
 <img src="docs/accounts.png" align="right" width="240" alt="Accounts" />
 
-- Keep several accounts, for example cash, bank and e-wallet, each with its own icon and color.
-- **Savings accounts** can have a monthly target, and a progress bar tracks it. The bar turns green when you reach the target.
-- Edit an account's balance directly. Outgo records the difference as a balance adjustment, so the balance always matches the transaction history. A new account's first balance is its opening balance, dated the day you choose.
-- Accounts that have history are archived, not deleted, so past records stay correct.
-- **Drag to reorder:** long-press an account, drag it to a new place and let go. The same order is used on Home and in the account picker.
+- Several accounts, for example cash, bank and e-wallet, each with its own icon and color, and subaccounts inside them.
+- **Savings accounts** can have a monthly target. A progress bar tracks it and turns green when you reach it.
+- Edit a balance directly. Outgo records the difference as a balance adjustment, so the balance always matches the history. A new account's first balance is its opening balance, dated the day you choose.
+- Accounts with history are archived, not deleted, so past records stay correct.
+- **Drag to reorder:** long-press an account, drag it, let go. The order is used everywhere.
 
 <br clear="right" />
 
@@ -63,56 +84,55 @@ Open the app and you are already on the "add expense" screen. Log a purchase in 
 
 <img src="docs/categories.png" align="right" width="240" alt="Categories and budgets" />
 
-- **Two-level categories** (parent and subcategory) for both expense and income. A default set is created on first launch.
-- Set a **monthly budget** on any expense category. A parent budget counts the spending of all its subcategories.
-- The progress bar shows the remaining amount. It turns red with an "over" amount when you exceed the budget.
-- **253 built-in icons** (148 of them, for categories only, grouped by theme in the picker), or **import your own PNG**. Imported icons are stored in the database, so they are included in backups.
-
-<br clear="right" />
-
-#### Drag to reorder
-
-<img src="docs/reorder.png" align="right" width="240" alt="Dragging a subcategory to a new place" />
-
-- **Long-press** a category or subcategory to lift it. Drag it, and the other rows move aside to show where it will land. Let go to drop it there.
-- Categories move among categories. While you drag one, all categories fold so the list is short.
-- Subcategories move within their category or into another one. Hold a subcategory over a folded category for a moment and it opens, so you can drop the subcategory inside. The subcategory's past transactions and budget spending move with it.
-- A category's only subcategory can't be moved out of it.
-- The list scrolls when you drag near its top or bottom edge.
+- **Two-level categories** (category and subcategory) for expense and income. A default set is created on first launch.
+- A **monthly budget** on any expense category. A category's budget counts the spending of all its subcategories.
+- The bar shows what is left. It turns red, with the amount over, when you go past the budget.
+- **253 built-in icons**, grouped by theme in the picker, or **import your own PNG**. Imported icons are stored in the database, so backups include them.
+- **Drag to reorder:** long-press a category or subcategory, drag it, let go. Hold a subcategory over a folded category for a moment and it opens, so you can move the subcategory into it. Its past transactions and budget spending move with it.
 
 <br clear="right" />
 
 ### Analysis
 
-<img src="docs/analysis.png" align="right" width="240" alt="Analysis" />
+<p>
+  <img src="docs/analysis.png" width="240" alt="Account charts" />&nbsp;
+  <img src="docs/analysis-categories.png" width="240" alt="Category charts" />
+</p>
 
-- **One page per month and one per year**, swiped through or stepped with the year and month pickers in the top bar. Swipe right off December to reach that year's page: its own chart list with the same sections as the month pages (Accounts, Categories, Trades, Savings, Budgets, Other), 32 charts drawn from the year's months.
-- **Your own layout:** every month page is the same list of chart cards you arrange. Long-press a card to lift it, drag it to a new place and let go. To remove a card, drag it to the right edge: a red strip opens as your finger gets close, and dropping on it removes the card (with **Undo**).
-- **Add chart:** the button at the bottom of the list opens a sheet of the charts on offer, grouped (Accounts, Categories, Other) and shown with icons. The layout is saved in the database so it travels with backups.
-- **Accounts:** balances by day, a breakdown pie of month-end balances, and the last 5 months stacked — for each parent account (its subaccounts added up) or for the subaccounts of one parent you pick. Each account can be switched off on its card.
-- **Categories:** the same three charts for expense and income, by category or by the subcategories of one parent category.
-- **Month summary** (under Other): the total signed as money flows (spending −, income +, net in All mode), the change against last month in amount and percent, the average per day, and money moved between accounts. **Expense / Income / All** is picked from the chip in its title.
+- **One page per month and one per year.** Swipe between them, or jump with the pickers in the top bar. Swipe right off December to reach that year's page.
+- **Your own layout:** a page is a list of chart cards you arrange. Long-press a card to drag it. Drag it to the right edge to remove it (with **Undo**). **Add chart** at the bottom offers every chart, grouped and with icons. The layout is saved in the database, so it travels with backups.
+- **Accounts:** balance by day, balance breakdown and the last 5 months, for all accounts or the subaccounts of one.
+- **Categories:** the same charts for expense and income, by category or by the subcategories of one category, in money or in number of transactions.
+- **Transactions:** a day calendar, weekday and time of day, transaction sizes, the largest transactions, transfer flows.
+- **Savings and budgets:** pace, month forecast, burn-down, savings rate, and the last months' targets and limits.
+- **Month summary:** total, change against last month, average per day, and money moved between accounts.
+
+### History
+
+<img src="docs/history.png" align="right" width="240" alt="Transaction history" />
+
+- Every transaction, grouped by day, with daily totals.
+- Filter by type, account, category, date range, amount or note text.
+- Tap a transaction to edit or delete it.
 
 <br clear="right" />
 
 ### Settings and data
 
-- **English and Vietnamese**, chosen in the app or taken from the system language.
-- **Currency symbol:** pick one of 20 common currencies, or type your own.
-- **Backup and restore to one `.sqlite` file.** All your data is in that file: accounts, categories, transactions, budgets, settings and imported icons. A restore keeps a safety copy of your current data on the device first.
-- **Offline and private.** No account, no network, no ads. Your data stays on your phone.
+- **Language:** English or Vietnamese, or follow the system.
+- **Currency:** 20 common symbols, or type your own. Choose the **number format** (for example `1,234.56` or `1.234,56`) and **0, 1 or 2 decimal places**.
+- **Backup and restore to one `.sqlite` file.** It holds everything: accounts, categories, transactions, budgets, settings and imported icons. A restore first keeps a safety copy of your current data on the device.
 
 ## Download
 
 1. Go to the [Releases page](https://github.com/ngth1010v/Outgo/releases/latest).
 2. Download `Outgo.apk` from the latest release.
-3. Open the downloaded file on your Android phone to install it.
-   - The first time, Android asks for permission to install apps from this source. Allow it, then tap **Install**.
+3. Open the file on your phone to install it. The first time, Android asks for permission to install apps from this source. Allow it, then tap **Install**.
 4. Open **Outgo** from your app drawer.
 
-Requires Android 11 (API 30) or newer.
+Requires Android 11 (API 30) or newer. New versions install over the old one and keep your data.
 
-> **Updating from v1.5.1 or older?** Starting with v1.6.0, releases are signed with a new key, so Android will not install v1.6.0 over an older version. First export a backup in **Settings → Export backup**. Then uninstall the old app, install the new one, and use **Settings → Restore from backup**. Later versions will install over v1.6.0 normally.
+> **Updating from v1.5.1 or older?** Starting with v1.6.0, releases are signed with a new key, so Android will not install them over an older version. First export a backup in **Settings → Export backup**. Then uninstall the old app, install the new one, and use **Settings → Restore from backup**.
 
 ## Build from source
 
@@ -150,11 +170,11 @@ keyPassword=…
 ```
 
 Keep that keystore backed up somewhere private. Losing it means existing installs can never be
-updated — they have to be uninstalled first, and Outgo keeps its data on the device only. For CI,
+updated: they have to be uninstalled first, and Outgo keeps its data on the device only. For CI,
 hold the keystore as a base64 secret and write both files during the job rather than committing
 them. For Google Play, enrol in Play App Signing and keep this key as the private *upload* key.
 
-Check what a build actually produced:
+Check what a build produced:
 
 ```bash
 apksigner verify --verbose app\build\outputs\apk\release\app-release.apk
@@ -163,8 +183,8 @@ apksigner verify --verbose app\build\outputs\apk\release\app-release.apk
 ## Under the hood
 
 - **Kotlin, Jetpack Compose and Material 3.** A single-activity app with no DI framework and no image-loading library.
-- **One SQLite file (Room).** Money is stored as `Long` in hundredths of the currency unit (schema 21+), never as floating point. SQL triggers maintain balances, monthly category totals and category usage counts.
-- **Fast cold start.** The first frame draws before the database opens. A committed **Baseline Profile** AOT-compiles the startup path and every animated transition.
+- **One SQLite file (Room).** Money is stored as `Long` in hundredths of the currency unit, never as floating point. SQL triggers keep balances, monthly category totals and category usage counts up to date.
+- **Fast cold start.** The first frame draws before the database opens. A committed **Baseline Profile** compiles the startup path and every animated transition ahead of time.
 
 See [architecture.md](architecture.md) for the full design (in Vietnamese): data model, triggers, screens, backup format and performance budget.
 
