@@ -1,12 +1,11 @@
 package app.outgo.ui.category
 
+import app.outgo.ui.component.SectionSwitch
 import app.outgo.ui.component.MoneyTextField
 import app.outgo.util.MonthKey
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.material3.Switch
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.draw.scale
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -605,20 +604,6 @@ internal fun SectionHeader(title: String, info: String, action: (@Composable () 
             confirmButton = { TextButton(onClick = { showInfo = false }) { Text(stringResource(R.string.common_ok)) } },
         )
     }
-}
-
-/**
- * A section header's on/off switch, drawn at 75% (39x24dp) so it doesn't make the header taller
- * than its title row. Compose still widens its touch area to the 48dp minimum.
- */
-@Composable
-internal fun SectionSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
-    Switch(
-        checked = checked,
-        onCheckedChange = onCheckedChange,
-        enabled = enabled,
-        modifier = modifier.size(39.dp, 24.dp).scale(0.75f),
-    )
 }
 
 /** Where a budget's unspent amount goes: nowhere, another budget's limit, or another account. */

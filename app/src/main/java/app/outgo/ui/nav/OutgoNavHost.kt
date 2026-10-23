@@ -178,11 +178,13 @@ fun OutgoRoot(openSetting: Boolean = false) {
                     arguments = listOf(
                         navArgument("id") { type = NavType.LongType; defaultValue = 0L },
                         navArgument("parent") { type = NavType.LongType; defaultValue = 0L },
+                        navArgument("savings") { type = NavType.BoolType; defaultValue = false },
                     ),
                 ) { entry ->
                     AccountEditScreen(
                         accountId = entry.arguments?.getLong("id")?.takeIf { it > 0L },
                         parentId = entry.arguments?.getLong("parent")?.takeIf { it > 0L },
+                        openSavings = entry.arguments?.getBoolean("savings") ?: false,
                         onClose = { navController.popBackStack() },
                     )
                 }
@@ -212,7 +214,10 @@ fun OutgoRoot(openSetting: Boolean = false) {
 private fun TabContent(route: String, shown: Boolean, navController: NavHostController) {
     when (route) {
         Routes.TRADE -> TradeScreen(editingTradeId = null, onClose = {}, visible = shown)
-        Routes.HOME -> HomeScreen(onAddBudget = { id -> navController.navigate(Routes.categoryEdit(id, budget = true)) })
+        Routes.HOME -> HomeScreen(
+            onAddBudget = { id -> navController.navigate(Routes.categoryEdit(id, budget = true)) },
+            onAddSaving = { id -> navController.navigate(Routes.accountEdit(id, savings = true)) },
+        )
         Routes.BALANCE -> BalanceScreen(onOpenEditor = { id, parentId -> navController.navigate(Routes.accountEdit(id, parentId)) })
         Routes.CATEGORY -> CategoryScreen(
             onOpenEditor = { id, parentId -> navController.navigate(Routes.categoryEdit(id, parentId)) },

@@ -12,8 +12,8 @@ import androidx.compose.ui.text.input.TextFieldValue
 import app.outgo.util.Money
 
 /**
- * An outlined amount input: [text] is as [Money.cleanInput] writes it (grouped, up to two
- * decimals), and [Money.parseInput] turns it into an amount. The cursor stays at the end, like the
+ * An outlined amount input: [text] is as [Money.cleanInput] writes it (grouped, up to
+ * [Money.decimals] decimals), and [Money.parseInput] turns it into an amount. The cursor stays at the end, like the
  * Trade screen's amount: regrouping changes the text's length, and a cursor left where the
  * keyboard had it would put the next digit or decimal separator in the middle of the number.
  */

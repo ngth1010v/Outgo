@@ -29,6 +29,9 @@ class SettingViewModel(
     val numberStyle: StateFlow<NumberStyle> = settingRepository.observeNumberStyle()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Money.style)
 
+    val decimals: StateFlow<Int> = settingRepository.observeDecimals()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Money.decimals)
+
     val predictEnabled: StateFlow<Boolean> = settingRepository.observePredictEnabled()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
@@ -45,6 +48,10 @@ class SettingViewModel(
 
     fun setNumberStyle(style: NumberStyle) {
         viewModelScope.launch { settingRepository.setNumberStyle(style) }
+    }
+
+    fun setDecimals(decimals: Int) {
+        viewModelScope.launch { settingRepository.setDecimals(decimals) }
     }
 
     fun setCurrency(symbol: String) {

@@ -46,8 +46,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import app.outgo.ui.component.PickCell
+import app.outgo.ui.component.PlusRow
 import app.outgo.ui.component.GroupedPickerSheet
 import app.outgo.domain.CategoryKind
+import app.outgo.data.db.entity.AccountEntity
 import app.outgo.data.db.entity.CategoryEntity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
@@ -80,7 +82,7 @@ import app.outgo.util.Money
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(onAddBudget: (categoryId: Long) -> Unit = {}) {
+fun HomeScreen(onAddBudget: (categoryId: Long) -> Unit = {}, onAddSaving: (accountId: Long) -> Unit = {}) {
     val container = LocalAppContainer.current
     val viewModel: HomeViewModel = viewModel(
         factory = viewModelFactory {
@@ -113,6 +115,7 @@ fun HomeScreen(onAddBudget: (categoryId: Long) -> Unit = {}) {
     var info by rememberSaveable { mutableStateOf<HomeBalance?>(null) }
     var shortfallOpen by rememberSaveable { mutableStateOf(false) }
     var pickBudget by rememberSaveable { mutableStateOf(false) }
+    var pickSaving by rememberSaveable { mutableStateOf(false) }
 
     Scaffold { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
@@ -144,16 +147,10 @@ fun HomeScreen(onAddBudget: (categoryId: Long) -> Unit = {}) {
 
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 10.dp, bottom = 10.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(stringResource(R.string.home_budgets), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                            TextButton(onClick = { pickBudget = true }) { Text("+ " + stringResource(R.string.home_add_budget)) }
-                        }
+                        Text(stringResource(R.string.home_budgets), style = MaterialTheme.typography.titleMedium)
+                        // Adding one is offered only while there is none; later ones are added from the Category tab.
                         if (state.budgets.isEmpty()) {
-                            Text(
-                                stringResource(R.string.home_no_budgets),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            Card { PlusRow(stringResource(R.string.home_add_budget), onClick = { pickBudget = true }) }
                         } else {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 state.budgets.forEach { budget ->
@@ -170,10 +167,13 @@ fun HomeScreen(onAddBudget: (categoryId: Long) -> Unit = {}) {
                     }
                 }
 
-                if (state.savingsAccounts.isNotEmpty()) {
-                    item {
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(bottom = 10.dp)) {
-                            Text(stringResource(R.string.home_savings), style = MaterialTheme.typography.titleMedium)
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(bottom = 10.dp)) {
+                        Text(stringResource(R.string.home_savings), style = MaterialTheme.typography.titleMedium)
+                        // Like the budgets: adding one is offered only while there is none; later ones from the Balance tab.
+                        if (state.savingsAccounts.isEmpty()) {
+                            Card { PlusRow(stringResource(R.string.home_add_saving), onClick = { pickSaving = true }) }
+                        } else {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 state.savingsAccounts.forEach { account ->
                                     Card { SavingsAccountRow(account, modifier = Modifier.padding(12.dp)) }
@@ -192,6 +192,15 @@ fun HomeScreen(onAddBudget: (categoryId: Long) -> Unit = {}) {
                         onAddBudget(category.id)
                     },
                     onDismiss = { pickBudget = false },
+                )
+            }
+            if (pickSaving) {
+                SavingAccountSheet(
+                    onSelect = { account ->
+                        pickSaving = false
+                        onAddSaving(account.id)
+                    },
+                    onDismiss = { pickSaving = false },
                 )
             }
         }
@@ -227,6 +236,38 @@ private fun BudgetCategorySheet(onSelect: (CategoryEntity) -> Unit, onDismiss: (
         selectedId = null,
         cell = { item, selected, onClick, modifier -> PickCell(item.category.name, item.category.iconId, item.category.color, selected, onClick, modifier) },
         onSelect = { onSelect(it.category) },
+        onDismiss = onDismiss,
+    )
+}
+
+/** One cell of [SavingAccountSheet]: an account, under the group of its parent (a parent heads its own group). */
+private data class AccountPick(val account: AccountEntity, val group: Long?, val key: Long)
+
+/**
+ * The account a new saving is for, grouped like the Trade screen's account list. A parent is a
+ * group's header and also its first cell, so it can be picked.
+ */
+@Composable
+private fun SavingAccountSheet(onSelect: (AccountEntity) -> Unit, onDismiss: () -> Unit) {
+    val container = LocalAppContainer.current
+    val all by remember { container.accountRepository.observeActive() }.collectAsStateWithLifecycle(initialValue = emptyList())
+    val picks = remember(all) {
+        val parents = all.filter { it.parentId == null }
+        parents.flatMap { p ->
+            listOf(AccountPick(p, null, p.id), AccountPick(p, p.id, -p.id)) +
+                all.filter { it.parentId == p.id }.map { AccountPick(it, p.id, it.id) }
+        }
+    }
+    GroupedPickerSheet(
+        title = stringResource(R.string.home_add_saving_title),
+        searchHint = stringResource(R.string.trade_search_account_hint),
+        items = picks,
+        parentId = { it.group },
+        id = { it.key },
+        name = { it.account.name },
+        selectedId = null,
+        cell = { item, selected, onClick, modifier -> PickCell(item.account.name, item.account.iconId, item.account.color, selected, onClick, modifier) },
+        onSelect = { onSelect(it.account) },
         onDismiss = onDismiss,
     )
 }

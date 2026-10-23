@@ -124,9 +124,10 @@
     <string name="home_income_history">Income history</string>
     <string name="home_transfer_history">Transfer history</string>
     <string name="home_history_section">History</string>
-    <string name="home_no_budgets">No budgets yet. Tap Add budget to set a monthly limit for a category.</string>
     <string name="home_add_budget">Add budget</string>
     <string name="home_add_budget_title">Budget for which category?</string>
+    <string name="home_add_saving">Add saving</string>
+    <string name="home_add_saving_title">Save in which account?</string>
     <string name="home_no_data">No data yet</string>
 
     <!-- Balance screen -->
@@ -252,6 +253,7 @@
     <string name="setting_language">Language</string>
     <string name="setting_currency">Currency</string>
     <string name="setting_number_format">Number format</string>
+    <string name="setting_decimals">Decimal places</string>
     <string name="setting_currency_custom">Custom symbol</string>
     <string name="setting_currency_custom_hint">Pick one above, or type your own symbol and save.</string>
     <string name="currency_region_usd">United States</string>

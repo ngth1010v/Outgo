@@ -38,6 +38,15 @@ class SettingRepository(private val context: Context, private val settingDao: Se
         CurrencyPrefs.setNumberStyle(context, style)
     }
 
+    /** Decimals every amount is written with; [Money.DEFAULT_DECIMALS] while there is no row. */
+    fun observeDecimals(): Flow<Int> = settingDao.observe(SettingKeys.DECIMALS)
+        .map { it?.toIntOrNull()?.coerceIn(0, Money.MAX_DECIMALS) ?: Money.DEFAULT_DECIMALS }
+
+    suspend fun setDecimals(decimals: Int) {
+        settingDao.set(SettingEntity(SettingKeys.DECIMALS, decimals.toString()))
+        CurrencyPrefs.setDecimals(context, decimals)
+    }
+
     suspend fun setLocale(languageTag: String) {
         settingDao.set(SettingEntity(SettingKeys.LOCALE, languageTag))
         // Mirrored to SharedPreferences so the next cold start can apply it in

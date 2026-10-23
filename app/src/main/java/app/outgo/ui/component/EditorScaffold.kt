@@ -37,7 +37,7 @@ import app.outgo.R
 /**
  * The full-screen editor shared by the category and account editors: a back arrow and the title
  * at the top left, the fields, then the buttons every editor shares (see [EditorButtons]):
- * Save, Cancel, and Delete set apart at the end. [onDelete] null hides Delete (creating, not
+ * Save, Cancel, then Delete. [onDelete] null hides Delete (creating, not
  * editing). Nothing is written until Save; while [dirty], leaving by the arrow, Cancel, the system
  * Back or a bottom-bar tab asks first (see [rememberDiscardGuard]).
  */
@@ -94,7 +94,7 @@ fun EditorTitle(title: String, onBack: () -> Unit, modifier: Modifier = Modifier
     }
 }
 
-/** Every editor's buttons, in one order: Save (the main one), Cancel, then Delete apart at the end. */
+/** Every editor's buttons, in one order and evenly spaced: Save (the main one), Cancel, then Delete. */
 @Composable
 fun EditorButtons(onSave: () -> Unit, saveEnabled: Boolean, onCancel: () -> Unit, onDelete: (() -> Unit)?) {
     Button(onClick = onSave, enabled = saveEnabled, modifier = Modifier.fillMaxWidth()) {
@@ -107,10 +107,10 @@ fun EditorButtons(onSave: () -> Unit, saveEnabled: Boolean, onCancel: () -> Unit
     if (onDelete != null) DeleteButton(onDelete)
 }
 
-/** The red Delete, with its bin icon, set apart below an editor's other buttons. */
+/** The red Delete, with its bin icon, below an editor's other buttons (the same 8dp gap as between them). */
 @Composable
 fun DeleteButton(onClick: () -> Unit) {
-    Spacer(Modifier.height(24.dp))
+    Spacer(Modifier.height(8.dp))
     OutlinedButton(
         onClick = onClick,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),

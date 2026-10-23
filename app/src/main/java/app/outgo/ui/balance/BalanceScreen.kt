@@ -40,6 +40,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -62,7 +64,7 @@ import app.outgo.domain.AccountType
 import app.outgo.domain.SavingProgressHide
 import app.outgo.ui.LocalAppContainer
 import app.outgo.ui.category.SectionHeader
-import app.outgo.ui.category.SectionSwitch
+import app.outgo.ui.component.SectionSwitch
 import app.outgo.ui.component.BudgetProgressBlock
 import app.outgo.ui.component.OutgoSegmentedButton
 import app.outgo.ui.component.ColorPickerGrid
@@ -235,7 +237,7 @@ private fun balanceViewModel(): BalanceViewModel {
 
 /** The account editor as its own screen: [accountId] edits that account, else [parentId] creates a subaccount, else a parent. */
 @Composable
-fun AccountEditScreen(accountId: Long?, parentId: Long?, onClose: () -> Unit) {
+fun AccountEditScreen(accountId: Long?, parentId: Long?, onClose: () -> Unit, openSavings: Boolean = false) {
     val viewModel = balanceViewModel()
     val accounts by viewModel.accounts.collectAsStateWithLifecycle()
     // Nothing to draw for the moment a deleted account is still on screen before the pop.
@@ -246,7 +248,7 @@ fun AccountEditScreen(accountId: Long?, parentId: Long?, onClose: () -> Unit) {
     val normalChildren = if (row?.account?.isParent != true) 0 else {
         accounts.count { it.account.parentId == accountId && it.account.accountType != AccountType.SAVINGS }
     }
-    EditAccountScreen(row, parent, normalChildren, onClose, viewModel)
+    EditAccountScreen(row, parent, normalChildren, onClose, viewModel, openSavings)
 }
 
 /**
@@ -272,6 +274,8 @@ private fun EditAccountScreen(
     normalChildren: Int,
     onDismiss: () -> Unit,
     viewModel: BalanceViewModel,
+    /** Opened to add a saving (Home's "Add saving"): made a savings account, this month's target turned on once read and focused. */
+    openSavings: Boolean = false,
 ) {
     val account = row?.account
     // A parent's balance is its subaccounts': shown, not edited.
@@ -320,6 +324,10 @@ private fun EditAccountScreen(
     // every changed month, so moving between months keeps what was typed.
     val loadedForms = remember { mutableStateMapOf<Int, SavingsForm>() }
     val editedForms = remember { mutableStateMapOf<Int, SavingsForm>() }
+    var savingsOpened by remember { mutableStateOf(false) }
+    // Set when opened to add a saving: the target field takes focus, which scrolls it into view.
+    var focusTarget by remember { mutableStateOf(false) }
+    val targetFocus = remember { FocusRequester() }
     fun showMonth(m: Int) {
         if (account == null) {
             month = m
@@ -336,6 +344,12 @@ private fun EditAccountScreen(
             val loaded = SavingsForm.of(viewModel.savingsAt(account.id, m))
             loadedForms[m] = loaded
             if (month == m) form = loaded
+            // Once, on the month it opens on: an unsaved change, like flipping the switch.
+            if (openSavings && !savingsOpened && month == m) {
+                savingsOpened = true
+                if (!loaded.enabled) form = loaded.copy(enabled = true)
+                focusTarget = true
+            }
         }
     }
     // Every month whose target differs from what was read, the shown one included.
@@ -353,6 +367,12 @@ private fun EditAccountScreen(
     val fields = listOf(accountType, name, description, Money.parseInput(balanceText), iconId, color, exempt, privacy, openingAt) +
         if (account == null) listOf(month, form) else emptyList()
     val initialFields = remember { fields }
+    // Opened to add a saving: a normal account becomes a savings one (asked first when it has normal subaccounts).
+    LaunchedEffect(Unit) {
+        if (openSavings && !typeLocked && accountType != AccountType.SAVINGS) {
+            if (normalChildren > 0) showConvertConfirm = true else accountType = AccountType.SAVINGS
+        }
+    }
     val changed = changedForms()
     val savingsShown = accountType == AccountType.SAVINGS && form.enabled
     // Like the trade form, fields are marked only once a save was tapped with something missing.
@@ -502,8 +522,14 @@ private fun EditAccountScreen(
                 label = stringResource(R.string.balance_target_hint),
                 enabled = !form.sumChildren,
                 isError = showErrors && !form.complete,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().focusRequester(targetFocus),
             )
+            if (focusTarget && !form.sumChildren) {
+                LaunchedEffect(Unit) {
+                    focusTarget = false
+                    runCatching { targetFocus.requestFocus() }
+                }
+            }
         }
 
         Spacer(Modifier.height(24.dp))

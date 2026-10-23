@@ -104,7 +104,7 @@ import app.outgo.ui.component.AccountSheet
 import app.outgo.ui.component.BudgetSheet
 import app.outgo.ui.component.GroupedPickerSheet
 import app.outgo.ui.category.SectionHeader
-import app.outgo.ui.category.SectionSwitch
+import app.outgo.ui.component.SectionSwitch
 import app.outgo.ui.component.ExceptionBadge
 import app.outgo.ui.component.IconView
 import app.outgo.ui.component.PickCell
@@ -494,7 +494,7 @@ private fun TradeForm(
             Text(stringResource(R.string.common_save), fontWeight = FontWeight.Bold)
         }
 
-        // The editors' shared order (see EditorScaffold): Save, Cancel, then Delete apart at the end.
+        // The editors' shared order (see EditorScaffold): Save, Cancel, then Delete.
         if (state.isEditing) {
             Spacer(Modifier.height(8.dp))
             OutlinedButton(onClick = onClose, modifier = Modifier.fillMaxWidth()) {

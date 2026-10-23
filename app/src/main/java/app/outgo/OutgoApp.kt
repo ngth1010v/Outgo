@@ -30,6 +30,7 @@ class OutgoApp : Application() {
         // this symbol in the first frame, long before the database finishes opening.
         Money.symbol = CurrencyPrefs.get(this)
         Money.style = CurrencyPrefs.getNumberStyle(this)
+        Money.decimals = CurrencyPrefs.getDecimals(this)
 
         // Kick off opening the database on a background thread right away so it's
         // usually already open by the time the Trade screen asks for data — but
@@ -43,6 +44,7 @@ class OutgoApp : Application() {
             // Keeps the currency symbol every screen formats with in sync with the setting
             // row. Money.symbol is snapshot state, so this also covers changing it at runtime.
             launch { container.settingRepository.observeNumberStyle().collect { Money.style = it } }
+            launch { container.settingRepository.observeDecimals().collect { Money.decimals = it } }
             container.settingRepository.observeCurrency().collect { Money.symbol = it }
         }
     }

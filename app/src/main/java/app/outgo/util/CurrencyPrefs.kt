@@ -12,6 +12,7 @@ import android.content.Context
 object CurrencyPrefs {
     private const val KEY_CURRENCY = "currency"
     private const val KEY_NUMBER_STYLE = "number_style"
+    private const val KEY_DECIMALS = "decimals"
 
     fun get(context: Context): String = context
         .getSharedPreferences(LocalePrefs.PREFS_NAME, Context.MODE_PRIVATE)
@@ -32,5 +33,16 @@ object CurrencyPrefs {
     fun setNumberStyle(context: Context, style: NumberStyle) {
         context.getSharedPreferences(LocalePrefs.PREFS_NAME, Context.MODE_PRIVATE)
             .edit().putString(KEY_NUMBER_STYLE, style.key).apply()
+    }
+
+    /** Mirror of the decimal places, for the same first-frame reason as the symbol. */
+    fun getDecimals(context: Context): Int = context
+        .getSharedPreferences(LocalePrefs.PREFS_NAME, Context.MODE_PRIVATE)
+        .getInt(KEY_DECIMALS, Money.DEFAULT_DECIMALS)
+        .coerceIn(0, Money.MAX_DECIMALS)
+
+    fun setDecimals(context: Context, decimals: Int) {
+        context.getSharedPreferences(LocalePrefs.PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putInt(KEY_DECIMALS, decimals).apply()
     }
 }

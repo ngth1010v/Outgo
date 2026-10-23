@@ -22,14 +22,17 @@ enum class NumberStyle(val key: String, val grouping: Char, val decimal: Char) {
 /**
  * All money in Outgo is a [Long] in hundredths of the currency unit (schema 21+), so 4.50$ is
  * 450 and 45,000₫ is 4,500,000. Never use Float/Double for money to avoid rounding drift.
- * The decimals are only written when they are not zero: 45,000 stays "45,000".
+ * Amounts are written with exactly [decimals] decimals, zeros included: with 2, 45,000 is "45,000.00".
  */
 object Money {
     /** Stored units per currency unit. */
     const val SCALE = 100L
 
-    /** Most digits typed after the decimal separator. */
-    private const val FRACTION_DIGITS = 2
+    /** Decimals the stored amounts hold, so the most [decimals] can be. */
+    const val MAX_DECIMALS = 2
+
+    /** A fresh install writes whole amounts, like before the setting existed. */
+    const val DEFAULT_DECIMALS = 0
 
     const val DEFAULT_SYMBOL = "$"
 
@@ -60,6 +63,13 @@ object Money {
     /** Thousands/decimal separators; snapshot state like [symbol]. See SettingRepository.observeNumberStyle. */
     var style: NumberStyle by mutableStateOf(NumberStyle.DEFAULT)
 
+    /**
+     * Decimals every amount is written with (0 to [MAX_DECIMALS]), and the most an amount field
+     * takes; snapshot state like [symbol]. Fewer than the stored two round half up: 4.50 with 0 is "5".
+     * See SettingRepository.observeDecimals.
+     */
+    var decimals: Int by mutableStateOf(DEFAULT_DECIMALS)
+
     /** 123456789 -> "1,234,567.89$": the symbol always follows the number, with no space, whatever the currency. */
     fun format(amount: Long): String = "${groupThousands(amount)}$symbol"
 
@@ -75,24 +85,39 @@ object Money {
         return sign + groupThousands(kotlin.math.abs(amount))
     }
 
-    /** 123456789 -> "1,234,567.89", 4500000 -> "45,000" (no currency symbol). */
-    fun groupThousands(amount: Long): String {
+    /** With 2 [decimals]: 123456789 -> "1,234,567.89", 4500000 -> "45,000.00" (no currency symbol). */
+    fun groupThousands(amount: Long): String = write(amount, trimZeros = false)
+
+    /**
+     * An amount as an input field starts out: grouped, rounded to [decimals] but without trailing
+     * zero decimals (so typing on goes on from the last digit), "" for 0.
+     */
+    fun inputText(amount: Long): String = if (amount == 0L) "" else write(amount, trimZeros = true)
+
+    private fun write(amount: Long, trimZeros: Boolean): String {
+        val digits = decimals.coerceIn(0, MAX_DECIMALS)
         val negative = amount < 0
-        val abs = if (amount == Long.MIN_VALUE) Long.MAX_VALUE else kotlin.math.abs(amount)
-        val whole = abs / SCALE
-        val fraction = abs % SCALE
-        val sb = StringBuilder(if (negative) "-" else "")
-        sb.append(group(whole.toString()))
-        if (fraction != 0L) sb.append(style.decimal).append(fraction.toString().padStart(FRACTION_DIGITS, '0'))
+        val abs = roundTo(if (amount == Long.MIN_VALUE) Long.MAX_VALUE else kotlin.math.abs(amount), digits)
+        val sb = StringBuilder(if (negative && abs != 0L) "-" else "")
+        sb.append(group((abs / SCALE).toString()))
+        var fraction = (abs % SCALE).toString().padStart(MAX_DECIMALS, '0').take(digits)
+        if (trimZeros) fraction = fraction.trimEnd('0')
+        if (fraction.isNotEmpty()) sb.append(style.decimal).append(fraction)
         return sb.toString()
     }
 
-    /** An amount as an input field starts out: grouped, decimals only when set, "" for 0. */
-    fun inputText(amount: Long): String = if (amount == 0L) "" else groupThousands(amount)
+    /** [abs] (hundredths, not negative) rounded half up to [digits] decimals. */
+    private fun roundTo(abs: Long, digits: Int): Long {
+        var unit = 1L
+        repeat(MAX_DECIMALS - digits) { unit *= 10 }
+        if (unit == 1L || abs > Long.MAX_VALUE - unit) return abs
+        return (abs + unit / 2) / unit * unit
+    }
 
     /**
      * What an amount field shows after the user typed [new] over [old] (both with the cursor at the
-     * end): digits regrouped, at most one decimal separator and two decimals. A '.' or ',' typed at
+     * end): digits regrouped, at most one decimal separator and [decimals] decimals (none with 0: the
+     * separator is dropped). A '.' or ',' typed at
      * the end starts the decimals whatever the style, so it works with any keyboard; the grouping
      * separators are always ours. [allowNegative] lets a leading '-' through (account balances).
      */
@@ -105,9 +130,9 @@ object Money {
             else -> -1
         }
         val whole = (if (decimalAt < 0) body else body.substring(0, decimalAt)).filter(Char::isDigit).trimStart('0')
-        if (decimalAt < 0) return sign + group(whole)
+        if (decimalAt < 0 || decimals <= 0) return sign + group(whole)
         val fraction = body.substring(decimalAt + 1).filter(Char::isDigit)
-        if (fraction.length > FRACTION_DIGITS) return old
+        if (fraction.length > decimals.coerceAtMost(MAX_DECIMALS)) return old
         return sign + group(whole).ifEmpty { "0" } + style.decimal + fraction
     }
 
@@ -119,7 +144,7 @@ object Money {
         val whole = (if (decimalAt < 0) body else body.substring(0, decimalAt)).ifEmpty { "0" }
         val fraction = if (decimalAt < 0) "" else body.substring(decimalAt + 1).filter(Char::isDigit)
         val value = (whole.toBigInteger() * SCALE.toBigInteger() +
-            fraction.take(FRACTION_DIGITS).padEnd(FRACTION_DIGITS, '0').toBigInteger())
+            fraction.take(MAX_DECIMALS).padEnd(MAX_DECIMALS, '0').toBigInteger())
             .min(Long.MAX_VALUE.toBigInteger()).toLong()
         return if (negative) -value else value
     }

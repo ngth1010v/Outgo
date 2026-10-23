@@ -293,7 +293,7 @@ private fun AnalysisHeader(
         ) {
             Text(stringResource(R.string.analysis_go_now), style = MaterialTheme.typography.labelLarge)
         }
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.width(ModeSwitchWidth)) {
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.width(ModeSwitchWidth).height(ModeSwitchHeight)) {
             OutgoSegmentedButton(
                 selected = !yearMode,
                 onClick = { if (yearMode) monthOfYear?.let(onGoTo) },
@@ -311,6 +311,9 @@ private fun AnalysisHeader(
 }
 
 private val ModeSwitchWidth = 148.dp
+
+/** 70% of a segmented button's 40dp height. */
+private val ModeSwitchHeight = 28.dp
 
 /** The picker's one row: tall enough for the Month / Year switch. */
 private val HeaderRowHeight = 40.dp

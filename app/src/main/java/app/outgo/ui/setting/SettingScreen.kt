@@ -47,6 +47,7 @@ import app.outgo.data.backup.RestoreException
 import app.outgo.ui.LocalAppContainer
 import app.outgo.ui.component.ConfirmDialog
 import app.outgo.util.LocalePrefs
+import app.outgo.util.Money
 import app.outgo.util.NumberStyle
 import kotlinx.coroutines.launch
 import java.io.File
@@ -72,9 +73,11 @@ fun SettingScreen() {
     var showLanguagePicker by remember { mutableStateOf(false) }
     var showCurrencyPicker by remember { mutableStateOf(false) }
     var showNumberStylePicker by remember { mutableStateOf(false) }
+    var showDecimalsPicker by remember { mutableStateOf(false) }
     val locale by viewModel.locale.collectAsStateWithLifecycle()
     val currency by viewModel.currency.collectAsStateWithLifecycle()
     val numberStyle by viewModel.numberStyle.collectAsStateWithLifecycle()
+    val decimals by viewModel.decimals.collectAsStateWithLifecycle()
     val predictEnabled by viewModel.predictEnabled.collectAsStateWithLifecycle()
     val predictMinConfidence by viewModel.predictMinConfidence.collectAsStateWithLifecycle()
 
@@ -132,6 +135,11 @@ fun SettingScreen() {
                 title = stringResource(R.string.setting_number_format),
                 subtitle = numberStyleSample(numberStyle),
                 onClick = { showNumberStylePicker = true },
+            )
+            SettingRow(
+                title = stringResource(R.string.setting_decimals),
+                subtitle = decimalsLabel(decimals, numberStyle),
+                onClick = { showDecimalsPicker = true },
             )
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
@@ -207,6 +215,20 @@ fun SettingScreen() {
         )
     }
 
+    if (showDecimalsPicker) {
+        OptionSheet(
+            title = stringResource(R.string.setting_decimals),
+            options = (0..Money.MAX_DECIMALS).toList(),
+            selected = decimals,
+            label = { decimalsLabel(it, numberStyle) },
+            onSelect = { n ->
+                showDecimalsPicker = false
+                viewModel.setDecimals(n)
+            },
+            onDismiss = { showDecimalsPicker = false },
+        )
+    }
+
     if (showLanguagePicker) {
         LanguagePickerSheet(
             selected = locale,
@@ -234,6 +256,10 @@ private fun languageLabel(tag: String): String = when (tag) {
     "vi" -> stringResource(R.string.setting_language_vietnamese)
     else -> stringResource(R.string.setting_language_system)
 }
+
+/** "2 (1,234.00)": [n] decimals, with a sample written in [style]. */
+private fun decimalsLabel(n: Int, style: NumberStyle): String =
+    "$n (1${style.grouping}234" + (if (n > 0) style.decimal + "0".repeat(n) else "") + ")"
 
 /** "1,234.56" written in [style], whatever the current one is. */
 private fun numberStyleSample(style: NumberStyle): String = "1${style.grouping}234${style.decimal}56"

@@ -119,9 +119,10 @@
     <string name="home_income_history">Lịch sử Thu</string>
     <string name="home_transfer_history">Lịch sử chuyển khoản</string>
     <string name="home_history_section">Lịch sử</string>
-    <string name="home_no_budgets">Chưa có ngân sách nào. Bấm Thêm ngân sách để đặt hạn mức hằng tháng cho một danh mục.</string>
     <string name="home_add_budget">Thêm ngân sách</string>
     <string name="home_add_budget_title">Ngân sách cho danh mục nào?</string>
+    <string name="home_add_saving">Thêm tiết kiệm</string>
+    <string name="home_add_saving_title">Tiết kiệm vào tài khoản nào?</string>
     <string name="home_no_data">Chưa có dữ liệu</string>
 
     <string name="balance_edit_title">Sửa tài khoản</string>
@@ -243,6 +244,7 @@
     <string name="setting_language">Ngôn ngữ</string>
     <string name="setting_currency">Tiền tệ</string>
     <string name="setting_number_format">Định dạng số</string>
+    <string name="setting_decimals">Số chữ số thập phân</string>
     <string name="setting_currency_custom">Ký hiệu tự chọn</string>
     <string name="setting_currency_custom_hint">Chọn một mục ở trên, hoặc tự nhập ký hiệu rồi lưu.</string>
     <string name="currency_region_usd">Hoa Kỳ</string>
