@@ -76,6 +76,7 @@ private fun typeLabel(type: Int?): String = stringResource(
         TradeType.EXPENSE -> R.string.trade_expense
         TradeType.INCOME -> R.string.trade_income
         TradeType.TRANSFER -> R.string.trade_transfer
+        HistoryFilter.ADJUSTMENT -> R.string.history_type_adjustment
         else -> R.string.history_filter_any
     },
 )
@@ -234,7 +235,7 @@ internal fun HistoryFilterSheet(
             OffsetPicker(
                 stringResource(R.string.history_filter_type),
                 filter.type,
-                listOf(null, TradeType.EXPENSE, TradeType.INCOME, TradeType.TRANSFER).map { PickOption(it, typeLabel(it)) },
+                listOf(null, TradeType.EXPENSE, TradeType.INCOME, TradeType.TRANSFER, HistoryFilter.ADJUSTMENT).map { PickOption(it, typeLabel(it)) },
             ) {
                 // Category, budget and transfer picks belong to one type: a new type drops them.
                 if (it != filter.type) {
@@ -268,8 +269,8 @@ internal fun HistoryFilterSheet(
                 OffsetPicker(stringResource(R.string.history_filter_account), filter.accountId, accounts) {
                     onChange(filter.copy(accountId = it))
                 }
-                // Categories are per type: pick Expense or Income first.
-                if (filter.type != null) {
+                // Categories are per type: pick Expense or Income first (adjustments have none).
+                if (filter.hasCategories) {
                     OffsetPicker(stringResource(R.string.history_filter_category), filter.categoryId, categories(null)) {
                         // Another parent's subcategory no longer applies.
                         if (it != filter.categoryId) onChange(filter.copy(categoryId = it, subCategoryId = null))

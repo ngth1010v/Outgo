@@ -63,6 +63,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -187,7 +189,7 @@ private fun categoryViewModel(): CategoryViewModel {
 
 /** The category editor as its own screen; see [Routes.CATEGORY_EDIT_PATTERN][app.outgo.ui.nav.Routes.CATEGORY_EDIT_PATTERN]. */
 @Composable
-fun CategoryEditScreen(categoryId: Long?, parentId: Long?, onClose: () -> Unit) {
+fun CategoryEditScreen(categoryId: Long?, parentId: Long?, onClose: () -> Unit, openBudget: Boolean = false) {
     val viewModel = categoryViewModel()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val all = listOfNotNull(state, state.other).flatMap { it.parents + it.childrenByParent.values.flatten() }
@@ -197,7 +199,7 @@ fun CategoryEditScreen(categoryId: Long?, parentId: Long?, onClose: () -> Unit) 
         parentId != null -> all.firstOrNull { it.id == parentId }?.let { EditTarget.NewChild(it.id, it.color) }
         else -> EditTarget.NewParent
     } ?: return
-    EditCategoryScreen(target, state.type, state.budgetsByCategory, state.accounts, viewModel, onClose)
+    EditCategoryScreen(target, state.type, state.budgetsByCategory, state.accounts, viewModel, onClose, openBudget)
 }
 
 /** One type's categories; drawn for both types while a type swipe moves. */
@@ -221,6 +223,8 @@ private fun CategoryList(
         onOpen = { onEdit(EditTarget.Edit(it)) },
         onAddChild = { onEdit(EditTarget.NewChild(it.id, it.color)) },
         onAddParent = { onEdit(EditTarget.NewParent) },
+        addChildLabel = stringResource(R.string.category_add_sub),
+        addParentLabel = stringResource(R.string.category_add),
         onReorder = onReorder,
         row = { category, onClick, rowModifier, trailing ->
             CategoryRow(category, state.budgetsByCategory[category.id]?.takeIf { it.enabled }, onClick, rowModifier, trailing)
@@ -278,7 +282,7 @@ private fun CategoryRow(
                     Money.groupThousands(limit),
                 ),
                 progress = if (limit > 0) budget.spent.toFloat() / limit.toFloat() else 0f,
-                color = budgetRemainingColor(budget.spent, limit, Color(category.color)),
+                color = budgetRemainingColor(budget.spent, limit),
                 current = budget.spent,
                 total = limit,
                 lineName = stringResource(R.string.progress_line_spent),
@@ -298,6 +302,8 @@ private fun EditCategoryScreen(
     accounts: List<AccountEntity>,
     viewModel: CategoryViewModel,
     onDismiss: () -> Unit,
+    /** Opened to add a budget: this month's is turned on once read, and its limit focused. */
+    openBudget: Boolean = false,
 ) {
     val existing = (target as? EditTarget.Edit)?.category
     val effectiveType = existing?.type ?: currentType
@@ -332,6 +338,10 @@ private fun EditCategoryScreen(
     // Editing saves on Save only. Each month's budget as read, and as changed since: Save writes
     // every changed month, so moving between months keeps what was typed.
     val hasBudget = existing != null && effectiveType == CategoryKind.EXPENSE
+    var budgetOpened by remember { mutableStateOf(false) }
+    // Set when opened to add a budget: the limit field takes focus, which scrolls it into view.
+    var focusLimit by remember { mutableStateOf(false) }
+    val limitFocus = remember { FocusRequester() }
     val loadedForms = remember { mutableStateMapOf<Int, BudgetForm>() }
     val editedForms = remember { mutableStateMapOf<Int, BudgetForm>() }
     fun showMonth(m: Int) {
@@ -350,6 +360,12 @@ private fun EditCategoryScreen(
             val loaded = BudgetForm.of(viewModel.budgetAt(existing.id, m))
             loadedForms[m] = loaded
             if (month == m) form = loaded
+            // Once, on the month it opens on: an unsaved change, like flipping the switch.
+            if (openBudget && !budgetOpened && month == m) {
+                budgetOpened = true
+                if (!loaded.enabled) form = loaded.copy(enabled = true)
+                focusLimit = true
+            }
         }
     }
     // Every month whose budget differs from what was read, the shown one included.
@@ -374,11 +390,10 @@ private fun EditCategoryScreen(
     val fields = listOf(name, description, iconId, color, exempt) + if (existing == null) listOf(month, form) else emptyList()
     val initialFields = remember { fields }
     val changed = changedForms()
-    EditorScaffold(
-        title = title,
-        onCancel = onDismiss,
-        dirty = fields != initialFields || changed.isNotEmpty(),
-        onSave = if (existing != null) {
+    // Like the trade form, fields are marked only once a save was tapped with something missing.
+    var showErrors by remember { mutableStateOf(false) }
+    val valid = name.isNotBlank() && (effectiveType != CategoryKind.EXPENSE || form.complete) && changed.values.all { it.complete }
+    val save: () -> Unit = if (existing != null) {
             {
                 viewModel.update(existing, name.trim(), iconId, color, description.trim().ifEmpty { null })
                 if (exempt != existing.parentBudgetExempt) viewModel.setParentBudgetExempt(existing.id, exempt)
@@ -395,8 +410,13 @@ private fun EditCategoryScreen(
                 }
                 onDismiss()
             }
-        },
-        saveEnabled = name.isNotBlank() && (effectiveType != CategoryKind.EXPENSE || form.complete) && changed.values.all { it.complete },
+        }
+    EditorScaffold(
+        title = title,
+        onCancel = onDismiss,
+        dirty = fields != initialFields || changed.isNotEmpty(),
+        onSave = { if (valid) save() else showErrors = true },
+        saveEnabled = true,
         onDelete = if (existing != null) { { showDeleteConfirm = true } } else null,
     ) {
         SectionHeader(stringResource(R.string.category_section_general), stringResource(R.string.category_general_info))
@@ -410,7 +430,7 @@ private fun EditCategoryScreen(
             onValueChange = { name = it },
             label = { Text(stringResource(R.string.category_name_hint)) },
             singleLine = true,
-            isError = existing != null && name.isBlank(),
+            isError = showErrors && name.isBlank(),
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(8.dp))
@@ -477,9 +497,15 @@ private fun EditCategoryScreen(
                         onTextChange = { form = form.copy(limitText = it) },
                         label = stringResource(R.string.category_budget_limit),
                         enabled = !form.sumChildren,
-                        isError = existing != null && !form.sumChildren && Money.parseInput(form.limitText) <= 0,
-                        modifier = Modifier.fillMaxWidth(),
+                        isError = showErrors && !form.sumChildren && Money.parseInput(form.limitText) <= 0,
+                        modifier = Modifier.fillMaxWidth().focusRequester(limitFocus),
                     )
+                    if (focusLimit && !form.sumChildren) {
+                        LaunchedEffect(Unit) {
+                            focusLimit = false
+                            runCatching { limitFocus.requestFocus() }
+                        }
+                    }
 
                     if (!form.sumChildren) {
                         OffsetPicker(

@@ -79,13 +79,16 @@ data class TradeUiState(
             if (isTransfer && selectedToAccountId == null) add(TradeError.TO_ACCOUNT)
             // Into the same account it only moves budget, so it needs a "From" or "To" budget.
             if (isSelfTransfer && selectedCategory == null && effectiveToBudget == null) add(TradeError.SELF_TRANSFER_BUDGET)
-            if (overdrawnBySave != null) add(TradeError.NEGATIVE_BALANCE)
+            // Going below 0 doesn't block the save: the form warns (see [overdrawnBySave]) and lets it through.
         }
 
     private val originalMoves: Map<Long, Long>
         get() = original?.let { balanceMoves(it.type, it.amount, it.accountId, it.toAccountId) }.orEmpty()
 
-    /** The account saving would take below 0 (in place of the edited trade, when editing); null when none. */
+    /**
+     * The account saving would take below 0 (in place of the edited trade, when editing); null when
+     * none. Only a warning: a new account starts at 0, and its first expense must still be savable.
+     */
     val overdrawnBySave: AccountEntity?
         get() {
             val from = selectedAccountId ?: return null
@@ -105,6 +108,10 @@ data class TradeUiState(
         accounts.find { it.id == id }?.takeIf { delta < 0 && it.balance + delta < 0 }
     }
     val isValid: Boolean get() = errors.isEmpty()
+
+    /** What the user typed themselves (not a prediction): Back asks before dropping it. */
+    val hasInput: Boolean
+        get() = (amount > 0 && PredictField.AMOUNT !in predicted) || (note.isNotEmpty() && PredictField.NOTE !in predicted)
 
     /** [errors] as the form marks them: none until a save was tapped with some. */
     val shownErrors: Set<TradeError> get() = if (showErrors) errors else emptySet()
@@ -173,7 +180,7 @@ data class TradeUiState(
 }
 
 /** A reason the trade can't be saved, marked on its field. */
-enum class TradeError { AMOUNT, CATEGORY, ACCOUNT, TO_ACCOUNT, SELF_TRANSFER_BUDGET, NEGATIVE_BALANCE }
+enum class TradeError { AMOUNT, CATEGORY, ACCOUNT, TO_ACCOUNT, SELF_TRANSFER_BUDGET }
 
 /** What a trade does to account balances, by account id: as the trade triggers apply it (see OutgoDatabase). */
 internal fun balanceMoves(type: Int, amount: Long, accountId: Long, toAccountId: Long?): Map<Long, Long> = buildMap {
@@ -282,8 +289,10 @@ class TradeViewModel(
      * new-trade form predicts; a prediction naming an account, category or budget no longer
      * offered is dropped.
      */
-    private fun withPrediction(s: TradeUiState): TradeUiState {
-        if (!predictEnabled || s.isEditing || history.isEmpty()) return s
+    private fun withPrediction(form: TradeUiState): TradeUiState {
+        if (form.isEditing) return form
+        val s = withAccountDefault(form)
+        if (!predictEnabled || history.isEmpty()) return withLastAccount(s)
         val transfer = s.isTransfer
         val exempt = if (s.type == CategoryKind.EXPENSE) s.budgetExempt else s.savingExempt
         val known = TradeFields(
@@ -327,7 +336,29 @@ class TradeViewModel(
             },
             noteSuffix = p.noteSuffix,
             noteAccepted = p.noteAccepted,
-        )
+        ).let(::withLastAccount)
+    }
+
+    /** The accounts a trade can be saved to: subaccounts, not their parents. */
+    private fun TradeUiState.pickable() = accounts.filter { !it.isParent }
+
+    /** With only one account to pick from, it is picked: there is no choice to make. */
+    private fun withAccountDefault(s: TradeUiState): TradeUiState {
+        if (s.selectedAccountId != null) return s
+        val only = s.pickable().singleOrNull() ?: return s
+        return s.copy(selectedAccountId = only.id)
+    }
+
+    /**
+     * Still no account: the one the last trade of this type used, shown faded like a prediction
+     * (and saved as shown, see [PredictField.ACCOUNT]). The fallback when nothing better is
+     * predicted, and it works with predictions turned off too.
+     */
+    private fun withLastAccount(s: TradeUiState): TradeUiState {
+        if (s.selectedAccountId != null || PredictField.ACCOUNT in s.touched) return s
+        val last = history.firstOrNull { it.type == s.type }?.accountId
+            ?.takeIf { id -> s.pickable().any { it.id == id } } ?: return s
+        return s.copy(selectedAccountId = last, predicted = s.predicted + PredictField.ACCOUNT)
     }
 
     /** The user tapped [field]: its prediction goes, and it stays empty until they fill it. */
@@ -367,6 +398,16 @@ class TradeViewModel(
         if (type != TradeType.TRANSFER) {
             viewModelScope.launch { loadPicker(type) }
         }
+    }
+
+    /** The form was left (its tab hidden): the errors marked by a save tapped earlier go. */
+    fun clearErrors() {
+        if (raw.showErrors) edit { it.copy(showErrors = false) }
+    }
+
+    /** Drops what was typed (Back on the form, confirmed): the amount and note clear, like after a save. */
+    fun discardInput() {
+        edit { it.copy(amount = 0, note = "", showErrors = false) }
     }
 
     fun onAmountChange(amount: Long) {

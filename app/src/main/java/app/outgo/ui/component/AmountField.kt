@@ -5,7 +5,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
@@ -98,7 +97,7 @@ fun AmountField(
                         .focusRequester(focusRequester),
                 )
             }
-            Spacer(Modifier.width(4.dp))
+            // No gap: amounts are always written "<money><currency>", see Money.format.
             Text(Money.symbol, style = style.copy(color = if (text.isEmpty()) placeholderColor else color))
         }
     }

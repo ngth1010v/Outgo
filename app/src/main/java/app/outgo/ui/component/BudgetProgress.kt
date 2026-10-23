@@ -38,6 +38,7 @@ import app.outgo.ui.analysis.BalanceLine
 import app.outgo.ui.analysis.DailyBalanceChart
 import app.outgo.ui.theme.ExpenseRed
 import app.outgo.ui.theme.IncomeGreen
+import app.outgo.ui.theme.WarningDarkYellow
 import app.outgo.util.Money
 import java.time.LocalDate
 
@@ -158,15 +159,21 @@ private fun PacePanel(color: Color, current: Long, total: Long, lineName: String
 fun budgetRemainingText(spent: Long, limit: Long): String {
     val remaining = limit - spent
     return if (remaining >= 0) {
-        stringResource(R.string.balance_savings_remain, Money.groupThousands(remaining))
+        stringResource(R.string.balance_savings_remain, Money.format(remaining))
     } else {
-        stringResource(R.string.category_budget_over, Money.groupThousands(-remaining))
+        stringResource(R.string.category_budget_over, Money.format(-remaining))
     }
 }
 
-/** The category's own color while under budget, forced to red once spend passes the limit. */
-fun budgetRemainingColor(spent: Long, limit: Long, categoryColor: Color): Color =
-    if (spent > limit) ExpenseRed else categoryColor
+/**
+ * By how much of the limit is spent, never the category's own color (a red category would look
+ * overspent from the first trade): green under 75%, amber up to the limit, red past it.
+ */
+fun budgetRemainingColor(spent: Long, limit: Long): Color = when {
+    spent > limit -> ExpenseRed
+    limit > 0 && spent * 4 >= limit * 3 -> WarningDarkYellow
+    else -> IncomeGreen
+}
 
 /** "<left> to go" while under target, "Done" on target, "Done - <over> ahead" past it. */
 @Composable
@@ -174,9 +181,9 @@ fun savingsProgressText(saved: Long, target: Long): String {
     val remaining = target - saved
     val done = stringResource(R.string.balance_savings_done)
     return when {
-        remaining > 0 -> stringResource(R.string.balance_savings_to_go, Money.groupThousands(remaining))
+        remaining > 0 -> stringResource(R.string.balance_savings_to_go, Money.format(remaining))
         remaining == 0L -> done
-        else -> "$done - " + stringResource(R.string.balance_savings_ahead, Money.groupThousands(-remaining))
+        else -> "$done - " + stringResource(R.string.balance_savings_ahead, Money.format(-remaining))
     }
 }
 

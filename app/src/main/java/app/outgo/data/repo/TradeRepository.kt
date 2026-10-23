@@ -88,8 +88,14 @@ class TradeRepository(private val tradeDao: TradeDao) {
         signalChange()
     }
 
-    /** Records the delta between an account's old and new "current balance" as one adjustment trade. */
-    suspend fun recordAdjustment(accountId: Long, delta: Long) = withContext(Dispatchers.IO) {
+    /** Adjustments that are an account's opening balance, see [TradeDao.openingAdjustmentIds]. */
+    suspend fun openingAdjustmentIds(): Set<Long> = withContext(Dispatchers.IO) { tradeDao.openingAdjustmentIds().toSet() }
+
+    /**
+     * Records the delta between an account's old and new "current balance" as one adjustment trade,
+     * at [occurredAt]: now, or for an account's opening balance the day the user says it started.
+     */
+    suspend fun recordAdjustment(accountId: Long, delta: Long, occurredAt: Long = System.currentTimeMillis()) = withContext(Dispatchers.IO) {
         if (delta == 0L) return@withContext
         val now = System.currentTimeMillis()
         tradeDao.insert(
@@ -98,8 +104,8 @@ class TradeRepository(private val tradeDao: TradeDao) {
                 amount = kotlin.math.abs(delta),
                 accountId = accountId,
                 categoryId = null,
-                occurredAt = now,
-                monthKey = MonthKey.of(now),
+                occurredAt = occurredAt,
+                monthKey = MonthKey.of(occurredAt),
                 note = null,
                 createdAt = now,
                 updatedAt = now,

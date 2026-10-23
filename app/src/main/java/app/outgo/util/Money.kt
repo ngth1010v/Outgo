@@ -3,6 +3,7 @@ package app.outgo.util
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import java.util.Locale
 
 /** How amounts are written: which character groups thousands and which starts the decimals. */
 enum class NumberStyle(val key: String, val grouping: Char, val decimal: Char) {
@@ -19,8 +20,8 @@ enum class NumberStyle(val key: String, val grouping: Char, val decimal: Char) {
 }
 
 /**
- * All money in Outgo is a [Long] in hundredths of the currency unit (schema 21+), so 4.50 $ is
- * 450 and 45,000 ₫ is 4,500,000. Never use Float/Double for money to avoid rounding drift.
+ * All money in Outgo is a [Long] in hundredths of the currency unit (schema 21+), so 4.50$ is
+ * 450 and 45,000₫ is 4,500,000. Never use Float/Double for money to avoid rounding drift.
  * The decimals are only written when they are not zero: 45,000 stays "45,000".
  */
 object Money {
@@ -33,6 +34,23 @@ object Money {
     const val DEFAULT_SYMBOL = "$"
 
     /**
+     * The currency a fresh install starts with: the one of the device's region (₫ in Vietnam,
+     * € in Germany), [DEFAULT_SYMBOL] when the region's currency isn't one the picker offers.
+     */
+    fun regionalSymbol(locale: Locale = Locale.getDefault()): String {
+        val code = runCatching { java.util.Currency.getInstance(locale).currencyCode }.getOrNull()
+            ?: if (locale.language == "vi") "VND" else null
+        return RegionalSymbols[code] ?: DEFAULT_SYMBOL
+    }
+
+    /** Currency code to the symbol stored for it: the same symbols as the Setting tab's currency list. */
+    private val RegionalSymbols = mapOf(
+        "USD" to "$", "EUR" to "€", "JPY" to "¥", "GBP" to "£", "CNY" to "CN¥", "AUD" to "A$", "CAD" to "C$",
+        "CHF" to "Fr", "HKD" to "HK$", "SGD" to "S$", "SEK" to "kr", "KRW" to "₩", "NOK" to "Nkr", "NZD" to "NZ$",
+        "INR" to "₹", "MXN" to "Mex$", "TWD" to "NT$", "ZAR" to "R", "BRL" to "R$", "VND" to "₫",
+    )
+
+    /**
      * Currency symbol appended to every formatted amount. Snapshot state, so changing it
      * recomposes every screen showing an amount without threading it through their state.
      * Loaded from the `setting` table at startup; see SettingRepository.observeCurrency.
@@ -42,14 +60,14 @@ object Money {
     /** Thousands/decimal separators; snapshot state like [symbol]. See SettingRepository.observeNumberStyle. */
     var style: NumberStyle by mutableStateOf(NumberStyle.DEFAULT)
 
-    /** 123456789 -> "1,234,567.89 $" */
-    fun format(amount: Long): String = "${groupThousands(amount)} $symbol"
+    /** 123456789 -> "1,234,567.89$": the symbol always follows the number, with no space, whatever the currency. */
+    fun format(amount: Long): String = "${groupThousands(amount)}$symbol"
 
-    /** Masked amount for when the user has hidden a balance, e.g. "--- $". */
-    fun formatHidden(): String = "--- $symbol"
+    /** Masked amount for when the user has hidden a balance, e.g. "---$". */
+    fun formatHidden(): String = "---$symbol"
 
-    /** Same as [format] but with an explicit sign for positive amounts, e.g. "+50,000 $". */
-    fun formatSigned(amount: Long): String = "${formatSignedNoCurrency(amount)} $symbol"
+    /** Same as [format] but with an explicit sign for positive amounts, e.g. "+50,000$". */
+    fun formatSigned(amount: Long): String = "${formatSignedNoCurrency(amount)}$symbol"
 
     /** Same as [formatSigned] but without the currency symbol, e.g. "+50,000". */
     fun formatSignedNoCurrency(amount: Long): String {

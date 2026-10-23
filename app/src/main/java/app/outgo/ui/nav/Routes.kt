@@ -27,9 +27,13 @@ object Routes {
     const val ACCOUNT_EDIT_PATTERN = "account/edit?id={id}&parent={parent}"
     fun accountEdit(id: Long? = null, parentId: Long? = null) = "account/edit?id=${id ?: 0L}&parent=${parentId ?: 0L}"
 
-    /** Category editor: [id] edits that category, else [parentId] creates a child, else a new parent. 0 = unset. */
-    const val CATEGORY_EDIT_PATTERN = "category/edit?id={id}&parent={parent}"
-    fun categoryEdit(id: Long? = null, parentId: Long? = null) = "category/edit?id=${id ?: 0L}&parent=${parentId ?: 0L}"
+    /**
+     * Category editor: [id] edits that category, else [parentId] creates a child, else a new parent.
+     * 0 = unset. [budget] opens it with this month's budget turned on (Home's "Add budget").
+     */
+    const val CATEGORY_EDIT_PATTERN = "category/edit?id={id}&parent={parent}&budget={budget}"
+    fun categoryEdit(id: Long? = null, parentId: Long? = null, budget: Boolean = false) =
+        "category/edit?id=${id ?: 0L}&parent=${parentId ?: 0L}&budget=$budget"
 }
 
 enum class HistoryType(val arg: String) {

@@ -80,6 +80,9 @@ fun <T> TreeList(
     onOpen: (T) -> Unit,
     onAddChild: (T) -> Unit,
     onAddParent: () -> Unit,
+    /** What the "+" rows say they add, e.g. "Add subaccount" under a parent and "Add account" at the end. */
+    addChildLabel: String,
+    addParentLabel: String,
     onReorder: (Map<Long?, List<Long>>) -> Unit,
     row: @Composable (item: T, onClick: () -> Unit, modifier: Modifier, trailing: (@Composable () -> Unit)?) -> Unit,
     modifier: Modifier = Modifier,
@@ -255,6 +258,7 @@ fun <T> TreeList(
                     )
                 }
                 is AddChildEntry<*> -> PlusRow(
+                    label = addChildLabel,
                     onClick = guarded { onAddChild(entry.parent as T) },
                     modifier = nested(entry.parentId)
                         .then(slideItem(slide = slide))
@@ -263,6 +267,7 @@ fun <T> TreeList(
                         .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
                 )
                 is AddParentEntry -> PlusRow(
+                    label = addParentLabel,
                     onClick = guarded(onAddParent),
                     modifier = Modifier
                         .then(slideItem(slide = slide))

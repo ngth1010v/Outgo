@@ -15,9 +15,9 @@ object CurrencyPrefs {
 
     fun get(context: Context): String = context
         .getSharedPreferences(LocalePrefs.PREFS_NAME, Context.MODE_PRIVATE)
-        .getString(KEY_CURRENCY, Money.DEFAULT_SYMBOL)
+        .getString(KEY_CURRENCY, null)
         .orEmpty()
-        .ifBlank { Money.DEFAULT_SYMBOL }
+        .ifBlank { Money.regionalSymbol() }
 
     fun set(context: Context, symbol: String) {
         context.getSharedPreferences(LocalePrefs.PREFS_NAME, Context.MODE_PRIVATE)

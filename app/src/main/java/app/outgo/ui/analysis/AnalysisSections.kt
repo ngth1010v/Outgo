@@ -324,14 +324,13 @@ fun SummarySection(
                 fontWeight = FontWeight.Bold,
                 color = deltaColor(headline, CategoryKind.INCOME),
             )
+            // All mode compares the net (what is left), like its headline; the others their own kind.
+            val delta = if (mode == AnalysisMode.ALL) summary.net - summary.prevNet else kind.deltaAmount
+            val percent = if (mode == AnalysisMode.ALL) percentChange(summary.net, summary.prevNet) else kind.deltaPercent
             Text(
-                stringResource(
-                    if (yearly) R.string.analysis_vs_last_year_percent else R.string.analysis_vs_last_month_percent,
-                    Money.formatSigned(kind.deltaAmount),
-                    kind.deltaPercent,
-                ),
+                comparisonText(mode, delta, percent, yearly),
                 style = MaterialTheme.typography.bodyMedium,
-                color = deltaColor(kind.deltaAmount, kindType),
+                color = deltaColor(delta, if (mode == AnalysisMode.ALL) CategoryKind.INCOME else kindType),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -367,7 +366,30 @@ private fun summaryDescription(kind: KindSummary, mode: AnalysisMode, summary: S
     return stringResource(R.string.analysis_cd_summary, Money.format(total), direction)
 }
 
-private fun signedPercent(percent: Int): String = (if (percent > 0) "+" else "") + "$percent%"
+/** "+25%"; "—" with no baseline to compare with (see [percentChange]). */
+private fun signedPercent(percent: Int?): String = when {
+    percent == null -> "—"
+    percent > 0 -> "+$percent%"
+    else -> "$percent%"
+}
+
+/**
+ * The summary's comparison, in words so its sign can't be misread against the headline's: "Spent
+ * 50$ more than last month (+25%)". The percent is left out when the period before had nothing.
+ */
+@Composable
+private fun comparisonText(mode: AnalysisMode, delta: Long, percent: Int?, yearly: Boolean): String {
+    val period = stringResource(if (yearly) R.string.analysis_cmp_last_year else R.string.analysis_cmp_last_month)
+    if (delta == 0L) return stringResource(R.string.analysis_cmp_same, period)
+    val more = delta > 0
+    val res = when (mode) {
+        AnalysisMode.EXPENSE -> if (more) R.string.analysis_cmp_spent_more else R.string.analysis_cmp_spent_less
+        AnalysisMode.INCOME -> if (more) R.string.analysis_cmp_earned_more else R.string.analysis_cmp_earned_less
+        AnalysisMode.ALL -> if (more) R.string.analysis_cmp_net_more else R.string.analysis_cmp_net_less
+    }
+    val text = stringResource(res, Money.format(kotlin.math.abs(delta)), period)
+    return if (percent == null) text else "$text (${signedPercent(percent)})"
+}
 
 // ------------------------------------------------------------- daily lines
 

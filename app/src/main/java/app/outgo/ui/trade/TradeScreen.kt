@@ -91,6 +91,12 @@ import app.outgo.domain.CategoryKind
 import app.outgo.domain.TradeType
 import app.outgo.ui.LocalAppContainer
 import app.outgo.ui.component.rememberDiscardGuard
+import app.outgo.ui.component.DeleteButton
+import app.outgo.ui.component.EditorTitle
+import app.outgo.ui.theme.WarningDarkYellow
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
+import androidx.compose.material3.OutlinedButton
 import app.outgo.ui.component.OutgoSegmentedButton
 import app.outgo.ui.component.AmountField
 import app.outgo.ui.component.ConfirmDialog
@@ -129,7 +135,13 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit, visible: Boolean = t
     // (name, icon, parent budget exception) shows as it is now. Not on first show: init loads them.
     var wasHidden by remember { mutableStateOf(false) }
     LaunchedEffect(visible) {
-        if (!visible) wasHidden = true else if (wasHidden) viewModel.refreshPickers()
+        if (!visible) {
+            wasHidden = true
+            // Errors marked by an earlier save don't greet the user on coming back.
+            viewModel.clearErrors()
+        } else if (wasHidden) {
+            viewModel.refreshPickers()
+        }
     }
     // A new trade's time follows the clock while the form is on screen, and on coming back to it
     // (from another tab, or the app from the background) until the user picks a date or time.
@@ -144,13 +156,17 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit, visible: Boolean = t
         }
     }
     val state by viewModel.state.collectAsStateWithLifecycle()
-    // A new trade starts at its amount: focused, keyboard up, each time the tab is shown. After the
-    // first frame, so the keyboard never holds up the cold start's first paint.
+    // A new trade starts at its amount: focused, keyboard up, when the tab is shown with nothing
+    // typed yet. A form already holding an amount is left alone, so the keyboard doesn't cover it
+    // and its save button. After the first frame, so the keyboard never holds up the cold start's
+    // first paint.
     val amountFocus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     LaunchedEffect(visible) {
         if (!visible || editingTradeId != null) return@LaunchedEffect
         withFrameNanos { }
+        val now = viewModel.state.value
+        if (now.amount > 0 && PredictField.AMOUNT !in now.predicted) return@LaunchedEffect
         runCatching { amountFocus.requestFocus() }
         keyboard?.show()
     }
@@ -168,6 +184,32 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit, visible: Boolean = t
     var initialFields by remember { mutableStateOf<List<Any?>?>(null) }
     LaunchedEffect(state.isLoading) { if (!state.isLoading && initialFields == null) initialFields = fields }
     val cancel = if (state.isEditing) rememberDiscardGuard(initialFields != null && fields != initialFields, onClose) else onClose
+    // The Add tab's form: Back with something typed asks before the app closes and drops it.
+    var askDiscardInput by remember { mutableStateOf(false) }
+    var leaveAfterDiscard by remember { mutableStateOf(false) }
+    val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+    BackHandler(enabled = !state.isEditing && visible && state.hasInput) { askDiscardInput = true }
+    // Once the input is gone this handler is off, so passing Back on does what Back would have done.
+    LaunchedEffect(leaveAfterDiscard, state.hasInput) {
+        if (leaveAfterDiscard && !state.hasInput) {
+            leaveAfterDiscard = false
+            backDispatcher?.onBackPressed()
+        }
+    }
+    if (askDiscardInput) {
+        ConfirmDialog(
+            title = stringResource(R.string.trade_discard_input_title),
+            message = stringResource(R.string.trade_discard_input_message),
+            confirmLabel = stringResource(R.string.discard_confirm),
+            dismissLabel = stringResource(R.string.discard_keep_editing),
+            onConfirm = {
+                askDiscardInput = false
+                viewModel.discardInput()
+                leaveAfterDiscard = true
+            },
+            onDismiss = { askDiscardInput = false },
+        )
+    }
     val savedLabel = stringResource(R.string.trade_saved)
     val undoLabel = stringResource(R.string.trade_undo)
     // The save button's sideways shake, in dp, played once per save tapped with errors.
@@ -213,12 +255,7 @@ fun TradeScreen(editingTradeId: Long?, onClose: () -> Unit, visible: Boolean = t
                 .padding(start = 16.dp, top = if (state.isEditing) 16.dp else 36.dp, end = 16.dp, bottom = 16.dp),
         ) {
             if (state.isEditing) {
-                Text(
-                    stringResource(R.string.trade_edit_title),
-                    style = MaterialTheme.typography.titleLarge,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                )
+                EditorTitle(stringResource(R.string.trade_edit_title), onBack = cancel, modifier = Modifier.padding(bottom = 12.dp))
             }
             ExpenseIncomeToggle(type = state.type, onTypeChange = viewModel::onTypeChange, enabled = !state.isEditing)
             Box {
@@ -349,10 +386,9 @@ private fun TradeForm(
                     onSelect = { viewModel.onAccountSelected(it.id) },
                     predicted = PredictField.ACCOUNT in state.predicted,
                     onOpen = { viewModel.dismissPrediction(PredictField.ACCOUNT) },
-                    // Also where any account the trade would take below 0 is named, the "To" one included.
-                    error = errorFor(TradeError.ACCOUNT, R.string.trade_error_account)
-                        ?: state.overdrawnBySave?.takeIf { TradeError.NEGATIVE_BALANCE in errors }
-                            ?.let { stringResource(R.string.trade_error_negative_balance, it.name) },
+                    error = errorFor(TradeError.ACCOUNT, R.string.trade_error_account),
+                    // Live, and only a warning: any account the trade takes below 0, the "To" one included.
+                    warning = state.overdrawnBySave?.let { stringResource(R.string.trade_warning_negative_balance, it.name) },
                 )
                 Spacer(Modifier.height(16.dp))
 
@@ -360,7 +396,8 @@ private fun TradeForm(
                     // A self-transfer missing both budgets marks both; the message goes under "To budget"
                     // when it shows (it always does on a self-transfer), else here.
                     BudgetDropdown(
-                        label = stringResource(R.string.trade_from_budget_label),
+                        // Into the same account only budget moves, so one of the two budgets is required.
+                        label = stringResource(if (state.isSelfTransfer) R.string.trade_from_budget_label_self else R.string.trade_from_budget_label),
                         budgets = state.budgetOptions,
                         selected = state.selectedCategory,
                         onSelect = viewModel::onBudgetSelected,
@@ -381,11 +418,19 @@ private fun TradeForm(
                         error = errorFor(TradeError.TO_ACCOUNT, R.string.trade_error_to_account),
                     )
                     Spacer(Modifier.height(16.dp))
+                    if (state.isSelfTransfer) {
+                        Text(
+                            stringResource(R.string.trade_self_transfer_note),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 12.dp),
+                        )
+                    }
                     SavingExemptRow(state, viewModel::onSavingExemptChange)
 
                     if (state.showToBudget) {
                         BudgetDropdown(
-                            label = stringResource(R.string.trade_to_budget_label),
+                            label = stringResource(if (state.isSelfTransfer) R.string.trade_to_budget_label_self else R.string.trade_to_budget_label),
                             budgets = state.toBudgetOptions,
                             selected = state.effectiveToBudget,
                             onSelect = viewModel::onToBudgetSelected,
@@ -437,28 +482,6 @@ private fun TradeForm(
             return@Column
         }
 
-        if (state.isEditing) {
-            TextButton(
-                onClick = onClose,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(20.dp)),
-            ) {
-                Text(stringResource(R.string.common_cancel))
-            }
-            Spacer(Modifier.height(8.dp))
-            TextButton(
-                onClick = onDelete,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, MaterialTheme.colorScheme.error, RoundedCornerShape(20.dp)),
-            ) {
-                Icon(painterResource(R.drawable.ph_trash), contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                Text("  " + stringResource(R.string.common_delete), color = MaterialTheme.colorScheme.error)
-            }
-            Spacer(Modifier.height(16.dp))
-        }
-
         // Always tappable: a save with errors marks them and shakes the button instead.
         androidx.compose.material3.Button(
             onClick = viewModel::save,
@@ -468,7 +491,16 @@ private fun TradeForm(
                 .fillMaxWidth()
                 .height(52.dp),
         ) {
-            Text(stringResource(R.string.trade_save), fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.common_save), fontWeight = FontWeight.Bold)
+        }
+
+        // The editors' shared order (see EditorScaffold): Save, Cancel, then Delete apart at the end.
+        if (state.isEditing) {
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = onClose, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.common_cancel))
+            }
+            DeleteButton(onClick = onDelete)
         }
     }
 }
@@ -505,6 +537,8 @@ private fun ExpenseIncomeToggle(type: Int, onTypeChange: (Int) -> Unit, enabled:
  */
 @Composable
 private fun BudgetExemptRow(state: TradeUiState, onChange: (Boolean) -> Unit) {
+    // Hidden, not shown disabled, where it can't apply: no budget counts this category.
+    if (!state.showBudgetExempt) return
     SectionHeader(stringResource(R.string.trade_budget_exception), stringResource(R.string.trade_budget_exception_info)) {
         SectionSwitch(
             checked = state.effectiveBudgetExempt,
@@ -518,6 +552,8 @@ private fun BudgetExemptRow(state: TradeUiState, onChange: (Boolean) -> Unit) {
 
 @Composable
 private fun SavingExemptRow(state: TradeUiState, onChange: (Boolean) -> Unit) {
+    // Hidden where it can't apply: the money doesn't go into a savings account.
+    if (!state.showSavingExempt) return
     SectionHeader(stringResource(R.string.trade_saving_exception), stringResource(R.string.trade_saving_exception_info)) {
         SectionSwitch(
             checked = state.effectiveSavingExempt,
@@ -638,6 +674,8 @@ private fun AccountDropdown(
     onSelect: (AccountEntity) -> Unit,
     label: String = stringResource(R.string.trade_account_label),
     error: String? = null,
+    /** Shown in amber under the field while there is no [error]; doesn't block the save. */
+    warning: String? = null,
     /** [selectedAccount] is a prediction: drawn faded, and [onOpen] (the tap) takes it away. */
     predicted: Boolean = false,
     onOpen: () -> Unit = {},
@@ -662,6 +700,14 @@ private fun AccountDropdown(
             Icon(painterResource(R.drawable.ph_caret_down), contentDescription = null)
         }
         ErrorText(error)
+        if (error == null && warning != null) {
+            Text(
+                warning,
+                style = MaterialTheme.typography.bodySmall,
+                color = WarningDarkYellow,
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp, start = 4.dp),
+            )
+        }
     }
     if (open) {
         AccountSheet(

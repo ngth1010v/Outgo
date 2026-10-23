@@ -51,7 +51,7 @@
 | Chart | Tự vẽ bằng Compose `Canvas` | Chỉ có 1 dạng chart, thêm thư viện là thừa |
 | Ảnh icon | Tự giải mã + `LruCache<Long, ImageBitmap>` | Coil/Glide quá nặng cho vài chục icon 128px |
 | Icon điều hướng | Phosphor SVG chuyển thành VectorDrawable lúc build | Không dùng `material-icons-extended` (rất nặng) |
-| Tiền | `Long` theo đơn vị 1/100 (schema 21+: 4,50 $ = 450; 45.000 ₫ = 4.500.000) | Không có sai số dấu phẩy động; nhập được 2 số lẻ |
+| Tiền | `Long` theo đơn vị 1/100 (schema 21+: 4,50$ = 450; 45.000₫ = 4.500.000) | Không có sai số dấu phẩy động; nhập được 2 số lẻ. Luôn hiển thị `<số><ký hiệu>`, không cách, với mọi loại tiền (`Money.format`) |
 | Thời gian | `occurred_at` (epoch ms UTC) + `month_key` (yyyyMM, giờ địa phương) | Truy vấn theo tháng bằng số nguyên, có index |
 | Module | 1 module `:app` + `:baselineprofile` | App nhỏ, tách nhiều module chỉ thêm độ phức tạp |
 
@@ -708,10 +708,10 @@ sequenceDiagram
 | **Số tiền** | `BasicTextField` với `KeyboardType.Number`. Bộ lọc chỉ nhận chữ số nên **không thể nhập số âm**. Tối đa 13 chữ số. `VisualTransformation` hiển thị phân cách hàng nghìn. Font `headlineLarge`, `FontWeight.Bold`, căn giữa. Màu `expenseRed` hoặc `incomeGreen`. Tự focus khi mở màn. |
 | **Lưới danh mục** | `2 × 5`, mỗi ô gồm icon 40dp và tên (tối đa 1 dòng, cắt bằng dấu …). Ô đang chọn có viền màu nhấn. |
 | **"Tất cả ›"** | Mở sheet chứa toàn bộ cây danh mục của loại đang chọn, dùng khi danh mục cần tìm không nằm trong 10 ô. |
-| **Tài khoản** | Dropdown. Mặc định là tài khoản của giao dịch gần nhất, nếu chưa có thì lấy tài khoản đầu tiên. |
+| **Tài khoản** | Dropdown. Chỉ có 1 tài khoản con thì nó được chọn sẵn. Không thì lấy theo dự đoán; dự đoán không có thì hiện mờ (ghost, lưu như hiển thị) tài khoản của giao dịch cùng loại gần nhất. Giao dịch làm số dư âm vẫn lưu được, chỉ có cảnh báo vàng dưới ô. |
 | **Ngày / Giờ** | Hai ô ngang nhau. Bấm vào mở `DatePickerDialog` (định dạng `dd/MM/yyyy`) hoặc `TimePickerDialog` (định dạng `HH:mm`, 24h). Mặc định là thời điểm hiện tại. |
 | **Ghi chú** | `singleLine = true`, tối đa 100 ký tự. |
-| **LƯU** | Nằm cuối trang, chỉ bấm được khi form hợp lệ. Sau khi lưu, **vẫn ở màn Trade** và reset form: tiền = trống, danh mục = chưa chọn, ghi chú = trống, ngày giờ = hiện tại, Thu/Chi = Chi, tài khoản = mặc định. |
+| **Lưu** | Nằm cuối trang, luôn bấm được: form chưa hợp lệ thì đánh dấu lỗi (và lỗi được xoá khi rời tab). Back khi đã nhập số tiền/ghi chú thì hỏi trước khi bỏ. Sau khi lưu, **vẫn ở màn Trade** và reset form: tiền = trống, danh mục = chưa chọn, ghi chú = trống, ngày giờ = hiện tại, Thu/Chi = Chi, tài khoản = mặc định. |
 
 #### Thuật toán gợi ý danh mục (2 hàng)
 
@@ -837,9 +837,11 @@ flowchart TD
     N & O --> Z
 ```
 
-> **Tài khoản con (schema 14).** Tài khoản có 2 cấp như danh mục: giao dịch (và bù trừ budget, filter Lịch sử, Analysis) chỉ trỏ tới tài khoản **con**; tài khoản cha chỉ để nhóm, `balance` của cha luôn = 0 và số dư hiển thị = tổng các con chưa lưu trữ (`AccountWithProgress.totalBalance`), nên trigger và mọi phép `SUM(balance)` giữ nguyên. Cả cha lẫn con đều có loại Thường/Tiết kiệm và mục tiêu tiết kiệm theo tháng riêng (`savings_month`); số đã để dành của cha = thu nhập + chuyển khoản vào các con từ ngoài nhóm. Cha Thường thì con Thường hoặc Tiết kiệm tuỳ ý; cha Tiết kiệm thì mọi con bắt buộc Tiết kiệm (`AccountRepository` ép khi tạo con, đổi loại cha, kéo con sang cha; UI hỏi trước khi chuyển con Thường, và khoá ô loại ở con). Tạo tài khoản cha thì tạo luôn 1 con cùng tên/icon/màu nhận số dư ban đầu. Màn Balance dùng chung `TreeList` với màn Danh mục (mở/đóng, kéo thả, con đổi được cha). Migration 13→14: mỗi tài khoản cũ giữ nguyên id thành con của 1 cha mới chép từ nó; mục tiêu tiết kiệm chuyển lên cha.
+> **Tài khoản con (schema 14).** Tài khoản có 2 cấp như danh mục: giao dịch (và bù trừ budget, filter Lịch sử, Analysis) chỉ trỏ tới tài khoản **con**; tài khoản cha chỉ để nhóm, `balance` của cha luôn = 0 và số dư hiển thị = tổng các con chưa lưu trữ (`AccountWithProgress.totalBalance`), nên trigger và mọi phép `SUM(balance)` giữ nguyên. Cả cha lẫn con đều có loại Thường/Tiết kiệm và mục tiêu tiết kiệm theo tháng riêng (`savings_month`); số đã để dành của cha = thu nhập + chuyển khoản vào các con từ ngoài nhóm. Cha Thường thì con Thường hoặc Tiết kiệm tuỳ ý; cha Tiết kiệm thì mọi con bắt buộc Tiết kiệm (`AccountRepository` ép khi tạo con, đổi loại cha, kéo con sang cha; UI hỏi trước khi chuyển con Thường, và khoá ô loại ở con). Tạo tài khoản cha thì tạo luôn 1 con cùng icon/màu, tên riêng ("Chính"/"Main"; tài khoản mẫu: "Ví"/"Wallet") để phân biệt với cha, nhận số dư đầu kỳ. Màn Balance dùng chung `TreeList` với màn Danh mục (mở/đóng, kéo thả, con đổi được cha). Migration 13→14: mỗi tài khoản cũ giữ nguyên id thành con của 1 cha mới chép từ nó; mục tiêu tiết kiệm chuyển lên cha.
 
-> Giao dịch điều chỉnh (`ADJ_*`) **không tính vào chart hay budget** và chỉ hiện trong lịch sử của tài khoản với nhãn "Điều chỉnh số dư". Nhờ đó số dư luôn bằng tổng các giao dịch và có thể kiểm tra lại được.
+> Giao dịch điều chỉnh (`ADJ_*`) **không tính vào chart chi tiêu/thu nhập hay budget**. Lịch sử hiện chúng trong bộ lọc "Tất cả" (và có loại lọc riêng "Điều chỉnh") với nhãn "Điều chỉnh số dư", nên danh sách luôn cộng lại khớp số dư. Khi tài khoản chưa có giao dịch nào, ô số dư là **"Số dư đầu kỳ"** kèm ngày bắt đầu ("Từ ngày …", không quá hôm nay): điều chỉnh được ghi vào ngày đó và Lịch sử gọi nó là "Số dư đầu kỳ" (`TradeDao.openingAdjustmentIds`: điều chỉnh là giao dịch đầu tiên của tài khoản). Biểu đồ số dư theo ngày bắt đầu đường của một tài khoản chưa có lịch sử từ ngày giao dịch đầu tiên (`BalanceLine.start`), không vẽ từ 0 rồi nhảy lên.
+
+> Lưu giao dịch làm số dư âm **không bị chặn**: form chỉ cảnh báo (màu vàng, dưới ô tài khoản), vì tài khoản mới bắt đầu từ 0.
 
 ### 7.4 Category
 
@@ -936,7 +938,7 @@ flowchart LR
 
 ### 7.6 Analysis
 
-Mỗi tháng một trang, mỗi năm một trang. Trang năm có danh sách biểu đồ riêng (`LayoutSlot.YEAR`, lưu ở `analysis_layout_year_v2`) với đúng các nhóm của trang tháng (Accounts, Categories, Trades, Savings, Budgets, Other). Mỗi biểu đồ năm (`ChartType.YEAR_*`) trỏ tới biểu đồ tháng cùng dạng qua `base` và dùng lại card đó, chỉ đổi dữ liệu: Accounts/Categories từ `AnalysisYear.kt`, Trades/Savings/Budgets từ các hàm dựng của trang tháng chạy trên các tháng của năm.
+Mỗi tháng một trang, mỗi năm một trang. Đầu màn là một bộ chọn kỳ duy nhất: mũi tên đi theo tháng (hoặc theo năm ở chế độ Năm), nút chuyển Tháng/Năm, và "Hiện tại" về tháng này. Trang năm có danh sách biểu đồ riêng (`LayoutSlot.YEAR`, lưu ở `analysis_layout_year_v2`) với đúng các nhóm của trang tháng (Accounts, Categories, Trades, Savings, Budgets, Other). Mỗi biểu đồ năm (`ChartType.YEAR_*`) trỏ tới biểu đồ tháng cùng dạng qua `base` và dùng lại card đó, chỉ đổi dữ liệu: Accounts/Categories từ `AnalysisYear.kt`, Trades/Savings/Budgets từ các hàm dựng của trang tháng chạy trên các tháng của năm.
 
 ### 7.7 Setting
 

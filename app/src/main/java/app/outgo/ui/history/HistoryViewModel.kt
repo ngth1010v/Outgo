@@ -46,13 +46,24 @@ data class HistoryFilter(
     val isEmpty: Boolean get() = this == HistoryFilter()
     val isTransfer: Boolean get() = type == TradeType.TRANSFER
 
+    /** [type] [ADJUSTMENT]: balance adjustments, both ways. */
+    val isAdjustment: Boolean get() = type == ADJUSTMENT
+
+    /** Expense or income: the types that have categories. */
+    val hasCategories: Boolean get() = type == TradeType.EXPENSE || type == TradeType.INCOME
+
     fun toQuery() = HistoryQuery(
-        types = type?.let { listOf(it) } ?: listOf(TradeType.EXPENSE, TradeType.INCOME, TradeType.TRANSFER),
+        // Every type at once includes the balance adjustments: the list then adds up to the balances.
+        types = when (type) {
+            null -> listOf(TradeType.EXPENSE, TradeType.INCOME, TradeType.TRANSFER, TradeType.ADJUST_IN, TradeType.ADJUST_OUT)
+            ADJUSTMENT -> listOf(TradeType.ADJUST_IN, TradeType.ADJUST_OUT)
+            else -> listOf(type)
+        },
         accountId = accountId,
         eitherAccount = type == null,
         toAccountId = toAccountId.takeIf { isTransfer },
         categoryId = subCategoryId ?: budgetId.takeIf { isTransfer },
-        parentId = categoryId.takeIf { subCategoryId == null && type != null && !isTransfer },
+        parentId = categoryId.takeIf { subCategoryId == null && hasCategories },
         automatic = automatic.takeIf { isTransfer },
         fromMillis = fromDay,
         toMillis = toDay?.let(::nextDayStart),
@@ -60,6 +71,11 @@ data class HistoryFilter(
         minAmount = minAmount,
         maxAmount = maxAmount,
     )
+
+    companion object {
+        /** The filter's [type] for balance adjustments, in and out alike (see [TradeType.ADJUST_IN]). */
+        const val ADJUSTMENT = TradeType.ADJUST_IN
+    }
 }
 
 /** Start of the day after the one [dayStart] falls in, in local time. */
@@ -79,6 +95,8 @@ data class HistoryUiState(
     val isLoadingMore: Boolean = false,
     val canLoadMore: Boolean = true,
     val filter: HistoryFilter = HistoryFilter(),
+    /** Adjustments that are an account's opening balance (its first entry): labelled as such. */
+    val openingIds: Set<Long> = emptySet(),
 )
 
 private const val PAGE_SIZE = 50
@@ -165,10 +183,12 @@ class HistoryViewModel(
                 tradeRepository.pageInRange(tradeType ?: TradeType.EXPENSE, dayStartMillis, dayStartMillis + DAY_MILLIS)
             }
             val items = withContext(Dispatchers.Default) { buildHistoryItems(first) }
+            val openingIds = tradeRepository.openingAdjustmentIds()
             _state.update {
                 it.copy(
                     trades = first,
                     items = items,
+                    openingIds = openingIds,
                     isLoading = false,
                     canLoadMore = dayStartMillis == null && first.size == PAGE_SIZE,
                 )

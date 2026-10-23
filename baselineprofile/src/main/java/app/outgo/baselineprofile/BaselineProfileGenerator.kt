@@ -30,7 +30,7 @@ class BaselineProfileGenerator {
     fun generate() = rule.collect(packageName = PACKAGE, includeInStartupProfile = true) {
         pressHome()
         startActivityAndWait()
-        device.wait(Until.hasObject(By.text("SAVE")), TIMEOUT)
+        device.wait(Until.hasObject(By.text("Save")), TIMEOUT)
 
         animationJourney()
     }
@@ -76,12 +76,13 @@ internal fun MacrobenchmarkScope.animationJourney() {
     tap(By.text("Expense"))
 
     // Editors: a category's (Budget section and its month picker), then an account's Savings
-    // section. Names are the first-launch seed's, which is Vietnamese whatever the UI language.
-    tap(By.text("Ăn uống"))
+    // target section. Names are the first-launch seed's, which follows the device language: the
+    // English UI this runs on gets the English names.
+    tap(By.text("Food & drink"))
     openMonthPicker()
     device.pressBack()
     tap(By.desc("Accounts"))
-    tap(By.text("Tiền mặt"))
+    tap(By.text("Cash"))
     tap(By.text("Savings"))
     openMonthPicker()
     tap(By.text("Normal"))
@@ -96,7 +97,7 @@ internal fun MacrobenchmarkScope.animationJourney() {
     flingDownAndUp()
     tap(By.desc("Previous month"))
     flingDownAndUp()
-    tap(By.text("Yearly analysis"))
+    tap(By.text("Year"))
     flingDownAndUp()
     tap(By.text("Now"))
 }

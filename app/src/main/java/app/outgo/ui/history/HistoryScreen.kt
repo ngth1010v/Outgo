@@ -115,7 +115,7 @@ fun HistoryScreen(
         }
 
         LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
-            historyItems(items, state.categoriesById, state.accountsById, onOpenTrade)
+            historyItems(items, state.categoriesById, state.accountsById, onOpenTrade, openingIds = state.openingIds)
         }
     }
 }
@@ -191,7 +191,7 @@ fun HistoryTabScreen(visible: Boolean, onOpenTrade: (Long) -> Unit) {
                         }
                     }
                 } else {
-                    historyItems(state.items, state.categoriesById, state.accountsById, onOpenTrade, onRetry = onRetry)
+                    historyItems(state.items, state.categoriesById, state.accountsById, onOpenTrade, onRetry = onRetry, openingIds = state.openingIds)
                 }
             }
         }

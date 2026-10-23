@@ -38,7 +38,7 @@ class FrameBenchmark {
         setupBlock = {
             pressHome()
             startActivityAndWait()
-            device.wait(Until.hasObject(By.text("SAVE")), TIMEOUT)
+            device.wait(Until.hasObject(By.text("Save")), TIMEOUT)
         },
     ) {
         animationJourney()

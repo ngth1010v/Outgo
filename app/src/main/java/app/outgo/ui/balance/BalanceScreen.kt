@@ -82,6 +82,14 @@ import app.outgo.util.Money
 import app.outgo.util.MonthKey
 import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.launch
+import android.app.DatePickerDialog
+import android.text.format.DateUtils
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
+import app.outgo.util.formatDate
+import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -119,6 +127,8 @@ fun BalanceScreen(onOpenEditor: (id: Long?, parentId: Long?) -> Unit) {
             onOpen = { onOpenEditor(it.account.id, null) },
             onAddChild = { onOpenEditor(null, it.account.id) },
             onAddParent = { onOpenEditor(null, null) },
+            addChildLabel = stringResource(R.string.balance_add_sub),
+            addParentLabel = stringResource(R.string.balance_add),
             onReorder = ::onReorder,
             row = { row, onClick, modifier, trailing ->
                 AccountRow(row, privacy[row.account.id] ?: AccountPrivacy(), row.account.id in warned, onClick, modifier, trailing)
@@ -291,12 +301,20 @@ private fun EditAccountScreen(
     var showIconPicker by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var hasTrades by remember { mutableStateOf(false) }
+    // A new account has none; an edited one's are read first, so its balance field doesn't flip.
+    var tradesKnown by remember { mutableStateOf(account == null) }
     var childCount by remember { mutableIntStateOf(0) }
+    // When the opening balance was there: the account's money before it is tracked. Now unless picked.
+    var openingAt by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
     LaunchedEffect(account) {
         hasTrades = account?.let { viewModel.hasTrades(it.id) } ?: false
+        tradesKnown = true
         if (account != null && editingParent) childCount = viewModel.childCount(account.id)
     }
+    val defaultSubName = stringResource(R.string.balance_default_sub_name)
+    // With no history yet, the balance typed is the account's opening balance, dated by the user.
+    val opening = !editingParent && tradesKnown && !hasTrades
 
     // Editing saves on Save only. Each month's target as read, and as changed since: Save writes
     // every changed month, so moving between months keeps what was typed.
@@ -332,22 +350,21 @@ private fun EditAccountScreen(
 
     // Compared against the values the editor opened with, for the discard check. Editing, the
     // month shown is not a change; the Savings section counts through changedForms.
-    val fields = listOf(accountType, name, description, Money.parseInput(balanceText), iconId, color, exempt, privacy) +
+    val fields = listOf(accountType, name, description, Money.parseInput(balanceText), iconId, color, exempt, privacy, openingAt) +
         if (account == null) listOf(month, form) else emptyList()
     val initialFields = remember { fields }
     val changed = changedForms()
     val savingsShown = accountType == AccountType.SAVINGS && form.enabled
-    EditorScaffold(
-        title = when {
-            account != null -> stringResource(R.string.balance_edit_title)
-            parent != null -> stringResource(R.string.balance_create_sub_title)
-            else -> stringResource(R.string.balance_create_title)
-        },
-        onCancel = onDismiss,
-        dirty = fields != initialFields || changed.isNotEmpty(),
-        onSave = if (account != null) {
+    // Like the trade form, fields are marked only once a save was tapped with something missing.
+    var showErrors by remember { mutableStateOf(false) }
+    // A savings target that is on needs an amount, in every month changed.
+    val valid = name.isNotBlank() && (!savingsShown || form.complete) && changed.values.all { it.complete }
+    val save: () -> Unit = if (account != null) {
             {
-                viewModel.update(account.id, name.trim(), iconId, color, Money.parseInput(balanceText).takeIf { !editingParent }, accountType, description.trim().ifEmpty { null })
+                viewModel.update(
+                    account.id, name.trim(), iconId, color, Money.parseInput(balanceText).takeIf { !editingParent }, accountType,
+                    description.trim().ifEmpty { null }, openingAt.takeIf { opening },
+                )
                 if (exempt != account.parentSavingExempt) viewModel.setParentSavingExempt(account.id, exempt)
                 if (privacy != account.ownPrivacy) viewModel.setPrivacy(account.id, privacy)
                 changed.forEach { (m, f) -> viewModel.setSavingsMonth(account.id, m, f.toSetting()) }
@@ -356,12 +373,21 @@ private fun EditAccountScreen(
         } else {
             {
                 val savings = form.toSetting().takeIf { savingsShown }
-                viewModel.create(name.trim(), iconId, color, Money.parseInput(balanceText), accountType, savings, month, description.trim().ifEmpty { null }, parent?.id, exempt, privacy)
+                viewModel.create(name.trim(), iconId, color, Money.parseInput(balanceText), accountType, savings, month, description.trim().ifEmpty { null }, parent?.id, exempt, privacy, openingAt, defaultSubName)
                 onDismiss()
             }
+        }
+    EditorScaffold(
+        title = when {
+            account != null && account.parentId != null -> stringResource(R.string.balance_edit_sub_title)
+            account != null -> stringResource(R.string.balance_edit_title)
+            parent != null -> stringResource(R.string.balance_create_sub_title)
+            else -> stringResource(R.string.balance_create_title)
         },
-        // A savings target that is on needs an amount, in every month changed.
-        saveEnabled = name.isNotBlank() && (!savingsShown || form.complete) && changed.values.all { it.complete },
+        onCancel = onDismiss,
+        dirty = fields != initialFields || changed.isNotEmpty(),
+        onSave = { if (valid) save() else showErrors = true },
+        saveEnabled = true,
         onDelete = if (account != null) { { showDeleteConfirm = true } } else null,
     ) {
         SectionHeader(stringResource(R.string.category_section_general), stringResource(R.string.balance_general_info))
@@ -401,7 +427,7 @@ private fun EditAccountScreen(
             onValueChange = { name = it },
             label = { Text(stringResource(R.string.balance_name_hint)) },
             singleLine = true,
-            isError = account != null && name.isBlank(),
+            isError = showErrors && name.isBlank(),
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(8.dp))
@@ -417,11 +443,19 @@ private fun EditAccountScreen(
         MoneyTextField(
             text = balanceText,
             onTextChange = { balanceText = it },
-            label = stringResource(R.string.balance_current_balance_hint),
+            label = stringResource(if (opening) R.string.balance_opening_balance_hint else R.string.balance_current_balance_hint),
             enabled = !editingParent,
-            supportingText = if (editingParent) { { Text(stringResource(R.string.balance_parent_balance_note)) } } else null,
+            supportingText = when {
+                editingParent -> { { Text(stringResource(R.string.balance_parent_balance_note)) } }
+                opening -> { { Text(stringResource(R.string.balance_opening_note)) } }
+                else -> null
+            },
             modifier = Modifier.fillMaxWidth(),
         )
+        if (opening) {
+            Spacer(Modifier.height(4.dp))
+            OpeningDateField(openingAt) { openingAt = it }
+        }
         Spacer(Modifier.height(12.dp))
         Text(stringResource(R.string.category_color_label), style = MaterialTheme.typography.labelLarge)
         Spacer(Modifier.height(8.dp))
@@ -438,18 +472,19 @@ private fun EditAccountScreen(
             }
         }
 
-        // Only a savings account has a target; a normal one shows the switch off and disabled,
-        // its monthly targets kept for if it becomes a savings account again.
-        Spacer(Modifier.height(24.dp))
-        val switchDescription = stringResource(R.string.balance_savings_target_switch)
-        SectionHeader(stringResource(R.string.balance_savings_label), stringResource(R.string.balance_savings_info)) {
-            if (accountType == AccountType.SAVINGS) MonthPicker(month, ::showMonth)
-            SectionSwitch(
-                checked = savingsShown,
-                onCheckedChange = { form = form.copy(enabled = it) },
-                enabled = accountType == AccountType.SAVINGS,
-                modifier = Modifier.semantics { contentDescription = switchDescription },
-            )
+        // Only a savings account has a target, so only it shows the section; a normal one keeps its
+        // monthly targets for if it becomes a savings account again.
+        if (accountType == AccountType.SAVINGS) {
+            Spacer(Modifier.height(24.dp))
+            val switchDescription = stringResource(R.string.balance_savings_target_switch)
+            SectionHeader(stringResource(R.string.balance_savings_target_switch), stringResource(R.string.balance_savings_info)) {
+                MonthPicker(month, ::showMonth)
+                SectionSwitch(
+                    checked = savingsShown,
+                    onCheckedChange = { form = form.copy(enabled = it) },
+                    modifier = Modifier.semantics { contentDescription = switchDescription },
+                )
+            }
         }
         if (savingsShown) {
             if (canSumChildren) {
@@ -466,7 +501,7 @@ private fun EditAccountScreen(
                 onTextChange = { form = form.copy(targetText = it) },
                 label = stringResource(R.string.balance_target_hint),
                 enabled = !form.sumChildren,
-                isError = account != null && !form.complete,
+                isError = showErrors && !form.complete,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -506,6 +541,37 @@ private fun EditAccountScreen(
             },
             onDismiss = { showDeleteConfirm = false },
         )
+    }
+}
+
+/** "Since <date>" under an opening balance: tapping it picks the day the balance was there (not later than today). */
+@Composable
+private fun OpeningDateField(at: Long, onPick: (Long) -> Unit) {
+    val context = LocalContext.current
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable {
+                val cal = Calendar.getInstance().apply { timeInMillis = at }
+                DatePickerDialog(
+                    context,
+                    { _, year, month, day ->
+                        val picked = Calendar.getInstance().apply { set(year, month, day, 0, 0, 0); set(Calendar.MILLISECOND, 0) }
+                        // Today keeps the current time, so it never lands after a transaction saved today.
+                        onPick(if (DateUtils.isToday(picked.timeInMillis)) System.currentTimeMillis() else picked.timeInMillis)
+                    },
+                    cal.get(Calendar.YEAR),
+                    cal.get(Calendar.MONTH),
+                    cal.get(Calendar.DAY_OF_MONTH),
+                ).apply { datePicker.maxDate = System.currentTimeMillis() }.show()
+            }
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        Icon(painterResource(R.drawable.ph_calendar_blank), contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(stringResource(R.string.balance_opening_since, formatDate(at)), style = MaterialTheme.typography.bodyMedium)
     }
 }
 

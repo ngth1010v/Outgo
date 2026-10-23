@@ -63,6 +63,9 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import app.outgo.ui.component.OutgoSegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
@@ -236,6 +239,12 @@ private data class SyncPoint(val leader: Boolean, val index: Int, val offset: In
 
 // --------------------------------------------------------------------- header
 
+/**
+ * One period picker: the arrows step through the periods of the mode shown (months, or years),
+ * the label names the period, and the Month / Year switch changes the mode (a year's months, or
+ * its summary). "Now" comes back to this month. The pager's swipe still walks the flat page list,
+ * a year's summary after its December, and the switch follows the page it settles on.
+ */
 @Composable
 private fun AnalysisHeader(
     pages: List<AnalysisPage>,
@@ -245,74 +254,66 @@ private fun AnalysisHeader(
 ) {
     val current = pages.getOrNull(index)
     val year = current?.year ?: (currentMonth / 100)
-    val yearlyIndex = yearlyPageIndex(pages, year)
+    val yearMode = current is AnalysisPage.Year
     val nowIndex = currentMonthIndex(pages, currentMonth)
-
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp)) {
-        HeaderRow(
-            label = year.toString(),
-            labelStyle = MaterialTheme.typography.titleMedium,
-            previousIndex = yearStepTarget(pages, index, -1),
-            nextIndex = yearStepTarget(pages, index, 1),
-            previousDescription = stringResource(R.string.analysis_previous_year),
-            nextDescription = stringResource(R.string.analysis_next_year),
-            actionLabel = stringResource(R.string.analysis_year_page_title),
-            action = if (yearlyIndex >= 0 && current !is AnalysisPage.Year) ({ onGoTo(yearlyIndex) }) else null,
-            onGoTo = onGoTo,
-        )
-        HeaderRow(
-            label = when (current) {
-                is AnalysisPage.Year, null -> stringResource(R.string.analysis_year_page_title)
-                is AnalysisPage.Month -> stringResource(R.string.analysis_month_page_title, monthName(current.monthKey))
-            },
-            labelStyle = MaterialTheme.typography.titleSmall,
-            // Plain flat order: left of January is the previous year's summary page.
-            previousIndex = (index - 1).takeIf { it >= 0 },
-            nextIndex = (index + 1).takeIf { it <= pages.lastIndex },
-            previousDescription = stringResource(R.string.analysis_previous_month),
-            nextDescription = stringResource(R.string.analysis_next_month),
-            actionLabel = stringResource(R.string.analysis_go_now),
-            action = if (nowIndex >= 0 && nowIndex != index) ({ onGoTo(nowIndex) }) else null,
-            onGoTo = onGoTo,
-        )
+    // The neighbouring period of the same mode: the month (or year summary) before or after.
+    fun step(delta: Int): Int? {
+        var i = index + delta
+        while (i in pages.indices) {
+            if ((pages[i] is AnalysisPage.Year) == yearMode) return i
+            i += delta
+        }
+        return null
     }
-}
+    // The switch to Month opens the year on its last month (this month, for the current year).
+    val monthOfYear = pages.indexOfLast { it is AnalysisPage.Month && it.year == year }.takeIf { it >= 0 }
+    val yearIndex = yearlyPageIndex(pages, year).takeIf { it >= 0 }
 
-@Composable
-private fun HeaderRow(
-    label: String,
-    labelStyle: androidx.compose.ui.text.TextStyle,
-    previousIndex: Int?,
-    nextIndex: Int?,
-    previousDescription: String,
-    nextDescription: String,
-    actionLabel: String,
-    /** Null greys the button out. */
-    action: (() -> Unit)?,
-    onGoTo: (Int) -> Unit,
-) {
     Row(
-        modifier = Modifier.fillMaxWidth().height(HeaderRowHeight),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp).height(HeaderRowHeight),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-            ArrowButton(previousIndex, previousDescription, rotation = 180f, onGoTo = onGoTo)
-            Text(label, style = labelStyle, fontWeight = FontWeight.Bold)
-            ArrowButton(nextIndex, nextDescription, rotation = 0f, onGoTo = onGoTo)
-        }
+        ArrowButton(step(-1), stringResource(if (yearMode) R.string.analysis_previous_year else R.string.analysis_previous_month), rotation = 180f, onGoTo = onGoTo)
+        Text(
+            when (current) {
+                is AnalysisPage.Month -> stringResource(R.string.analysis_period_month, monthName(current.monthKey), current.year)
+                else -> year.toString()
+            },
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+        )
+        ArrowButton(step(1), stringResource(if (yearMode) R.string.analysis_next_year else R.string.analysis_next_month), rotation = 0f, onGoTo = onGoTo)
+        Spacer(Modifier.weight(1f))
+        val action = if (nowIndex >= 0 && nowIndex != index) ({ onGoTo(nowIndex) }) else null
         TextButton(
             onClick = { action?.invoke() },
             enabled = action != null,
-            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-            modifier = Modifier.height(HeaderRowHeight).alpha(if (action != null) 1f else 0.3f),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+            modifier = Modifier.alpha(if (action != null) 1f else 0.3f),
         ) {
-            Text(actionLabel, style = MaterialTheme.typography.labelLarge)
+            Text(stringResource(R.string.analysis_go_now), style = MaterialTheme.typography.labelLarge)
+        }
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.width(ModeSwitchWidth)) {
+            OutgoSegmentedButton(
+                selected = !yearMode,
+                onClick = { if (yearMode) monthOfYear?.let(onGoTo) },
+                enabled = !yearMode || monthOfYear != null,
+                shape = SegmentedButtonDefaults.itemShape(0, 2),
+            ) { Text(stringResource(R.string.analysis_mode_month), style = MaterialTheme.typography.labelMedium, maxLines = 1) }
+            OutgoSegmentedButton(
+                selected = yearMode,
+                onClick = { if (!yearMode) yearIndex?.let(onGoTo) },
+                enabled = yearMode || yearIndex != null,
+                shape = SegmentedButtonDefaults.itemShape(1, 2),
+            ) { Text(stringResource(R.string.analysis_mode_year), style = MaterialTheme.typography.labelMedium, maxLines = 1) }
         }
     }
 }
 
-/** Well under the 48dp default, so the two picker rows sit close together. */
-private val HeaderRowHeight = 30.dp
+private val ModeSwitchWidth = 148.dp
+
+/** The picker's one row: tall enough for the Month / Year switch. */
+private val HeaderRowHeight = 40.dp
 private val HeaderIconSize = 20.dp
 
 @Composable
@@ -717,7 +718,7 @@ private fun BalanceCard(card: ChartCard, height: Dp, accounts: Stage<BalancesUi>
         when (card.type) {
             ChartType.ACCOUNT_DAILY, ChartType.SUBACCOUNT_DAILY -> {
                 val lines = remember(data.daily, groups) {
-                    val length = data.daily.lines.maxOfOrNull { it.values.size } ?: 0
+                    val length = data.daily.lines.maxOfOrNull { it.start + it.values.size } ?: 0
                     if (length == 0) emptyList() else sumLines(data.daily.lines, groups, length)
                 }
                 BalanceDaysSection(title, lines, data.daily.daysInMonth, card.zero, animate)
@@ -756,7 +757,7 @@ private fun CategoryCard(card: ChartCard, height: Dp, data: Stage<CategoryCharts
             ChartType.EXPENSE_CATEGORY_DAILY, ChartType.EXPENSE_SUBCATEGORY_DAILY,
             ChartType.INCOME_CATEGORY_DAILY, ChartType.INCOME_SUBCATEGORY_DAILY -> {
                 val lines = remember(charts, groups) {
-                    val length = charts.daily.maxOfOrNull { it.values.size } ?: 0
+                    val length = charts.daily.maxOfOrNull { it.start + it.values.size } ?: 0
                     if (length == 0) emptyList() else sumLines(charts.daily, groups, length).filter { line -> line.values.any { it != 0L } }
                 }
                 BalanceDaysSection(title, lines, charts.daysInMonth, card.zero, animate)

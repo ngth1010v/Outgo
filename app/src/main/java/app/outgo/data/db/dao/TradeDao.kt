@@ -74,6 +74,22 @@ interface TradeDao {
     ): List<TradeEntity>
 
     /**
+     * Adjustments that are an account's opening balance: its first entry (by time, then id), no
+     * trade touching the account before it.
+     */
+    @Query(
+        """
+        SELECT t.id FROM trade t
+        WHERE t.type IN (2, 3) AND NOT EXISTS (
+            SELECT 1 FROM trade o
+            WHERE (o.account_id = t.account_id OR o.to_account_id = t.account_id)
+              AND (o.occurred_at < t.occurred_at OR (o.occurred_at = t.occurred_at AND o.id < t.id))
+        )
+        """,
+    )
+    suspend fun openingAdjustmentIds(): List<Long>
+
+    /**
      * The History tab's list: every type in [types], newest first, after the (occurred_at, id)
      * cursor. Each null filter matches everything. [accountId] matches the "From" account, and with
      * [eitherAccount] the "To" one too. [toMillis] is exclusive; [notePattern] is a LIKE pattern

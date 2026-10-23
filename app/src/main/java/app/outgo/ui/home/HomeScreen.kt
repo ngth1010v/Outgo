@@ -45,6 +45,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import app.outgo.ui.component.PickCell
+import app.outgo.ui.component.GroupedPickerSheet
+import app.outgo.domain.CategoryKind
+import app.outgo.data.db.entity.CategoryEntity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -76,7 +80,7 @@ import app.outgo.util.Money
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen() {
+fun HomeScreen(onAddBudget: (categoryId: Long) -> Unit = {}) {
     val container = LocalAppContainer.current
     val viewModel: HomeViewModel = viewModel(
         factory = viewModelFactory {
@@ -108,6 +112,7 @@ fun HomeScreen() {
     )
     var info by rememberSaveable { mutableStateOf<HomeBalance?>(null) }
     var shortfallOpen by rememberSaveable { mutableStateOf(false) }
+    var pickBudget by rememberSaveable { mutableStateOf(false) }
 
     Scaffold { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
@@ -139,7 +144,10 @@ fun HomeScreen() {
 
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 10.dp, bottom = 10.dp)) {
-                        Text(stringResource(R.string.home_budgets), style = MaterialTheme.typography.titleMedium)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(stringResource(R.string.home_budgets), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                            TextButton(onClick = { pickBudget = true }) { Text("+ " + stringResource(R.string.home_add_budget)) }
+                        }
                         if (state.budgets.isEmpty()) {
                             Text(
                                 stringResource(R.string.home_no_budgets),
@@ -177,8 +185,50 @@ fun HomeScreen() {
             }
             info?.let { BalanceInfoDialog(it, state, onDismiss = { info = null }) }
             if (shortfallOpen) BudgetShortfallDialog(state, onDismiss = { shortfallOpen = false })
+            if (pickBudget) {
+                BudgetCategorySheet(
+                    onSelect = { category ->
+                        pickBudget = false
+                        onAddBudget(category.id)
+                    },
+                    onDismiss = { pickBudget = false },
+                )
+            }
         }
     }
+}
+
+/** One cell of [BudgetCategorySheet]: a category, under the group of its parent (a parent heads its own group). */
+private data class BudgetPick(val category: CategoryEntity, val group: Long?, val key: Long)
+
+/**
+ * The spending category a new budget is for: every parent (all of its spending) and every
+ * subcategory, grouped like the Trade screen's full list. A parent is a group's header and also
+ * its first cell, so it can be picked.
+ */
+@Composable
+private fun BudgetCategorySheet(onSelect: (CategoryEntity) -> Unit, onDismiss: () -> Unit) {
+    val container = LocalAppContainer.current
+    val all by remember { container.categoryRepository.observeAllOfType(CategoryKind.EXPENSE) }.collectAsStateWithLifecycle(initialValue = emptyList())
+    val picks = remember(all) {
+        val parents = all.filter { it.parentId == null }
+        parents.flatMap { p ->
+            listOf(BudgetPick(p, null, p.id), BudgetPick(p, p.id, -p.id)) +
+                all.filter { it.parentId == p.id }.map { BudgetPick(it, p.id, it.id) }
+        }
+    }
+    GroupedPickerSheet(
+        title = stringResource(R.string.home_add_budget_title),
+        searchHint = stringResource(R.string.trade_search_category_hint),
+        items = picks,
+        parentId = { it.group },
+        id = { it.key },
+        name = { it.category.name },
+        selectedId = null,
+        cell = { item, selected, onClick, modifier -> PickCell(item.category.name, item.category.iconId, item.category.color, selected, onClick, modifier) },
+        onSelect = { onSelect(it.category) },
+        onDismiss = onDismiss,
+    )
 }
 
 private val LIST_TOP_PADDING = 48.dp
@@ -406,7 +456,7 @@ private fun BudgetRow(budget: BudgetWithProgress, modifier: Modifier = Modifier)
                 Money.groupThousands(limit),
             ),
             progress = if (limit > 0) budget.spent.toFloat() / limit.toFloat() else 0f,
-            color = budgetRemainingColor(budget.spent, limit, budget.categoryColor?.let { Color(it) } ?: MaterialTheme.colorScheme.primary),
+            color = budgetRemainingColor(budget.spent, limit),
             current = budget.spent,
             total = limit,
             lineName = stringResource(R.string.progress_line_spent),
@@ -437,22 +487,22 @@ private fun MonthAmountBlock(current: Long, previous: Long, greenWhenLower: Bool
                 else -> MaterialTheme.colorScheme.onSurface
             },
         )
-        // No previous month to divide by: any amount at all counts as a full 100% swing.
+        // No previous month to divide by: no percent ("—"), a made-up +100% would read as a real swing.
         val percent = when {
             previous != 0L -> Math.round((current - previous) * 100.0 / previous)
-            current > 0L -> 100L
-            current < 0L -> -100L
-            else -> 0L
+            current == 0L -> 0L
+            else -> null
         }
         Text(
             text = when {
+                percent == null -> "—"
                 percent == 0L -> "~0%"
                 percent > 0 -> "+$percent%"
                 else -> "$percent%"
             },
             style = MaterialTheme.typography.bodySmall,
             color = when {
-                percent == 0L -> MaterialTheme.colorScheme.onSurfaceVariant
+                percent == null || percent == 0L -> MaterialTheme.colorScheme.onSurfaceVariant
                 (percent < 0) == greenWhenLower -> IncomeGreen
                 else -> ExpenseRed
             },

@@ -25,6 +25,9 @@ import app.outgo.data.db.entity.SettingEntity
 import app.outgo.data.db.entity.TradeEntity
 import app.outgo.domain.CategoryKind
 import app.outgo.domain.IconKind
+import app.outgo.data.db.entity.SettingKeys
+import app.outgo.util.Money
+import java.util.Locale
 
 /**
  * The single .sqlite file that holds every piece of user data — this is the
@@ -392,76 +395,93 @@ private object OutgoCallback : RoomDatabase.Callback() {
             db.insert("category", android.database.sqlite.SQLiteDatabase.CONFLICT_ABORT, cv)
         }
 
-        // Trades go to a subaccount, so the parent gets its default one (same name and color).
-        val cashColor = nextColor()
-        account("Tiền mặt", icon("wallet"), cashColor, account("Tiền mặt", icon("wallet"), cashColor))
+        // The starter data speaks the device's language (as the app does on its first launch):
+        // Vietnamese for a Vietnamese device, English otherwise. Only names differ.
+        val vi = Locale.getDefault().language == "vi"
+        fun t(viName: String, enName: String) = if (vi) viName else enName
 
-        // Categories typical of a Vietnamese household budget (Money Lover/MISA-style taxonomy).
+        // The fresh install's currency: its region's, see Money.regionalSymbol.
+        db.insert(
+            "setting",
+            android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE,
+            ContentValues().apply {
+                put("key", SettingKeys.CURRENCY)
+                put("value", Money.regionalSymbol())
+            },
+        )
+
+        // Trades go to a subaccount, so the parent gets its default one (same color, its own name
+        // so the two can be told apart).
+        val cashColor = nextColor()
+        val cashId = account(t("Tiền mặt", "Cash"), icon("wallet"), cashColor)
+        account(t("Ví", "Wallet"), icon("wallet"), cashColor, cashId)
+
+        // Categories typical of a household budget (Money Lover/MISA-style taxonomy).
         val exp = CategoryKind.EXPENSE
-        parent(exp, "Ăn uống", "food", 0).also { p ->
-            child(exp, p, "Ăn ngoài", "food", 0)
-            child(exp, p, "Cà phê", "coffee", 1)
-            child(exp, p, "Đi chợ", "groceries", 2)
+        parent(exp, t("Ăn uống", "Food & drink"), "food", 0).also { p ->
+            child(exp, p, t("Ăn ngoài", "Eating out"), "food", 0)
+            child(exp, p, t("Cà phê", "Coffee"), "coffee", 1)
+            child(exp, p, t("Đi chợ", "Groceries"), "groceries", 2)
         }
-        parent(exp, "Di chuyển", "transport", 1).also { p ->
-            child(exp, p, "Xăng xe", "fuel", 0)
-            child(exp, p, "Xe buýt / Taxi", "bus", 1)
-            child(exp, p, "Sửa xe", "repair", 2)
+        parent(exp, t("Di chuyển", "Transport"), "transport", 1).also { p ->
+            child(exp, p, t("Xăng xe", "Fuel"), "fuel", 0)
+            child(exp, p, t("Xe buýt / Taxi", "Bus / Taxi"), "bus", 1)
+            child(exp, p, t("Sửa xe", "Repairs"), "repair", 2)
         }
-        parent(exp, "Nhà ở", "rent", 2).also { p ->
-            child(exp, p, "Tiền nhà", "rent", 0)
-            child(exp, p, "Điện", "electricity", 1)
-            child(exp, p, "Nước", "water", 2)
+        parent(exp, t("Nhà ở", "Housing"), "rent", 2).also { p ->
+            child(exp, p, t("Tiền nhà", "Rent"), "rent", 0)
+            child(exp, p, t("Điện", "Electricity"), "electricity", 1)
+            child(exp, p, t("Nước", "Water"), "water", 2)
             child(exp, p, "Internet", "internet", 3)
-            child(exp, p, "Điện thoại", "phone", 4)
+            child(exp, p, t("Điện thoại", "Phone"), "phone", 4)
         }
-        parent(exp, "Mua sắm", "shopping", 3).also { p ->
-            child(exp, p, "Quần áo", "clothing", 0)
-            child(exp, p, "Đồ gia dụng", "shopping", 1)
+        parent(exp, t("Mua sắm", "Shopping"), "shopping", 3).also { p ->
+            child(exp, p, t("Quần áo", "Clothes"), "clothing", 0)
+            child(exp, p, t("Đồ gia dụng", "Household"), "shopping", 1)
         }
-        parent(exp, "Giải trí", "movie", 4).also { p ->
-            child(exp, p, "Phim ảnh", "movie", 0)
-            child(exp, p, "Nhậu", "beer", 1)
+        parent(exp, t("Giải trí", "Entertainment"), "movie", 4).also { p ->
+            child(exp, p, t("Phim ảnh", "Movies"), "movie", 0)
+            child(exp, p, t("Nhậu", "Drinks"), "beer", 1)
         }
-        parent(exp, "Sức khỏe", "health", 5).also { p ->
-            child(exp, p, "Thuốc", "medicine", 0)
-            child(exp, p, "Khám bệnh", "health", 1)
+        parent(exp, t("Sức khỏe", "Health"), "health", 5).also { p ->
+            child(exp, p, t("Thuốc", "Medicine"), "medicine", 0)
+            child(exp, p, t("Khám bệnh", "Doctor"), "health", 1)
         }
-        parent(exp, "Giáo dục", "education", 6).also { p ->
-            child(exp, p, "Học phí", "education", 0)
-            child(exp, p, "Sách vở", "book", 1)
+        parent(exp, t("Giáo dục", "Education"), "education", 6).also { p ->
+            child(exp, p, t("Học phí", "Tuition"), "education", 0)
+            child(exp, p, t("Sách vở", "Books"), "book", 1)
         }
-        parent(exp, "Làm đẹp", "beauty", 7).also { p ->
-            child(exp, p, "Mỹ phẩm", "beauty", 0)
-            child(exp, p, "Tóc & Spa", "beauty", 1)
+        parent(exp, t("Làm đẹp", "Beauty"), "beauty", 7).also { p ->
+            child(exp, p, t("Mỹ phẩm", "Cosmetics"), "beauty", 0)
+            child(exp, p, t("Tóc & Spa", "Hair & spa"), "beauty", 1)
         }
-        parent(exp, "Gia đình", "family", 8).also { p ->
-            child(exp, p, "Con cái", "family", 0)
-            child(exp, p, "Cha mẹ", "family", 1)
+        parent(exp, t("Gia đình", "Family"), "family", 8).also { p ->
+            child(exp, p, t("Con cái", "Children"), "family", 0)
+            child(exp, p, t("Cha mẹ", "Parents"), "family", 1)
         }
-        parent(exp, "Khác", "other", 9).also { p ->
-            child(exp, p, "Quà tặng", "gift", 0)
-            child(exp, p, "Du lịch", "travel", 1)
-            child(exp, p, "Thú cưng", "pet", 2)
-            child(exp, p, "Thể thao", "sport", 3)
-            child(exp, p, "Giặt ủi", "laundry", 4)
-            child(exp, p, "Phí & lệ phí", "fee", 5)
+        parent(exp, t("Khác", "Other"), "other", 9).also { p ->
+            child(exp, p, t("Quà tặng", "Gifts"), "gift", 0)
+            child(exp, p, t("Du lịch", "Travel"), "travel", 1)
+            child(exp, p, t("Thú cưng", "Pets"), "pet", 2)
+            child(exp, p, t("Thể thao", "Sports"), "sport", 3)
+            child(exp, p, t("Giặt ủi", "Laundry"), "laundry", 4)
+            child(exp, p, t("Phí & lệ phí", "Fees"), "fee", 5)
         }
 
         val inc = CategoryKind.INCOME
-        parent(inc, "Lương", "salary", 0).also { p ->
-            child(inc, p, "Lương", "salary", 0)
+        parent(inc, t("Lương", "Salary"), "salary", 0).also { p ->
+            child(inc, p, t("Lương", "Salary"), "salary", 0)
         }
-        parent(inc, "Thưởng", "bonus", 1).also { p ->
-            child(inc, p, "Thưởng", "bonus", 0)
+        parent(inc, t("Thưởng", "Bonus"), "bonus", 1).also { p ->
+            child(inc, p, t("Thưởng", "Bonus"), "bonus", 0)
         }
-        parent(inc, "Đầu tư", "investment", 2).also { p ->
-            child(inc, p, "Đầu tư", "investment", 0)
-            child(inc, p, "Lãi suất", "interest", 1)
+        parent(inc, t("Đầu tư", "Investments"), "investment", 2).also { p ->
+            child(inc, p, t("Đầu tư", "Investments"), "investment", 0)
+            child(inc, p, t("Lãi suất", "Interest"), "interest", 1)
         }
-        parent(inc, "Thu nhập khác", "other_income", 3).also { p ->
-            child(inc, p, "Làm thêm", "freelance", 0)
-            child(inc, p, "Khác", "other_income", 1)
+        parent(inc, t("Thu nhập khác", "Other income"), "other_income", 3).also { p ->
+            child(inc, p, t("Làm thêm", "Side work"), "freelance", 0)
+            child(inc, p, t("Khác", "Other"), "other_income", 1)
         }
     }
 }
@@ -575,8 +595,12 @@ private fun createTradeTriggers(db: SupportSQLiteDatabase, exemptColumns: Boolea
 }
 
 /** Cycled across seed parent categories so the Home chart starts out legible. */
+/**
+ * The starter accounts' and categories' colours: swatches of the editor's palette (row 4, see
+ * CategoryColorPalette), so an editor opened on one shows its colour as picked.
+ */
 private val SeedPalette = intArrayOf(
-    0xFF2E7D32.toInt(), 0xFFC62828.toInt(), 0xFF1565C0.toInt(), 0xFFF9A825.toInt(),
-    0xFF6A1B9A.toInt(), 0xFF00838F.toInt(), 0xFFAD1457.toInt(), 0xFF4E342E.toInt(),
-    0xFF558B2F.toInt(), 0xFFEF6C00.toInt(), 0xFF283593.toInt(),
+    0xFF408C45.toInt(), 0xFFBC3640.toInt(), 0xFF1586C8.toInt(), 0xFFFAB638.toInt(),
+    0xFF7A2EA4.toInt(), 0xFF13939F.toInt(), 0xFFBA2764.toInt(), 0xFF664A43.toInt(),
+    0xFFABAC37.toInt(), 0xFFF27C13.toInt(), 0xFF3B479F.toInt(),
 )

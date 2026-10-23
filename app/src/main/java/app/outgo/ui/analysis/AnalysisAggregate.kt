@@ -71,12 +71,12 @@ internal fun daysCounted(month: Int, zone: ZoneId, nowMillis: Long): Int {
 }
 
 /**
- * Percent change against [previous]. With no baseline, anything that appeared counts as +100%
- * (and a vanished negative net as -100%), so the change is always shown. Divides by |previous| so
- * a net that was negative still reads "+" when it grew.
+ * Percent change against [previous]; null with no baseline (a change from 0 has no percent, and
+ * showing one, like +100%, would be made up). Divides by |previous| so a net that was negative
+ * still reads "+" when it grew.
  */
-internal fun percentChange(current: Long, previous: Long): Int =
-    if (previous == 0L) current.sign * 100 else ((current - previous) * 100 / abs(previous)).toInt()
+internal fun percentChange(current: Long, previous: Long): Int? =
+    if (previous == 0L) null else ((current - previous) * 100 / abs(previous)).toInt()
 
 internal fun kindSummary(current: List<MonthCategoryTotal>, previous: List<MonthCategoryTotal>, periods: Int): KindSummary {
     val total = current.sumOf { it.total }
@@ -129,6 +129,10 @@ fun buildBalanceTrend(
  * Every account's end-of-day balance through [month]. [opening] is every balance at the start of
  * some earlier month, and [flows] must cover the months from there up to (not including) [month];
  * [moves] are [month]'s own balance changes. Accounts that sit at 0 all month are left out.
+ *
+ * An account with nothing before [month] (none of its money, no history) didn't exist yet: its
+ * line starts on its first move's day (see [BalanceLine.start]), so an opening balance entered then
+ * is where the line begins, not a jump up from a made-up 0.
  */
 fun buildDailyBalance(
     opening: List<AccountBalance>,
@@ -143,22 +147,31 @@ fun buildDailyBalance(
     val lastDay = daysCounted(month, zone, nowMillis).coerceAtMost(daysInMonth)
     val start = HashMap<Long, Long>()
     opening.forEach { start[it.accountId] = it.balance }
-    flows.filter { it.monthKey < month }.forEach { start[it.accountId] = (start[it.accountId] ?: 0L) + signed(it) }
+    // Accounts with any history before this month: they existed, even at 0.
+    val before = HashSet<Long>()
+    flows.filter { it.monthKey < month }.forEach {
+        start[it.accountId] = (start[it.accountId] ?: 0L) + signed(it)
+        before += it.accountId
+    }
     val perDay = HashMap<Long, LongArray>()
+    val firstDay = HashMap<Long, Int>()
     moves.forEach { move ->
         val day = Instant.ofEpochMilli(move.occurredAt).atZone(zone).dayOfMonth
         perDay.getOrPut(move.accountId) { LongArray(daysInMonth) }[day - 1] += move.delta
+        firstDay[move.accountId] = minOf(firstDay[move.accountId] ?: day, day)
     }
     val order = accounts.keys.withIndex().associate { (i, id) -> id to i }
     val lines = (start.keys + perDay.keys).sortedBy { order[it] ?: Int.MAX_VALUE }.mapNotNull { id ->
         var running = start[id] ?: 0L
         val days = perDay[id]
+        val isNew = running == 0L && id !in before
+        val from = if (isNew) ((firstDay[id] ?: 1) - 1).coerceAtMost(lastDay) else 0
         val values = (0 until lastDay).map { day ->
             running += days?.get(day) ?: 0L
             running
-        }
+        }.drop(from)
         val account = accounts[id]
-        if (values.all { it == 0L }) null else BalanceLine(id, account?.first.orEmpty(), account?.third ?: OTHER_COLOR, values, iconId = account?.second)
+        if (values.all { it == 0L }) null else BalanceLine(id, account?.first.orEmpty(), account?.third ?: OTHER_COLOR, values, iconId = account?.second, start = from)
     }
     return DailyBalanceUi(daysInMonth, lines)
 }
@@ -233,14 +246,17 @@ fun balanceGroups(tree: List<AccountNode>, parentId: Long?, subaccounts: Boolean
 /**
  * One line per group of [groups], [length] points long: the sum of its leaves' lines in [lines].
  * A leaf without a line sat at 0 all along (its line was dropped for that), and a line that stops
- * short (the live month stops at today) counts nothing after its end.
+ * short (the live month stops at today) counts nothing after its end. A line that starts late (see
+ * [BalanceLine.start]) counts from its start, and the group's line starts with its earliest leaf.
  */
 fun sumLines(lines: List<BalanceLine>, groups: List<Pair<AccountNode, List<Long>>>, length: Int): List<BalanceLine> {
     val byId = lines.associateBy { it.accountId }
     return groups.map { (node, leaves) ->
         val values = LongArray(length)
-        leaves.forEach { id -> byId[id]?.values?.forEachIndexed { i, v -> if (i < length) values[i] += v } }
-        BalanceLine(node.id, node.name, node.color, values.asList(), iconId = node.iconId)
+        val own = leaves.mapNotNull { byId[it] }
+        own.forEach { line -> line.values.forEachIndexed { i, v -> if (line.start + i < length) values[line.start + i] += v } }
+        val from = (own.minOfOrNull { it.start } ?: 0).coerceIn(0, length)
+        BalanceLine(node.id, node.name, node.color, values.asList().drop(from), iconId = node.iconId, start = from)
     }
 }
 

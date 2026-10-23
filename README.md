@@ -52,7 +52,7 @@ Open the app and you are already on the "add expense" screen. Log a purchase in 
 
 - Keep several accounts, for example cash, bank and e-wallet, each with its own icon and color.
 - **Savings accounts** can have a monthly target, and a progress bar tracks it. The bar turns green when you reach the target.
-- Edit an account's balance directly. Outgo records the difference as a balance adjustment, so the balance always matches the transaction history.
+- Edit an account's balance directly. Outgo records the difference as a balance adjustment, so the balance always matches the transaction history. A new account's first balance is its opening balance, dated the day you choose.
 - Accounts that have history are archived, not deleted, so past records stay correct.
 - **Drag to reorder:** long-press an account, drag it to a new place and let go. The same order is used on Home and in the account picker.
 

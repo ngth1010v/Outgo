@@ -36,6 +36,8 @@ import androidx.navigation.navArgument
 import app.outgo.ui.analysis.AnalysisScreen
 import app.outgo.ui.balance.BalanceScreen
 import app.outgo.ui.category.CategoryScreen
+import app.outgo.ui.component.LeaveGuard
+import app.outgo.ui.component.LocalLeaveGuard
 import app.outgo.ui.component.LocalSwipeParent
 import app.outgo.ui.component.rememberSwipeLevel
 import app.outgo.ui.component.swipeShift
@@ -61,11 +63,19 @@ fun OutgoRoot(openSetting: Boolean = false) {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val onTabs = backStackEntry?.destination?.route.let { it == null || it == Routes.TABS }
     val focusManager = LocalFocusManager.current
+    // An editor pushed on top with unsaved changes asks before a tab takes the user away from it.
+    val leaveGuard = remember { LeaveGuard() }
     fun selectTab(route: String) {
-        focusManager.clearFocus() // a focused field in a hidden tab would keep the keyboard up
-        if (route !in composedTabs) composedTabs += route
-        tab = route
-        if (!onTabs) navController.popBackStack(Routes.TABS, inclusive = false)
+        // Read now, not as composed: the bottom bar can hold on to an older copy of this function,
+        // and a stale "on the tabs" would change the tab under a pushed screen without closing it.
+        val pushed = navController.currentBackStackEntry?.destination?.route.let { it != null && it != Routes.TABS }
+        fun go() {
+            focusManager.clearFocus() // a focused field in a hidden tab would keep the keyboard up
+            if (route !in composedTabs) composedTabs += route
+            tab = route
+            if (pushed) navController.popBackStack(Routes.TABS, inclusive = false)
+        }
+        if (pushed) leaveGuard.leave(::go) else go()
     }
 
     BackHandler(enabled = onTabs && tab != Routes.TRADE) { selectTab(Routes.TRADE) }
@@ -106,6 +116,7 @@ fun OutgoRoot(openSetting: Boolean = false) {
             )
         },
     ) { padding ->
+        CompositionLocalProvider(LocalLeaveGuard provides leaveGuard) {
         Box(Modifier.padding(padding).consumeWindowInsets(padding)) {
             composedTabs.forEach { route ->
                 key(route) {
@@ -181,15 +192,18 @@ fun OutgoRoot(openSetting: Boolean = false) {
                     arguments = listOf(
                         navArgument("id") { type = NavType.LongType; defaultValue = 0L },
                         navArgument("parent") { type = NavType.LongType; defaultValue = 0L },
+                        navArgument("budget") { type = NavType.BoolType; defaultValue = false },
                     ),
                 ) { entry ->
                     CategoryEditScreen(
                         categoryId = entry.arguments?.getLong("id")?.takeIf { it > 0L },
                         parentId = entry.arguments?.getLong("parent")?.takeIf { it > 0L },
+                        openBudget = entry.arguments?.getBoolean("budget") ?: false,
                         onClose = { navController.popBackStack() },
                     )
                 }
             }
+        }
         }
     }
 }
@@ -198,7 +212,7 @@ fun OutgoRoot(openSetting: Boolean = false) {
 private fun TabContent(route: String, shown: Boolean, navController: NavHostController) {
     when (route) {
         Routes.TRADE -> TradeScreen(editingTradeId = null, onClose = {}, visible = shown)
-        Routes.HOME -> HomeScreen()
+        Routes.HOME -> HomeScreen(onAddBudget = { id -> navController.navigate(Routes.categoryEdit(id, budget = true)) })
         Routes.BALANCE -> BalanceScreen(onOpenEditor = { id, parentId -> navController.navigate(Routes.accountEdit(id, parentId)) })
         Routes.CATEGORY -> CategoryScreen(
             onOpenEditor = { id, parentId -> navController.navigate(Routes.categoryEdit(id, parentId)) },

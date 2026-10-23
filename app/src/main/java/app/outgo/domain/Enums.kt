@@ -23,6 +23,9 @@ object TradeType {
 
     /** True for types that increase the account balance. */
     fun isCredit(type: Int) = type == INCOME || type == ADJUST_IN
+
+    /** A balance adjustment, either way: what editing an account's balance records. */
+    fun isAdjustment(type: Int) = type == ADJUST_IN || type == ADJUST_OUT
 }
 
 /** Values for `account.account_type`. */

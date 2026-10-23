@@ -12,9 +12,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
-/** The trailing "+" row used to add a new account / category / subcategory. */
+/** The trailing "+ <label>" row used to add a new account / category / subcategory: [label] says which. */
 @Composable
-fun PlusRow(onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun PlusRow(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -23,6 +23,6 @@ fun PlusRow(onClick: () -> Unit, modifier: Modifier = Modifier) {
             .padding(8.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text("+", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
+        Text("+  $label", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
     }
 }

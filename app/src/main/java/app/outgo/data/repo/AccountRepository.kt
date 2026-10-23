@@ -58,9 +58,10 @@ class AccountRepository(
     suspend fun findById(id: Long): AccountEntity? = withContext(Dispatchers.IO) { accountDao.findById(id) }
 
     /**
-     * Creates a subaccount of [parentId], or with null a parent plus its default subaccount (same
-     * name, icon, color, description and type): trades only ever target a subaccount. The
-     * [initialBalance] goes to the subaccount, [savings] to the account created at that level.
+     * Creates a subaccount of [parentId], or with null a parent plus its default subaccount (named
+     * [defaultSubName]; same icon, color, description and type): trades only ever target a subaccount. The
+     * [initialBalance] goes to the subaccount as its opening balance, dated [openingAt]; [savings]
+     * to the account created at that level.
      * A savings parent's subaccounts are always savings accounts too.
      */
     suspend fun create(
@@ -75,6 +76,9 @@ class AccountRepository(
         parentId: Long? = null,
         parentSavingExempt: Boolean = false,
         privacy: AccountPrivacy = AccountPrivacy(),
+        openingAt: Long = System.currentTimeMillis(),
+        /** A new parent's default subaccount's name, so the two can be told apart; null: the parent's. */
+        defaultSubName: String? = null,
     ): Long = withContext(Dispatchers.IO) {
         db.withTransaction {
             val now = System.currentTimeMillis()
@@ -101,8 +105,8 @@ class AccountRepository(
                     savingProgressInAnalysis = privacy.progressInAnalysis,
                 ),
             )
-            val subId = if (parentId == null) accountDao.insert(row(id, 0)) else id
-            if (initialBalance != 0L) tradeRepository.recordAdjustment(subId, initialBalance)
+            val subId = if (parentId == null) accountDao.insert(row(id, 0).copy(name = defaultSubName ?: name)) else id
+            if (initialBalance != 0L) tradeRepository.recordAdjustment(subId, initialBalance, openingAt)
             if (savings != null && type == AccountType.SAVINGS) setSavingsMonth(id, monthKey, savings)
             id
         }
@@ -111,6 +115,8 @@ class AccountRepository(
     /**
      * [newBalance] is null for a parent: its balance is its subaccounts', not set by hand. A parent
      * made a savings account makes its subaccounts savings ones too (the editor asks first).
+     * [openingAt] dates the change when it is the account's opening balance (it has no history
+     * yet); otherwise the change is an adjustment made now.
      */
     suspend fun update(
         accountId: Long,
@@ -120,9 +126,11 @@ class AccountRepository(
         newBalance: Long?,
         accountType: Int,
         description: String?,
+        openingAt: Long? = null,
     ) = withContext(Dispatchers.IO) {
         db.withTransaction {
             val existing = accountDao.findById(accountId) ?: return@withTransaction
+            val opening = openingAt?.takeIf { accountDao.countTrades(accountId) == 0 }
             accountDao.update(
                 existing.copy(
                     name = name,
@@ -135,7 +143,7 @@ class AccountRepository(
             )
             if (existing.isParent && accountType == AccountType.SAVINGS) accountDao.setTypeWithChildren(listOf(accountId), AccountType.SAVINGS)
             val delta = (newBalance ?: existing.balance) - existing.balance
-            if (delta != 0L) tradeRepository.recordAdjustment(accountId, delta)
+            if (delta != 0L) tradeRepository.recordAdjustment(accountId, delta, opening ?: System.currentTimeMillis())
         }
     }
 

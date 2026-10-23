@@ -17,7 +17,10 @@ class SettingRepository(private val context: Context, private val settingDao: Se
     /** BCP-47 language tag ("en", "vi"), or "" to follow the system locale. */
     fun observeLocale(): Flow<String> = settingDao.observe(SettingKeys.LOCALE).map { it.orEmpty() }
 
-    /** Currency symbol, defaulting to [Money.DEFAULT_SYMBOL] — backups taken before this setting existed have no row. */
+    /**
+     * Currency symbol. A fresh install has its region's (see [Money.regionalSymbol]); backups taken
+     * before this setting existed have no row and keep [Money.DEFAULT_SYMBOL], what they were made with.
+     */
     fun observeCurrency(): Flow<String> =
         settingDao.observe(SettingKeys.CURRENCY).map { it?.takeIf(String::isNotBlank) ?: Money.DEFAULT_SYMBOL }
 

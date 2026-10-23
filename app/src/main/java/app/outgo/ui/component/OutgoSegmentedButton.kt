@@ -36,9 +36,13 @@ fun SingleChoiceSegmentedButtonRowScope.OutgoSegmentedButton(
         enabled = enabled,
         // Disabled borders keep the enabled outline: the selected segment is drawn over its
         // neighbours' edges, and Material's faint disabled border left a gap in the frame there.
+        // Disabled labels are clearly faded (the default inactive one looked tappable), so a locked
+        // choice, like an edited transaction's type, reads as locked.
         colors = SegmentedButtonDefaults.colors(
             disabledActiveBorderColor = MaterialTheme.colorScheme.outline,
             disabledInactiveBorderColor = MaterialTheme.colorScheme.outline,
+            disabledInactiveContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+            disabledInactiveContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         ),
         icon = {
             SegmentedButtonDefaults.Icon(

@@ -97,6 +97,8 @@ internal fun LazyListScope.historyItems(
     keyPrefix: String = "",
     /** Shows a Retry button on unfinished offset transfers; null hides it. */
     onRetry: ((TradeEntity) -> Unit)? = null,
+    /** Adjustments labelled "Opening balance" (see [HistoryUiState.openingIds]). */
+    openingIds: Set<Long> = emptySet(),
 ) {
     items(
         items = items,
@@ -109,7 +111,7 @@ internal fun LazyListScope.historyItems(
                 is HistoryListItem.Row -> "history_row"
             }
         },
-    ) { item -> HistoryItem(item, categoriesById, accountsById, onOpenTrade, rowModifier, onRetry) }
+    ) { item -> HistoryItem(item, categoriesById, accountsById, onOpenTrade, rowModifier, onRetry, openingIds) }
 }
 
 internal fun historyItemKey(item: HistoryListItem): String = when (item) {
@@ -130,6 +132,7 @@ internal fun HistoryItem(
     onOpenTrade: (Long) -> Unit,
     modifier: Modifier = Modifier,
     onRetry: ((TradeEntity) -> Unit)? = null,
+    openingIds: Set<Long> = emptySet(),
 ) {
     when (item) {
         is HistoryListItem.Header -> Row(
@@ -174,9 +177,11 @@ internal fun HistoryItem(
             toBudgetPath = toBudget?.let { c -> listOfNotNull(categoriesById[c.parentId]?.name, c.name).joinToString("/") },
             fromAccount = fromAccount,
             toAccount = accountsById[item.trade.toAccountId],
-            onClick = { onOpenTrade(item.trade.id) },
+            // An adjustment has no form of its own: the account's balance is where it is changed.
+            onClick = if (TradeType.isAdjustment(item.trade.type)) null else { { onOpenTrade(item.trade.id) } },
             modifier = modifier,
             onRetry = onRetry,
+            opening = item.trade.id in openingIds,
             )
         }
     }
@@ -192,14 +197,16 @@ private fun TradeRow(
     toBudgetPath: String?,
     fromAccount: AccountEntity?,
     toAccount: AccountEntity?,
-    onClick: () -> Unit,
+    onClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
     onRetry: ((TradeEntity) -> Unit)? = null,
+    /** An account's opening balance, not a later adjustment (see [TradeDao.openingAdjustmentIds]). */
+    opening: Boolean = false,
 ) {
     val isTransfer = trade.type == TradeType.TRANSFER
     val pending = trade.pendingAmount
     Row(
-        modifier = modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 5.dp),
+        modifier = modifier.fillMaxWidth().let { if (onClick != null) it.clickable(onClick = onClick) else it }.padding(vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Left out of budgets / savings targets, by the trade itself or by its subcategory/subaccount:
@@ -219,14 +226,21 @@ private fun TradeRow(
                 else -> false
             }
             Box {
-                IconView(iconId = category?.iconId, size = 32.dp, color = category?.color)
+                // An adjustment has no category: it shows its account.
+                val adjustment = TradeType.isAdjustment(trade.type)
+                IconView(
+                    iconId = if (adjustment) fromAccount?.iconId else category?.iconId,
+                    size = 32.dp,
+                    color = if (adjustment) fromAccount?.color else category?.color,
+                )
                 if (exempt) ExceptionBadge(32.dp)
             }
         }
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                (if (isTransfer) toAccount?.name else category?.name) ?: stringResource(R.string.history_adjustment_note),
+                (if (isTransfer) toAccount?.name else category?.name)
+                    ?: stringResource(if (opening) R.string.history_opening_balance else R.string.history_adjustment_note),
                 style = MaterialTheme.typography.bodyLarge,
             )
             if (!trade.note.isNullOrBlank()) {

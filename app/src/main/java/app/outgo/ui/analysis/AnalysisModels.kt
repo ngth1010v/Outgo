@@ -29,8 +29,8 @@ data class KindSummary(
     val total: Long,
     val prevTotal: Long,
     val deltaAmount: Long,
-    /** +100% when the previous period had nothing, see [percentChange]. */
-    val deltaPercent: Int,
+    /** Null when the previous period had nothing, see [percentChange]. */
+    val deltaPercent: Int?,
     val perPeriod: Long,
 )
 
@@ -65,7 +65,8 @@ data class ShareRow(
     val color: Int,
     val amount: Long,
     val delta: Long,
-    val deltaPercent: Int,
+    /** Null when the month before had nothing, see [percentChange]. */
+    val deltaPercent: Int?,
     val share: Float?,
     val startAngle: Float,
     val sweepAngle: Float,
