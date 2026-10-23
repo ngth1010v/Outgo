@@ -437,7 +437,13 @@ private fun DailyLines(
  * while [focusedId] names a line, the other names fade.
  */
 @Composable
-internal fun AccountLegend(lines: List<BalanceLine>, focusedId: Long? = null, onFocus: ((Long?) -> Unit)? = null) {
+internal fun AccountLegend(
+    lines: List<BalanceLine>,
+    focusedId: Long? = null,
+    onFocus: ((Long?) -> Unit)? = null,
+    /** A short stroke in each line's own style (solid, dashed, dotted) in place of the colour block. */
+    strokeSamples: Boolean = false,
+) {
     val anyFocused = focusedId != null && lines.any { it.accountId == focusedId }
     val clear = if (onFocus == null) Modifier else Modifier.pointerInput(Unit) { detectTapGestures { onFocus(null) } }
     BoxWithConstraints(modifier = Modifier.fillMaxWidth().then(clear)) {
@@ -468,6 +474,8 @@ internal fun AccountLegend(lines: List<BalanceLine>, focusedId: Long? = null, on
                             color = line.color,
                             circle = false,
                         )
+                    } else if (strokeSamples) {
+                        LegendStroke(line)
                     } else {
                         Box(Modifier.size(10.dp).background(Color(line.color), RoundedCornerShape(2.dp)))
                     }
@@ -626,3 +634,25 @@ private fun ShareRowItem(row: ShareRow, selection: AnalysisSelection, kind: Int,
 val ShareRowHeight = 44.dp
 /** The pie card shows four rows at once; more scroll inside. */
 val ShareHeight = ShareRowHeight * 4
+
+/** A legend's stroke sample: the line's colour and style, so lines of one colour still tell apart. */
+@Composable
+private fun LegendStroke(line: BalanceLine) {
+    val color = Color(line.color)
+    androidx.compose.foundation.Canvas(Modifier.size(width = 18.dp, height = 10.dp)) {
+        val y = size.height / 2f
+        val effect = when {
+            line.dotted -> androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(0.1f, 3.dp.toPx()))
+            line.dashed -> androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 2.dp.toPx()))
+            else -> null
+        }
+        drawLine(
+            color,
+            androidx.compose.ui.geometry.Offset(1.dp.toPx(), y),
+            androidx.compose.ui.geometry.Offset(size.width - 1.dp.toPx(), y),
+            strokeWidth = 2.dp.toPx(),
+            pathEffect = effect,
+            cap = if (line.dotted) androidx.compose.ui.graphics.StrokeCap.Round else androidx.compose.ui.graphics.StrokeCap.Butt,
+        )
+    }
+}

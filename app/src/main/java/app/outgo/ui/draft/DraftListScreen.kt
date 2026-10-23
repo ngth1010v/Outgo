@@ -20,6 +20,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.runtime.saveable.rememberSaveable
+import app.outgo.ui.component.BudgetCard
+import app.outgo.ui.component.BudgetDraftChange
+import app.outgo.ui.component.OutgoSegmentedButton
+import app.outgo.ui.component.SavingDraftChange
+import app.outgo.ui.component.SavingsCard
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -68,7 +76,13 @@ fun DraftListScreen(onBack: () -> Unit, onOpenDraft: (Long) -> Unit) {
     val viewModel: DraftListViewModel = viewModel(
         factory = viewModelFactory {
             initializer {
-                DraftListViewModel(container.draftStore, container.tradeRepository, container.accountRepository, container.categoryRepository)
+                DraftListViewModel(
+                    container.draftStore,
+                    container.tradeRepository,
+                    container.accountRepository,
+                    container.categoryRepository,
+                    container.budgetRepository,
+                )
             }
         },
     )
@@ -78,6 +92,7 @@ fun DraftListScreen(onBack: () -> Unit, onOpenDraft: (Long) -> Unit) {
     val resources = LocalContext.current.resources
     var askClear by remember { mutableStateOf(false) }
     var askPush by remember { mutableStateOf(false) }
+    var showImpact by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
@@ -132,17 +147,33 @@ fun DraftListScreen(onBack: () -> Unit, onOpenDraft: (Long) -> Unit) {
                     .heightIn(min = maxHeight)
                     .padding(horizontal = 16.dp),
             ) {
-                if (state.invalidCount > 0) InvalidBanner(state.invalidCount)
-                state.items.forEach { item ->
-                    key(historyItemKey(item)) {
-                        HistoryItem(
-                            item = item,
-                            categoriesById = state.categoriesById,
-                            accountsById = state.accountsById,
-                            onOpenTrade = onOpenDraft,
-                            onRemove = viewModel::remove,
-                            warnings = warnings,
-                        )
+                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    OutgoSegmentedButton(
+                        selected = !showImpact,
+                        onClick = { showImpact = false },
+                        shape = SegmentedButtonDefaults.itemShape(0, 2),
+                    ) { Text(stringResource(R.string.draft_tab_list), maxLines = 1) }
+                    OutgoSegmentedButton(
+                        selected = showImpact,
+                        onClick = { showImpact = true },
+                        shape = SegmentedButtonDefaults.itemShape(1, 2),
+                    ) { Text(stringResource(R.string.draft_tab_impact), maxLines = 1) }
+                }
+                if (showImpact) {
+                    ImpactContent(viewModel)
+                } else {
+                    if (state.invalidCount > 0) InvalidBanner(state.invalidCount)
+                    state.items.forEach { item ->
+                        key(historyItemKey(item)) {
+                            HistoryItem(
+                                item = item,
+                                categoriesById = state.categoriesById,
+                                accountsById = state.accountsById,
+                                onOpenTrade = onOpenDraft,
+                                onRemove = viewModel::remove,
+                                warnings = warnings,
+                            )
+                        }
                     }
                 }
                 Spacer(Modifier.weight(1f).heightIn(min = 16.dp))
@@ -223,5 +254,55 @@ private fun InvalidBanner(count: Int) {
             color = OnPendingContainer,
             fontWeight = FontWeight.Medium,
         )
+    }
+}
+
+/**
+ * The Impact tab: this month's budgets and savings targets the drafts change, as Home's cards
+ * with the figures as they'd be once the drafts are saved. The drafts' part is faded on the bar
+ * and dashed on the chart (tap the bar).
+ */
+@Composable
+private fun ImpactContent(viewModel: DraftListViewModel) {
+    // Collected here only, so the budget and savings queries run while the tab is shown.
+    val impact by viewModel.impact.collectAsStateWithLifecycle()
+    if (impact.isLoading) return
+    // Home's sections: a title, then its cards 8dp apart.
+    Column(Modifier.fillMaxWidth().padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (impact.budgets.isEmpty() && impact.savings.isEmpty()) {
+            Text(
+                stringResource(R.string.draft_impact_none),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 6.dp),
+            )
+        }
+        if (impact.budgets.isNotEmpty()) {
+            Text(stringResource(R.string.draft_impact_budgets), style = MaterialTheme.typography.titleMedium)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                impact.budgets.forEach { b ->
+                    key("b" + b.budget.id) {
+                        BudgetCard(b.budget, BudgetDraftChange(b.spentAfter, b.limitAfter, b.addedByDay))
+                    }
+                }
+            }
+        }
+        if (impact.savings.isNotEmpty()) {
+            Text(stringResource(R.string.draft_impact_savings), style = MaterialTheme.typography.titleMedium)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                impact.savings.forEach { sv ->
+                    key("s" + sv.row.account.id) {
+                        SavingsCard(sv.row, SavingDraftChange(sv.savedAfter, sv.addedByDay))
+                    }
+                }
+            }
+        }
+        if (impact.otherMonthCount > 0) {
+            Text(
+                pluralStringResource(R.plurals.draft_impact_other_month, impact.otherMonthCount, impact.otherMonthCount),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }

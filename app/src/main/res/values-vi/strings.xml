@@ -416,6 +416,7 @@
     <string name="progress_line_spent">Đã chi</string>
     <string name="progress_line_saved">Đã tiết kiệm</string>
     <string name="progress_line_plan">Kế hoạch</string>
+    <string name="progress_line_with_drafts">Kèm nháp</string>
 
     <!-- Analysis: Trades, Savings and Budgets groups -->
     <string-array name="weekday_abbrev"><item>T2</item><item>T3</item><item>T4</item><item>T5</item><item>T6</item><item>T7</item><item>CN</item></string-array>
@@ -697,4 +698,12 @@
     <string name="draft_problem_to_account">Tài khoản nhận đã bị lưu trữ hoặc xoá</string>
     <string name="draft_problem_category">Danh mục đã bị ẩn hoặc xoá</string>
     <string name="draft_problem_budget">Danh mục của ngân sách đã bị ẩn hoặc xoá</string>
+    <string name="draft_tab_list">Giao dịch</string>
+    <string name="draft_tab_impact">Ảnh hưởng</string>
+    <string name="draft_impact_budgets">Ngân sách tháng này</string>
+    <string name="draft_impact_savings">Tiết kiệm tháng này</string>
+    <string name="draft_impact_none">Lưu các giao dịch nháp này không thay đổi ngân sách hay mục tiêu tiết kiệm nào trong tháng này.</string>
+    <plurals name="draft_impact_other_month">
+        <item quantity="other">%1$d giao dịch nháp thuộc tháng khác, không tính ở đây.</item>
+    </plurals>
 </resources>

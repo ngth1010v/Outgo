@@ -97,6 +97,8 @@ data class BalanceLine(
     val color: Int,
     val values: List<Long>,
     val dashed: Boolean = false,
+    /** Drawn in dots; a line can't be both [dashed] and dotted. */
+    val dotted: Boolean = false,
     /** Shown in the legend, tinted with [color]; without one the legend falls back to a colour block. */
     val iconId: Long? = null,
     /** Index of the day (or month) [values]' first point sits on: a projection starts at today. */

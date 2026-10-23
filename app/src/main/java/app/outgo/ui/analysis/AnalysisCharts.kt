@@ -26,6 +26,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.luminance
@@ -60,6 +61,9 @@ import kotlin.math.min
  */
 
 private val DashEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f))
+
+/** Round-capped, so each near-zero dash draws as a dot. */
+private val DotEffect = PathEffect.dashPathEffect(floatArrayOf(0.1f, 12f))
 
 /**
  * Grows 0f -> 1f the first time a page is shown, and sits at 1f on a revisit. A lambda, read by
@@ -451,7 +455,12 @@ private fun DrawScope.drawBalanceLines(
         if (line.values.size == 1) {
             drawCircle(color, radius = 5f * grow, center = points[index][0], alpha = alpha)
         } else {
-            drawPath(pathOf(points[index]), color, alpha = alpha, style = Stroke(width = 4f * grow, pathEffect = if (line.dashed) DashEffect else null))
+            val stroke = when {
+                line.dotted -> Stroke(width = 5f * grow, pathEffect = DotEffect, cap = StrokeCap.Round)
+                line.dashed -> Stroke(width = 4f * grow, pathEffect = DashEffect)
+                else -> Stroke(width = 4f * grow)
+            }
+            drawPath(pathOf(points[index]), color, alpha = alpha, style = stroke)
         }
     }
     if (focus != null && focused in points.indices && points[focused].isNotEmpty()) {
@@ -479,6 +488,8 @@ fun DailyBalanceChart(
     progress: () -> Float,
     modifier: Modifier = Modifier,
     gapColors: Pair<Color, Color>? = null,
+    /** The two [lines] (by index) [gapColors] shades between. */
+    gapLines: Pair<Int, Int> = 0 to 1,
     pad: Boolean = true,
     focusedId: Long? = null,
     onFocus: ((Long?) -> Unit)? = null,
@@ -562,8 +573,10 @@ fun DailyBalanceChart(
         xTicks.forEach { (day, label) ->
             drawText(label, color = axisColor, topLeft = Offset(x(day - 1) - label.size.width / 2f, plotHeight + AxisGap.toPx()))
         }
-        if (gapColors != null && lines.size >= 2) {
-            drawGap(lines[0].values, lines[1].values, ::x, ::y, gapColors.first, gapColors.second)
+        val gapA = lines.getOrNull(gapLines.first)
+        val gapB = lines.getOrNull(gapLines.second)
+        if (gapColors != null && gapA != null && gapB != null) {
+            drawGap(gapA.values, gapB.values, ::x, ::y, gapColors.first, gapColors.second)
         }
         drawBalanceLines(lines, points, scrub, progress(), focus, look, plotWidth, plotHeight, xText, valueText)
     }

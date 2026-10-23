@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -25,7 +24,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
@@ -51,7 +49,6 @@ import app.outgo.ui.component.GroupedPickerSheet
 import app.outgo.domain.CategoryKind
 import app.outgo.data.db.entity.AccountEntity
 import app.outgo.data.db.entity.CategoryEntity
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -64,19 +61,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.outgo.R
-import app.outgo.data.db.dao.AccountWithProgress
-import app.outgo.data.db.dao.BudgetWithProgress
 import app.outgo.ui.LocalAppContainer
-import app.outgo.ui.component.BudgetProgressBlock
-import app.outgo.ui.component.WarningBadge
-import app.outgo.ui.theme.WarningContainer
-import app.outgo.ui.component.IconView
-import app.outgo.ui.component.budgetRemainingColor
-import app.outgo.ui.component.budgetRemainingText
-import app.outgo.ui.component.savingsProgressColor
-import app.outgo.ui.component.savingsProgressText
-import app.outgo.ui.theme.ExpenseRed
-import app.outgo.ui.theme.IncomeGreen
+import app.outgo.ui.component.BudgetCard
+import app.outgo.ui.component.SavingsCard
 import app.outgo.ui.theme.WarningDarkYellow
 import app.outgo.util.Money
 
@@ -153,15 +140,7 @@ fun HomeScreen(onAddBudget: (categoryId: Long) -> Unit = {}, onAddSaving: (accou
                             Card { PlusRow(stringResource(R.string.home_add_budget), onClick = { pickBudget = true }) }
                         } else {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                state.budgets.forEach { budget ->
-                                    val over = budget.spent > budget.effectiveLimit
-                                    Box {
-                                        Card(colors = if (over) CardDefaults.cardColors(containerColor = WarningContainer) else CardDefaults.cardColors()) {
-                                            BudgetRow(budget, modifier = Modifier.padding(12.dp))
-                                        }
-                                        if (over) WarningBadge(stringResource(R.string.category_over_budget_warning))
-                                    }
-                                }
+                                state.budgets.forEach { budget -> BudgetCard(budget) }
                             }
                         }
                     }
@@ -175,9 +154,7 @@ fun HomeScreen(onAddBudget: (categoryId: Long) -> Unit = {}, onAddSaving: (accou
                             Card { PlusRow(stringResource(R.string.home_add_saving), onClick = { pickSaving = true }) }
                         } else {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                state.savingsAccounts.forEach { account ->
-                                    Card { SavingsAccountRow(account, modifier = Modifier.padding(12.dp)) }
-                                }
+                                state.savingsAccounts.forEach { account -> SavingsCard(account) }
                             }
                         }
                     }
@@ -478,108 +455,3 @@ private val SMALL_ICON_SIZE = 14.4.dp
 /** Faded to 30% of the inherited content colour, so the buttons read as secondary to the amounts. */
 private const val SMALL_ICON_ALPHA = 0.3f
 
-@Composable
-private fun BudgetRow(budget: BudgetWithProgress, modifier: Modifier = Modifier) {
-    val trades = LocalAppContainer.current.tradeRepository
-    Column(modifier = modifier) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconView(iconId = budget.displayIconId, size = 32.dp, color = budget.categoryColor)
-            Spacer(Modifier.width(12.dp))
-            Text(budget.displayName, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-            MonthAmountBlock(budget.spent, budget.prevSpent, greenWhenLower = true)
-        }
-        val limit = budget.effectiveLimit
-        BudgetProgressBlock(
-            remainingText = budgetRemainingText(budget.spent, limit),
-            spentOfTotalText = stringResource(
-                R.string.category_spent_of_budget,
-                Money.groupThousands(budget.spent),
-                Money.groupThousands(limit),
-            ),
-            progress = if (limit > 0) budget.spent.toFloat() / limit.toFloat() else 0f,
-            color = budgetRemainingColor(budget.spent, limit),
-            current = budget.spent,
-            total = limit,
-            lineName = stringResource(R.string.progress_line_spent),
-            loadDays = { budget.categoryId?.let { trades.budgetDays(it) }.orEmpty() },
-            greenWhenLower = true,
-        )
-    }
-}
-
-/**
- * This month's amount with its deviation from last month underneath. Gray when unchanged,
- * otherwise green/red per [greenWhenLower] —
- * spending less is good for a budget, saving less is not.
- */
-@Composable
-private fun MonthAmountBlock(current: Long, previous: Long, greenWhenLower: Boolean) {
-    // Negative gap pulls the ratio up against the amount, same trick as BalanceBlock.
-    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy((-4).dp)) {
-        // A budget's amount is money spent ("-", red), a savings account's is money saved ("+", green).
-        val signed = if (greenWhenLower) -current else current
-        Text(
-            Money.formatSigned(signed),
-            fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.bodyLarge,
-            color = when {
-                signed > 0L -> IncomeGreen
-                signed < 0L -> ExpenseRed
-                else -> MaterialTheme.colorScheme.onSurface
-            },
-        )
-        // No previous month to divide by: no percent ("—"), a made-up +100% would read as a real swing.
-        val percent = when {
-            previous != 0L -> Math.round((current - previous) * 100.0 / previous)
-            current == 0L -> 0L
-            else -> null
-        }
-        Text(
-            text = when {
-                percent == null -> "—"
-                percent == 0L -> "~0%"
-                percent > 0 -> "+$percent%"
-                else -> "$percent%"
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = when {
-                percent == null || percent == 0L -> MaterialTheme.colorScheme.onSurfaceVariant
-                (percent < 0) == greenWhenLower -> IncomeGreen
-                else -> ExpenseRed
-            },
-        )
-    }
-}
-
-@Composable
-private fun SavingsAccountRow(row: AccountWithProgress, modifier: Modifier = Modifier) {
-    val trades = LocalAppContainer.current.tradeRepository
-    val account = row.account
-    Column(modifier = modifier) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconView(iconId = account.iconId, size = 32.dp, color = account.color)
-            Spacer(Modifier.width(12.dp))
-            Text(account.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-            MonthAmountBlock(row.monthlyIncome, row.prevMonthlyIncome, greenWhenLower = false)
-        }
-        val target = row.monthlyTarget
-        if (target != null) {
-            BudgetProgressBlock(
-                remainingText = savingsProgressText(row.monthlyIncome, target),
-                spentOfTotalText = stringResource(
-                    R.string.balance_savings_of_target,
-                    Money.groupThousands(row.monthlyIncome),
-                    Money.groupThousands(target),
-                ),
-                // A summed target can be 0 (no subaccount has one): nothing to save is done.
-                progress = if (target > 0) row.monthlyIncome.toFloat() / target.toFloat() else 1f,
-                color = savingsProgressColor(row.monthlyIncome, target, Color(account.color)),
-                current = row.monthlyIncome,
-                total = target,
-                lineName = stringResource(R.string.progress_line_saved),
-                loadDays = { trades.savingDaysThisMonth(account.id) },
-                greenWhenLower = false,
-            )
-        }
-    }
-}

@@ -17,6 +17,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -60,6 +61,8 @@ fun BudgetProgressBlock(
     /** Spending under the pace is good (budget); saving under it is not. Picks the shading colours. */
     greenWhenLower: Boolean,
     modifier: Modifier = Modifier,
+    /** What unsaved drafts would add: drawn faded on the bar and dashed on the chart. */
+    draft: DraftOverlay? = null,
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
     Column(modifier = modifier.fillMaxWidth().padding(top = 4.dp)) {
@@ -79,9 +82,19 @@ fun BudgetProgressBlock(
                             .clip(RoundedCornerShape(3.dp))
                             .background(MaterialTheme.colorScheme.outlineVariant),
                     )
+                    // The drafts' part: faded, from the solid bar's end to where the drafts take it.
+                    if (draft != null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(maxOf(progress, draft.progress).coerceIn(0f, 1f))
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(color.copy(alpha = DRAFT_ALPHA)),
+                        )
+                    }
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth(progress.coerceIn(0f, 1f))
+                            .fillMaxWidth((if (draft != null) minOf(progress, draft.progress) else progress).coerceIn(0f, 1f))
                             .fillMaxHeight()
                             .clip(RoundedCornerShape(3.dp))
                             .background(color),
@@ -96,22 +109,32 @@ fun BudgetProgressBlock(
             }
         }
         AnimatedVisibility(expanded) {
-            PacePanel(color, current, total, lineName, loadDays, greenWhenLower)
+            PacePanel(color, current, total, lineName, loadDays, greenWhenLower, draft)
         }
     }
 }
 
 @Composable
-private fun PacePanel(color: Color, current: Long, total: Long, lineName: String, loadDays: suspend () -> List<Long>, greenWhenLower: Boolean) {
+private fun PacePanel(
+    color: Color,
+    current: Long,
+    total: Long,
+    lineName: String,
+    loadDays: suspend () -> List<Long>,
+    greenWhenLower: Boolean,
+    draft: DraftOverlay?,
+) {
     val today = remember { LocalDate.now() }
     val daysInMonth = today.lengthOfMonth()
     // [current] changes whenever a trade lands in this month, so it doubles as the reload key.
     val days by produceState<List<Long>?>(null, current) { value = loadDays() }
-    val perDay = (total - current).coerceAtLeast(0) / (daysInMonth - today.dayOfMonth + 1)
+    // With drafts, the figures are as they'd be once the drafts are saved.
+    val shown = draft?.current ?: current
+    val perDay = (total - shown).coerceAtLeast(0) / (daysInMonth - today.dayOfMonth + 1)
     // Even share of [total] from the 1st through today, minus [current]. Budget: what can still be
     // spent today; savings: what still has to be saved today to catch up with that pace.
     val pace = total * today.dayOfMonth / daysInMonth
-    val todayAmount = pace - current
+    val todayAmount = pace - shown
     val planColor = MaterialTheme.colorScheme.outlineVariant.toArgb()
     val planName = stringResource(R.string.progress_line_plan)
     Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
@@ -134,12 +157,22 @@ private fun PacePanel(color: Color, current: Long, total: Long, lineName: String
                 color = color,
             )
         }
-        val lines = remember(days, total, color, planColor, lineName, planName) {
+        val lines = remember(days, total, color, planColor, lineName, planName, draft) {
             val plan = (0 until daysInMonth).map { total * it / (daysInMonth - 1).coerceAtLeast(1) }
-            listOfNotNull(
-                days?.let { BalanceLine(0, lineName, color.toArgb(), it) },
-                BalanceLine(1, planName, planColor, plan, dashed = true),
-            )
+            if (draft == null) {
+                listOfNotNull(
+                    days?.let { BalanceLine(0, lineName, color.toArgb(), it) },
+                    BalanceLine(1, planName, planColor, plan, dashed = true),
+                )
+            } else {
+                // Now (solid), with the drafts (dashed), plan (dotted: the dashes are the drafts').
+                val withDrafts = days?.mapIndexed { i, v -> v + (draft.addedByDay.getOrNull(i) ?: draft.addedByDay.lastOrNull() ?: 0L) }
+                listOfNotNull(
+                    days?.let { BalanceLine(0, lineName, color.toArgb(), it) },
+                    withDrafts?.let { BalanceLine(2, draft.lineName, color.toArgb(), it, dashed = true) },
+                    BalanceLine(1, planName, planColor, plan, dotted = true),
+                )
+            }
         }
         DailyBalanceChart(
             lines,
@@ -148,11 +181,28 @@ private fun PacePanel(color: Color, current: Long, total: Long, lineName: String
             progress = { 1f },
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(140.dp),
             gapColors = if (greenWhenLower) ExpenseRed to IncomeGreen else IncomeGreen to ExpenseRed,
+            // With drafts: shaded between the with-drafts line and the plan.
+            gapLines = if (draft != null && lines.size == 3) 1 to 2 else 0 to 1,
             pad = false,
         )
-        AccountLegend(lines)
+        AccountLegend(lines, strokeSamples = draft != null)
     }
 }
+
+/**
+ * Unsaved drafts on top of a [BudgetProgressBlock]: [progress] and [current] once they're saved,
+ * and [addedByDay] what they add up to by each day of the month so far (index 0 == the 1st).
+ */
+@Immutable
+data class DraftOverlay(
+    val progress: Float,
+    val current: Long,
+    val addedByDay: List<Long>,
+    val lineName: String,
+)
+
+/** How faded the drafts' part of a progress bar is. */
+private const val DRAFT_ALPHA = 0.35f
 
 /** "<left> remain" while under budget, else "<over> over" (call site should also switch the color to red). */
 @Composable

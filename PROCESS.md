@@ -1,35 +1,42 @@
 # PROCESS
 
 **Status:** DONE
-**Started:** 2026-10-23 22:00
-**Last updated:** 2026-10-23 22:45
+**Started:** 2026-10-24
+**Last updated:** 2026-10-24
 
 ## Task
-User: "bump the version; commit all changes; build and release a new version; rewrite a README.md
-(you can use emulator to create gif/pic); commit and push all changes".
+Follow-up on the draft screen's Impact tab: "chỉnh các budget/saving để nó có format giống bên home
+screen (có process bar / process chart)", with:
+- line chart: the drafts' change dashed — 3 lines: now / now + drafts / predict (plan) line
+- progress bar: the drafts' change faded
+User answers: plan line becomes dotted (only in Impact); right-side amount = after drafts + % vs last
+month + "(±draft)"; gap shading between with-drafts line and plan; chart collapsed, tap to open (like Home).
 
 ## Plan
-1. [x] Bump app/build.gradle.kts 4.17.0 (46) -> 4.18.0 (47); commit with PROCESS.md
-2. [x] build.bat release, verify signing cert ad5e3f, gh release v4.18.0 with Outgo.apk
-3. [x] Screenshots/GIF from emulator (mdn_test) into docs/; rewrite README.md
-4. [x] Commit + push (main + tag)
-
-Changes since v4.17.0: draft list on Add screen (66c4ebe), swipe undo snackbar (111f548),
-amount cursor follows taps (61f4d7c). No schema change.
+1. [x] Chart: `BalanceLine.dotted`, `DailyBalanceChart(gapLines = …)`, `AccountLegend(strokeSamples = …)`.
+2. [x] `BudgetProgressBlock(draft: DraftOverlay?)`: faded bar part, dashed with-drafts line, dotted plan, pace texts after drafts.
+3. [x] `MonthAmountBlock` moved from HomeScreen to `ui/component/MonthAmountBlock.kt`, + `draftDelta`.
+4. [x] VM: `BudgetImpact.addedByDay` / `SavingImpact.addedByDay` via `runningByDay`.
+5. [x] DraftListScreen: `BudgetImpactRow` / `SavingImpactRow` like Home's rows.
+6. [x] Strings `progress_line_with_drafts` (EN/VI); removed unused `draft_impact_before_after`.
+7. [x] Build + emulator check.
+8. [x] Follow-up "lấy luôn saving/budget row bên home": Home's BudgetRow/SavingsAccountRow + their Card/over-budget badge moved to `ui/component/ProgressCards.kt` (`BudgetCard`, `SavingsCard`, optional `BudgetDraftChange`/`SavingDraftChange`); Home and the Impact tab both use them. Emulator: Impact cards look like Home's.
 
 ## Done
-- Commit 23312c4 bump 4.18.0 (pushed). Release https://github.com/ngth1010v/Outgo/releases/tag/v4.18.0 with Outgo.apk, cert ad5e3f verified.
-- Debug app data on emulator backed up to scratchpad debug_backup.tar (databases/shared_prefs/files); debug app now holds sample English data (scratchpad seed.py, sample2.sqlite). Restored afterwards (done).
+- All of the above. Home's rows pass no draft, so they draw as before.
+
 ## Doing now
-- nothing
+- Nothing.
+
 ## Not done yet
-- nothing
+- Not committed. Baseline profile not regenerated.
+
 ## Tests / verification
 | Case | How | Result |
 |------|-----|--------|
-| release build | build.bat release | pass, v4.18.0 (47) |
-
-- README rewritten; docs/ screenshots retaken (add, home, accounts, categories, analysis, analysis-categories, history, draft) + docs/add-expense.gif; docs/reorder.png removed.
+| builds | `gradlew.bat :app:assembleDebug` | pass |
+| budget row + chart | emulator, expense draft 120,000 in Đi chợ (child of Ăn uống) | 3 lines + legend samples, faded bar part, (-120,000) |
+| savings row + chart | emulator, income draft 300,000 into Quỹ khẩn cấp | dashed line jumps to 3.8M today, shading follows it |
 
 ## Notes for resuming
-- See memory build-env-windows-gotchas (JAVA_HOME = ~/.gradle/jdks/eclipse_adoptium-21..., clear NoDefaultCurrentDirectoryInExePath).
+- Drafts are memory-only: reinstalling the APK clears them.

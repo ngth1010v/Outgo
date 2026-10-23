@@ -53,6 +53,7 @@ Back from a trip with a stack of receipts? Collect them first, save them togethe
 - Expenses, incomes and transfers can be mixed.
 - In the list: tap a row to edit it, **x** to remove it, **Clear draft**, or **Save to history** to save everything at once.
 - Drafts that point to a deleted or archived account or category are flagged and stay in the list.
+- The **Impact** tab shows what saving the drafts would do to this month's budgets and savings targets: each one's change, and its bar now and after.
 - The draft lives in memory only. It is gone when the app is closed.
 
 <br clear="right" />

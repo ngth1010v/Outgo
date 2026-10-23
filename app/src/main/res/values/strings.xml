@@ -430,6 +430,7 @@
     <string name="progress_line_spent">Spent</string>
     <string name="progress_line_saved">Saved</string>
     <string name="progress_line_plan">Plan</string>
+    <string name="progress_line_with_drafts">With drafts</string>
 
     <!-- Analysis: Trades, Savings and Budgets groups -->
     <string-array name="weekday_abbrev"><item>Mon</item><item>Tue</item><item>Wed</item><item>Thu</item><item>Fri</item><item>Sat</item><item>Sun</item></string-array>
@@ -715,4 +716,13 @@
     <string name="draft_problem_to_account">Its \"To\" account was archived or deleted</string>
     <string name="draft_problem_category">Its category was archived or deleted</string>
     <string name="draft_problem_budget">Its budget\'s category was archived or deleted</string>
+    <string name="draft_tab_list">Transactions</string>
+    <string name="draft_tab_impact">Impact</string>
+    <string name="draft_impact_budgets">Budgets this month</string>
+    <string name="draft_impact_savings">Savings this month</string>
+    <string name="draft_impact_none">Saving these drafts changes no budget or savings target this month.</string>
+    <plurals name="draft_impact_other_month">
+        <item quantity="one">%1$d draft is in another month and isn\'t counted here.</item>
+        <item quantity="other">%1$d drafts are in other months and aren\'t counted here.</item>
+    </plurals>
 </resources>
