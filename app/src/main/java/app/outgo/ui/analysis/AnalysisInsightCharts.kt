@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
@@ -128,10 +129,11 @@ private fun DrawScope.drawTopPill(lines: List<TextLayoutResult>, x: Float, fill:
 // ------------------------------------------------------------------ calendar
 
 /**
- * The month as a Monday-first calendar of six week rows, each day shaded by [values] (red for
+ * The month as a Monday-first calendar of six week rows (with [square], only as many as it spans), each day shaded by [values] (red for
  * money out, green for money in; with [diverging] the sign picks). A tap hands the day (1-based)
  * to [onSelect], or null off the days; the [selected] day is ringed, and [today] (when the month
- * is the current one) has a thin neutral border.
+ * is the current one) has a thin neutral border. With [square] the chart sets its own height so
+ * every cell is square, and [modifier] should not set one.
  */
 @Composable
 fun CalendarHeatmap(
@@ -145,6 +147,7 @@ fun CalendarHeatmap(
     progress: () -> Float,
     modifier: Modifier = Modifier,
     today: Int? = null,
+    square: Boolean = false,
 ) {
     val scheme = MaterialTheme.colorScheme
     val style = MaterialTheme.typography.labelSmall
@@ -156,13 +159,22 @@ fun CalendarHeatmap(
     val headerPx = (headers.firstOrNull()?.size?.height ?: 0)
     val select by rememberUpdatedState(onSelect)
     val layout by rememberUpdatedState(firstWeekday to daysInMonth)
+    // Six week rows on the card, so every month lays out alike; square cells take only the month's own.
+    val weeks = if (square) (firstWeekday + daysInMonth + 6) / 7 else 6
+    val rows by rememberUpdatedState(weeks)
 
+    val sized = if (!square) modifier else modifier.layout { measurable, constraints ->
+        val w = constraints.maxWidth
+        val h = headerPx + Gap.roundToPx() + w * weeks / 7
+        val placeable = measurable.measure(Constraints.fixed(w, h))
+        layout(w, h) { placeable.place(0, 0) }
+    }
     Canvas(
-        modifier = modifier.pointerInput(Unit) {
+        modifier = sized.pointerInput(Unit) {
             detectTapGestures { tap ->
                 val top = headerPx + Gap.toPx()
                 val cellW = size.width / 7f
-                val cellH = (size.height - top) / 6f
+                val cellH = (size.height - top) / rows
                 if (tap.y < top) return@detectTapGestures select(null)
                 val index = ((tap.y - top) / cellH).toInt() * 7 + (tap.x / cellW).toInt()
                 val day = index - layout.first + 1
@@ -172,7 +184,7 @@ fun CalendarHeatmap(
     ) {
         val top = headerPx + Gap.toPx()
         val cellW = size.width / 7f
-        val cellH = (size.height - top) / 6f
+        val cellH = (size.height - top) / weeks
         val inset = 1.5.dp.toPx()
         headers.forEachIndexed { i, label ->
             drawText(label, scheme.onSurfaceVariant, Offset(i * cellW + (cellW - label.size.width) / 2f, 0f))
@@ -199,13 +211,13 @@ fun CalendarHeatmap(
 // ------------------------------------------------------------------ week grid
 
 /**
- * Seven weekday rows (Monday first) of [DAY_SLOTS] four-hour cells, shaded by [grid]'s amounts in
- * [base]. A tap hands the cell's index (weekday * [DAY_SLOTS] + slot) to [onSelect]. The cell
+ * Seven weekday rows (Monday first) of [DAY_SLOTS] four-hour cells, shaded by [values] (amounts or
+ * trade counts, indexed like [WeekGridUi]) in [base]. A tap hands the cell's index (weekday * [DAY_SLOTS] + slot) to [onSelect]. The cell
  * of [now] (same index) has a thin neutral border.
  */
 @Composable
 fun WeekHeatmap(
-    grid: WeekGridUi,
+    values: List<Long>,
     base: Color,
     selected: Int?,
     onSelect: (Int?) -> Unit,
@@ -240,13 +252,13 @@ fun WeekHeatmap(
         val plotH = size.height - bottomH - Gap.toPx()
         val cellH = plotH / WEEK_DAYS
         val inset = 1.5.dp.toPx()
-        val max = grid.max
+        val max = values.maxOrNull() ?: 0L
         val p = progress()
         val empty = scheme.onSurface.copy(alpha = 0.05f)
         rows.forEachIndexed { r, label ->
             drawText(label, scheme.onSurfaceVariant, Offset(0f, r * cellH + (cellH - label.size.height) / 2f))
             for (c in 0 until DAY_SLOTS) {
-                val t = heat(grid.amount(r, c), max) * p
+                val t = heat(values[r * DAY_SLOTS + c], max) * p
                 val topLeft = Offset(left + c * cellW + inset, r * cellH + inset)
                 val cell = Size(cellW - inset * 2, cellH - inset * 2)
                 drawRoundRect(heatColor(base, t, empty), topLeft, cell, CellRadius)
@@ -265,7 +277,8 @@ fun WeekHeatmap(
 
 /**
  * Two bars per bucket side by side, [first] and [second] (shares, 0..1), on one percentage axis.
- * Scrubbing across picks a bucket out and shows [describe]'s lines for it.
+ * Scrubbing across picks a bucket out and shows [describe]'s lines for it. With [onSelect], a tap
+ * hands over the bucket under it, and the [selected] one stays picked out.
  */
 @Composable
 fun PairedShareBars(
@@ -277,11 +290,14 @@ fun PairedShareBars(
     describe: (Int) -> List<String>,
     progress: () -> Float,
     modifier: Modifier = Modifier,
+    selected: Int? = null,
+    onSelect: ((Int) -> Unit)? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
     val style = MaterialTheme.typography.labelSmall
     val measurer = rememberTextMeasurer()
     val xLabels = remember(labels, style) { labels.map { measurer.measure(it, style) } }
+    val select by rememberUpdatedState(onSelect)
     // A nice top: the next 25% above the largest share.
     val top = remember(first, second) { (((first + second).maxOrNull() ?: 0f) * 4f).let { kotlin.math.ceil(it.toDouble()).toFloat() / 4f }.coerceIn(0.25f, 1f) }
     val ticks = remember(top, style) { generateSequence(0.25f) { it + 0.25f }.takeWhile { it <= top + 0.001f }.map { it to measurer.measure("${Math.round(it * 100)}%", style) }.toList() }
@@ -291,9 +307,16 @@ fun PairedShareBars(
     val hoverText = remember(hovered, labels) { hovered?.let { i -> describe(i).map { measurer.measure(it, style) } }.orEmpty() }
 
     Canvas(
-        modifier = modifier.scrubX { x ->
-            hovered = x?.let { if (slotPx[0] > 0f) (it / slotPx[0]).toInt().coerceIn(0, labels.lastIndex) else null }
-        },
+        modifier = modifier
+            .scrubX { x ->
+                hovered = x?.let { if (slotPx[0] > 0f) (it / slotPx[0]).toInt().coerceIn(0, labels.lastIndex) else null }
+            }
+            .then(
+                if (onSelect == null) Modifier
+                else Modifier.pointerInput(Unit) {
+                    detectTapGestures { tap -> if (slotPx[0] > 0f) select?.invoke((tap.x / slotPx[0]).toInt().coerceIn(0, labels.lastIndex)) }
+                },
+            ),
     ) {
         val gutter = (ticks.maxOfOrNull { it.second.size.width } ?: 0) + Gap.toPx()
         val plotW = size.width - gutter
@@ -310,7 +333,8 @@ fun PairedShareBars(
         }
         val p = progress()
         labels.indices.forEach { i ->
-            val alpha = if (hovered == null || hovered == i) 1f else 0.4f
+            val focus = hovered ?: selected
+            val alpha = if (focus == null || focus == i) 1f else 0.4f
             val center = i * slot + slot / 2f
             val a = first.getOrElse(i) { 0f } * p
             val b = second.getOrElse(i) { 0f } * p
@@ -419,11 +443,17 @@ fun TransferFlowChart(
         val leftX = labelW + Gap.toPx()
         val rightX = size.width - labelW - Gap.toPx() - nodeW
         val total = flow.total.coerceAtLeast(1L).toFloat()
+        // Every node is at least as tall as its two-line label, so a small account's label never
+        // lands on its neighbour's; the rest of the height is shared by amount.
+        val labelH = texts.first.firstOrNull()?.let { (a, b) -> (a.size.height + b.size.height).toFloat() } ?: 0f
         fun layoutSide(nodes: List<FlowNode>): Map<Long, Pair<Float, Float>> {
             val usable = size.height - gap * (nodes.size - 1).coerceAtLeast(0)
+            // ponytail: with more nodes than fit their labels, back to plain shares (labels may overlap); scroll if that matters.
+            val floor = if (labelH * nodes.size < usable) labelH else 0f
+            val shared = usable - floor * nodes.size
             var y = 0f
             return nodes.associate { n ->
-                val h = usable * n.total / total
+                val h = floor + shared * n.total / total
                 val span = y to h
                 y += h + gap
                 n.id to span

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -39,6 +40,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.outgo.R
+import app.outgo.data.db.dao.TradeSlim
 import app.outgo.domain.TradeType
 import app.outgo.ui.component.IconView
 import app.outgo.ui.home.compactAmount
@@ -164,9 +166,9 @@ fun InsightCard(card: ChartCard, height: Dp, state: AnalysisUiState, month: Int,
         InsightGroup.TRADES -> StageSection(state.monthTradeInsights[month] ?: Stage.Loading, title, height) { data ->
             Section(title) {
                 when (type) {
-                    ChartType.TRADE_CALENDAR -> CalendarCard(card, data, actions, animate)
+                    ChartType.TRADE_CALENDAR -> CalendarCard(card, data, state, actions, animate)
                     ChartType.TRADE_WEEK -> WeekCard(card, data, animate)
-                    ChartType.TRADE_SIZES -> SizesCard(card, data, animate)
+                    ChartType.TRADE_SIZES -> SizesCard(card, data, state, actions, animate)
                     ChartType.TRADE_TOP -> TopCard(card, data, state, actions)
                     ChartType.TRADE_FREQUENCY -> FrequencyCard(card, data, animate)
                     else -> TransfersCard(data, state, animate)
@@ -283,81 +285,201 @@ private class CellPick {
 // ================================================================== TRADES
 
 @Composable
-private fun CalendarCard(card: ChartCard, data: TradesInsightUi, actions: InsightActions, animate: Boolean) {
+private fun CalendarCard(card: ChartCard, data: TradesInsightUi, state: AnalysisUiState, actions: InsightActions, animate: Boolean) {
+    val full = LocalFullscreenChart.current
     var selected by remember(data.month, card.id) { mutableStateOf<Int?>(null) }
-    val values = remember(data, card.mode) { data.days.map { it.value(card.mode) } }
-    CalendarHeatmap(
-        data.daysInMonth,
-        data.firstWeekday,
-        values,
-        modeColor(card.mode),
-        diverging = card.mode == AnalysisMode.ALL,
-        selected = selected,
-        onSelect = { selected = if (it == selected) null else it },
-        progress = introProgress(animate),
-        modifier = Modifier.fillMaxWidth().height(plotHeight(CalendarHeight)),
-        today = remember(data.month) { LocalDate.now().takeIf { it.year * 100 + it.monthValue == data.month }?.dayOfMonth },
-    )
-    val signed: (Long) -> String = { if (card.mode == AnalysisMode.EXPENSE) Money.formatSigned(-it) else Money.formatSigned(it) }
-    val day = selected
-    if (day != null) {
-        val totals = data.days[day - 1]
-        val date = LocalDate.of(data.month / 100, data.month % 100, day)
-        val label = stringArrayResource(R.array.weekday_abbrev)[date.dayOfWeek.value - 1] + " " + day
-        // All has no single kind: History opens on the one that moved more that day.
-        val type = when {
-            card.mode == AnalysisMode.INCOME -> HistoryType.INCOME
-            card.mode == AnalysisMode.EXPENSE -> HistoryType.EXPENSE
-            totals.income > totals.expense -> HistoryType.INCOME
-            else -> HistoryType.EXPENSE
-        }
-        val start = date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        DetailLine(
-            stringResource(R.string.analysis_day_detail, label, signed(totals.value(card.mode)), trades(totals.count(card.mode))),
-            stringResource(R.string.analysis_open),
-        ) { actions.openDay(type, start) }
-    } else {
-        val busiest = values.indices.maxByOrNull { kotlin.math.abs(values[it]) }?.takeIf { values[it] != 0L }
-        DetailLine(
-            if (busiest == null) stringResource(R.string.analysis_tap_hint)
-            else stringResource(R.string.analysis_busiest, stringResource(R.string.analysis_day_number, busiest + 1) + " (" + signed(values[busiest]) + ")"),
+    val values = remember(data, card.mode, card.byCount) {
+        data.days.map { if (card.byCount) it.count(card.mode).toLong() else it.value(card.mode) }
+    }
+    // Full screen: square cells, then the picked day's trades in the room left.
+    Column(modifier = fullscreenBox(full), verticalArrangement = Arrangement.spacedBy(GapDp)) {
+        CalendarHeatmap(
+            data.daysInMonth,
+            data.firstWeekday,
+            values,
+            modeColor(card.mode),
+            // Counts have no sign: All then shades in the accent like the other kinds.
+            diverging = card.mode == AnalysisMode.ALL && !card.byCount,
+            selected = selected,
+            onSelect = { selected = if (it == selected) null else it },
+            progress = introProgress(animate),
+            modifier = if (full != null) Modifier.fillMaxWidth() else Modifier.fillMaxWidth().height(CalendarHeight),
+            today = remember(data.month) { LocalDate.now().takeIf { it.year * 100 + it.monthValue == data.month }?.dayOfMonth },
+            square = full != null,
         )
+        val signed: (Long) -> String = { if (card.mode == AnalysisMode.EXPENSE) Money.formatSigned(-it) else Money.formatSigned(it) }
+        val day = selected
+        if (day != null) {
+            val totals = data.days[day - 1]
+            val date = LocalDate.of(data.month / 100, data.month % 100, day)
+            val label = stringArrayResource(R.array.weekday_abbrev)[date.dayOfWeek.value - 1] + " " + day
+            // All has no single kind: History opens on the one that moved more that day.
+            val type = when {
+                card.mode == AnalysisMode.INCOME -> HistoryType.INCOME
+                card.mode == AnalysisMode.EXPENSE -> HistoryType.EXPENSE
+                totals.income > totals.expense -> HistoryType.INCOME
+                else -> HistoryType.EXPENSE
+            }
+            val zone = ZoneId.systemDefault()
+            val start = date.atStartOfDay(zone).toInstant().toEpochMilli()
+            DetailLine(
+                stringResource(R.string.analysis_day_detail, label, signed(totals.value(card.mode)), trades(totals.count(card.mode))),
+                stringResource(R.string.analysis_open),
+            ) { actions.openDay(type, start) }
+            if (full != null) {
+                val dayTrades = remember(data, card.mode, day) {
+                    data.trades.filter { card.mode.takes(it.type) && Instant.ofEpochMilli(it.occurredAt).atZone(zone).toLocalDate() == date }.sortedBy { it.occurredAt }
+                }
+                TradeList(dayTrades, state, actions, TimeOnly, ranked = false, modifier = Modifier.weight(1f))
+            }
+        } else {
+            val busiest = values.indices.maxByOrNull { kotlin.math.abs(values[it]) }?.takeIf { values[it] != 0L }
+            DetailLine(
+                if (busiest == null) stringResource(R.string.analysis_tap_hint)
+                else stringResource(
+                    R.string.analysis_busiest,
+                    stringResource(R.string.analysis_day_number, busiest + 1) + " (" + (if (card.byCount) trades(values[busiest].toInt()) else signed(values[busiest])) + ")",
+                ),
+            )
+        }
     }
 }
 
+/** On the card, the content's own height; in full screen all of [full]'s, so a list can take the rest with a weight. */
+private fun fullscreenBox(full: FullscreenChart?): Modifier = if (full != null) Modifier.fillMaxWidth().height(full.height) else Modifier.fillMaxWidth()
+
+/** A chart's height in full screen when a list shares the screen with it. */
+private fun FullscreenChart.chartWithList(normal: Dp): Dp = maxOf(normal, height * 0.4f)
+
 @Composable
 private fun WeekCard(card: ChartCard, data: TradesInsightUi, animate: Boolean) {
+    val full = LocalFullscreenChart.current
     var selected by remember(data.month, card.id) { mutableStateOf<Int?>(null) }
     val grid = remember(data, card.mode) { weekGrid(data.trades, card.mode, ZoneId.systemDefault()) }
-    WeekHeatmap(
-        grid,
-        modeColor(card.mode),
-        selected,
-        onSelect = { selected = if (it == selected) null else it },
-        progress = introProgress(animate),
-        modifier = Modifier.fillMaxWidth().height(plotHeight(CalendarHeight)),
-        // A weekday and hour, not a date: marked on every page.
-        now = remember { LocalDateTime.now().let { (it.dayOfWeek.value - 1) * DAY_SLOTS + it.hour / (24 / DAY_SLOTS) } },
-    )
+    val values = remember(grid, card.byCount) { if (card.byCount) grid.counts.map { it.toLong() } else grid.amounts }
     val weekdays = stringArrayResource(R.array.weekday_abbrev)
     fun slotName(i: Int): String {
         val hours = 24 / DAY_SLOTS
         val slot = i % DAY_SLOTS
         return "${weekdays[i / DAY_SLOTS]} ${slot * hours}h–${(slot + 1) * hours}h"
     }
-    val cell = selected
-    if (cell != null) {
-        DetailLine(stringResource(R.string.analysis_day_detail, slotName(cell), Money.format(grid.amounts[cell]), trades(grid.counts[cell])))
-    } else {
-        val busiest = grid.amounts.indices.maxByOrNull { grid.amounts[it] }?.takeIf { grid.amounts[it] > 0 }
-        DetailLine(if (busiest == null) stringResource(R.string.analysis_no_data) else stringResource(R.string.analysis_busiest, slotName(busiest)))
+    Column(modifier = fullscreenBox(full), verticalArrangement = Arrangement.spacedBy(GapDp)) {
+        WeekHeatmap(
+            values,
+            modeColor(card.mode),
+            selected,
+            onSelect = { selected = if (it == selected) null else it },
+            progress = introProgress(animate),
+            modifier = Modifier.fillMaxWidth().height(full?.chartWithList(CalendarHeight) ?: CalendarHeight),
+            // A weekday and hour, not a date: marked on every page.
+            now = remember { LocalDateTime.now().let { (it.dayOfWeek.value - 1) * DAY_SLOTS + it.hour / (24 / DAY_SLOTS) } },
+        )
+        val cell = selected
+        if (cell != null) {
+            DetailLine(stringResource(R.string.analysis_day_detail, slotName(cell), Money.format(grid.amounts[cell]), trades(grid.counts[cell])))
+        } else {
+            val busiest = values.indices.maxByOrNull { values[it] }?.takeIf { values[it] > 0 }
+            DetailLine(if (busiest == null) stringResource(R.string.analysis_no_data) else stringResource(R.string.analysis_busiest, slotName(busiest)))
+        }
+        if (full != null) {
+            // Every slot with trades, ranked by what the card shades by, the other value breaking ties.
+            val ranked = remember(grid, card.byCount) {
+                grid.counts.indices.filter { grid.counts[it] > 0 }.sortedWith(
+                    if (card.byCount) compareByDescending<Int> { grid.counts[it] }.thenByDescending { grid.amounts[it] }
+                    else compareByDescending<Int> { grid.amounts[it] }.thenByDescending { grid.counts[it] },
+                )
+            }
+            val largest = (ranked.firstOrNull()?.let { values[it] } ?: 0L).coerceAtLeast(1L)
+            val color = modeColor(card.mode)
+            Column(modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())) {
+                ranked.forEachIndexed { rank, i ->
+                    val amount = Money.format(grid.amounts[i])
+                    val count = trades(grid.counts[i])
+                    BarRow(rank + 1, values[i].toFloat() / largest, color, selected == i, onClick = { selected = if (selected == i) null else i }) {
+                        Text(slotName(i), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, maxLines = 1, modifier = Modifier.weight(1f))
+                        Column(horizontalAlignment = Alignment.End) {
+                            // The value the list is ranked by on top.
+                            Text(if (card.byCount) count else amount, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, maxLines = 1)
+                            Text(if (card.byCount) amount else count, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** A list row of [TopRowHeight]: its [rank], then [content], over a faint bar of [share] (0..1) in [color]; tinted when [selected]. */
+@Composable
+private fun BarRow(
+    rank: Int?,
+    share: Float,
+    color: Color,
+    selected: Boolean = false,
+    onClick: () -> Unit,
+    content: @Composable RowScope.() -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(TopRowHeight)
+            .clip(RoundedCornerShape(8.dp))
+            .then(if (selected) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)) else Modifier)
+            .clickable(onClick = onClick),
+    ) {
+        Box(Modifier.fillMaxHeight().fillMaxWidth(share.coerceIn(0f, 1f)).background(color.copy(alpha = 0.08f)))
+        Row(modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (rank != null) {
+                Text("$rank", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(24.dp))
+            }
+            content()
+        }
+    }
+}
+
+private val TimeOnly = DateTimeFormatter.ofPattern("HH:mm")
+
+/**
+ * [list] as rows that open the trade's editor: category, [time] (and note), signed amount, over a
+ * bar of its share of the largest. Scrolls inside [modifier]'s box.
+ */
+@Composable
+private fun TradeList(list: List<TradeSlim>, state: AnalysisUiState, actions: InsightActions, time: DateTimeFormatter, ranked: Boolean, modifier: Modifier) {
+    val categories = remember(state.expenseTree, state.incomeTree) {
+        (state.expenseTree + state.incomeTree).flatMap { listOf(it) + it.children }.associateBy { it.id }
+    }
+    val largest = (list.maxOfOrNull { it.amount } ?: 0L).coerceAtLeast(1L)
+    val zone = ZoneId.systemDefault()
+    Column(modifier = modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+        list.forEachIndexed { i, t ->
+            val category = t.categoryId?.let { categories[it] }
+            val income = t.type == TradeType.INCOME
+            val color = if (income) IncomeGreen else ExpenseRed
+            BarRow(if (ranked) i + 1 else null, t.amount.toFloat() / largest, color, onClick = { actions.openTrade(t.id) }) {
+                IconView(iconId = category?.iconId, size = 24.dp, color = category?.color)
+                Spacer(Modifier.width(6.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(category?.name.orEmpty(), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        listOfNotNull(Instant.ofEpochMilli(t.occurredAt).atZone(zone).format(time), t.note?.takeIf { it.isNotBlank() }).joinToString(" · "),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Text(Money.formatSigned(if (income) t.amount else -t.amount), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, color = color, maxLines = 1)
+            }
+        }
     }
 }
 
 @Composable
-private fun SizesCard(card: ChartCard, data: TradesInsightUi, animate: Boolean) {
+private fun SizesCard(card: ChartCard, data: TradesInsightUi, state: AnalysisUiState, actions: InsightActions, animate: Boolean) {
     val buckets = remember(data, card.mode) { sizeBuckets(data.trades, card.mode) }
     if (buckets == null) return Empty(height = listHeight(BalanceHeight))
+    val full = LocalFullscreenChart.current
+    var selected by remember(data.month, card.id, card.mode) { mutableStateOf<Int?>(null) }
     val unitNames = units()
     val labels = remember(buckets, unitNames) {
         List(buckets.counts.size) { i -> if (i == 0) "<" + compactAmount(buckets.edges[0], unitNames) else compactAmount(buckets.edges[i - 1], unitNames) + "+" }
@@ -365,23 +487,39 @@ private fun SizesCard(card: ChartCard, data: TradesInsightUi, animate: Boolean) 
     val tradesShare = MaterialTheme.colorScheme.primary
     val moneyShare = modeColor(if (card.mode == AnalysisMode.ALL) AnalysisMode.EXPENSE else card.mode).copy(alpha = 0.75f)
     val tradesFormat = LocalTrades.current
-    PairedShareBars(
-        labels,
-        buckets.countShare,
-        buckets.sumShare,
-        tradesShare,
-        moneyShare,
-        describe = { i ->
-            listOf(
-                labels[i],
-                tradesFormat(buckets.counts[i]) + " (${Math.round(buckets.countShare[i] * 100)}%)",
-                Money.format(buckets.sums[i]) + " (${Math.round(buckets.sumShare[i] * 100)}%)",
-            )
-        },
-        progress = introProgress(animate),
-        modifier = Modifier.fillMaxWidth().height(plotHeight()),
-    )
-    Legend(tradesShare to stringResource(R.string.analysis_share_of_trades), moneyShare to stringResource(R.string.analysis_share_of_money))
+    Column(modifier = fullscreenBox(full), verticalArrangement = Arrangement.spacedBy(GapDp)) {
+        PairedShareBars(
+            labels,
+            buckets.countShare,
+            buckets.sumShare,
+            tradesShare,
+            moneyShare,
+            describe = { i ->
+                listOf(
+                    labels[i],
+                    tradesFormat(buckets.counts[i]) + " (${Math.round(buckets.countShare[i] * 100)}%)",
+                    Money.format(buckets.sums[i]) + " (${Math.round(buckets.sumShare[i] * 100)}%)",
+                )
+            },
+            progress = introProgress(animate),
+            modifier = Modifier.fillMaxWidth().height(full?.chartWithList(BalanceHeight) ?: BalanceHeight),
+            // Full screen: a tap picks a bucket and lists its trades.
+            selected = selected.takeIf { full != null },
+            onSelect = if (full != null) { i -> selected = if (selected == i) null else i } else null,
+        )
+        Legend(tradesShare to stringResource(R.string.analysis_share_of_trades), moneyShare to stringResource(R.string.analysis_share_of_money))
+        if (full != null) {
+            val bucket = selected
+            if (bucket == null) {
+                DetailLine(stringResource(R.string.analysis_tap_bucket_hint))
+            } else {
+                DetailLine(stringResource(R.string.analysis_day_detail, labels[bucket], Money.format(buckets.sums[bucket]), trades(buckets.counts[bucket])))
+                // data.trades is already largest first.
+                val list = remember(data, card.mode, buckets, bucket) { data.trades.filter { card.mode.takes(it.type) && it.amount > 0 && buckets.bucketOf(it.amount) == bucket } }
+                TradeList(list, state, actions, TopDate, ranked = true, modifier = Modifier.weight(1f))
+            }
+        }
+    }
 }
 
 /** "N trades", usable outside composition (inside a chart's describe lambda). */
@@ -399,56 +537,9 @@ private val TopDate = DateTimeFormatter.ofPattern("dd/MM HH:mm")
 @Composable
 private fun TopCard(card: ChartCard, data: TradesInsightUi, state: AnalysisUiState, actions: InsightActions) {
     val top = remember(data, card.mode) { topTrades(data.trades, card.mode) }
-    if (top.isEmpty()) return Empty(height = listHeight(TopRowHeight * TOP_ROWS_SHOWN))
-    val categories = remember(state.expenseTree, state.incomeTree) {
-        (state.expenseTree + state.incomeTree).flatMap { listOf(it) + it.children }.associateBy { it.id }
-    }
-    val largest = top.first().amount.coerceAtLeast(1L)
-    val zone = ZoneId.systemDefault()
-    Column(modifier = Modifier.fillMaxWidth().height(listHeight(TopRowHeight * TOP_ROWS_SHOWN)).verticalScroll(rememberScrollState())) {
-        top.forEachIndexed { i, t ->
-            val category = t.categoryId?.let { categories[it] }
-            val income = t.type == TradeType.INCOME
-            val color = if (income) IncomeGreen else ExpenseRed
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(TopRowHeight)
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable { actions.openTrade(t.id) },
-            ) {
-                // The row's share of the largest, as a faint bar behind it.
-                Box(Modifier.fillMaxHeight().fillMaxWidth(t.amount.toFloat() / largest).background(color.copy(alpha = 0.08f)))
-                Row(modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "${i + 1}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.width(18.dp),
-                    )
-                    IconView(iconId = category?.iconId, size = 24.dp, color = category?.color)
-                    Spacer(Modifier.width(6.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(category?.name.orEmpty(), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(
-                            listOfNotNull(Instant.ofEpochMilli(t.occurredAt).atZone(zone).format(TopDate), t.note?.takeIf { it.isNotBlank() }).joinToString(" · "),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    Text(
-                        Money.formatSigned(if (income) t.amount else -t.amount),
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Medium,
-                        color = color,
-                        maxLines = 1,
-                    )
-                }
-            }
-        }
-    }
+    val height = listHeight(TopRowHeight * TOP_ROWS_SHOWN)
+    if (top.isEmpty()) return Empty(height = height)
+    TradeList(top, state, actions, TopDate, ranked = true, modifier = Modifier.height(height))
 }
 
 private fun Modifier.fillMaxSize() = fillMaxWidth().fillMaxHeight()
@@ -463,6 +554,7 @@ private fun monthLabels(months: List<Int>): List<String> {
 private fun FrequencyCard(card: ChartCard, data: TradesInsightUi, animate: Boolean) {
     val counts = remember(data, card.mode) { data.activity.map { it.count(card.mode).toLong() } }
     if (counts.all { it == 0L }) return Empty(height = listHeight(BalanceHeight))
+    val full = LocalFullscreenChart.current
     val averages = remember(data, card.mode) { data.activity.map { a -> a.count(card.mode).let { if (it > 0) a.total(card.mode) / it else 0L } } }
     val labels = monthLabels(data.activity.map { it.month })
     val unitNames = units()
@@ -470,30 +562,90 @@ private fun FrequencyCard(card: ChartCard, data: TradesInsightUi, animate: Boole
     val averageLabel = stringResource(R.string.analysis_legend_average)
     val barColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
     val lineColor = modeColor(if (card.mode == AnalysisMode.ALL) AnalysisMode.EXPENSE else card.mode)
-    BarLineChart(
-        labels,
-        counts,
-        averages,
-        barColor,
-        lineColor,
-        barText = { it.toString() },
-        describe = { i -> listOf(labels[i] + ": " + tradesFormat(counts[i].toInt()), averageLabel + ": " + compactAmount(averages[i], unitNames)) },
-        progress = introProgress(animate),
-        modifier = Modifier.fillMaxWidth().height(plotHeight()),
-    )
-    Legend(barColor to stringResource(R.string.analysis_legend_trades), lineColor to averageLabel)
+    Column(modifier = fullscreenBox(full), verticalArrangement = Arrangement.spacedBy(GapDp)) {
+        BarLineChart(
+            labels,
+            counts,
+            averages,
+            barColor,
+            lineColor,
+            barText = { it.toString() },
+            describe = { i -> listOf(labels[i] + ": " + tradesFormat(counts[i].toInt()), averageLabel + ": " + compactAmount(averages[i], unitNames)) },
+            progress = introProgress(animate),
+            modifier = Modifier.fillMaxWidth().height(full?.chartWithList(BalanceHeight) ?: BalanceHeight),
+        )
+        Legend(barColor to stringResource(R.string.analysis_legend_trades), lineColor to averageLabel)
+        if (full != null) FrequencyTable(data.activity, card.mode, Modifier.weight(1f))
+    }
+}
+
+/** One row per month, newest first: its trade count, total and average per trade. */
+@Composable
+private fun FrequencyTable(activity: List<MonthActivity>, mode: AnalysisMode, modifier: Modifier) {
+    val label = MaterialTheme.typography.labelSmall
+    Column(modifier = modifier.fillMaxWidth()) {
+        TableRow(
+            listOf(
+                stringResource(R.string.analysis_mode_month),
+                stringResource(R.string.analysis_legend_trades),
+                stringResource(R.string.analysis_col_total),
+                stringResource(R.string.analysis_col_average),
+            ),
+            header = true,
+            modifier = Modifier.height(lineOf(label) + 4.dp),
+        )
+        Column(modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())) {
+            activity.asReversed().forEach { a ->
+                val count = a.count(mode)
+                val total = a.total(mode)
+                TableRow(
+                    listOf(monthYear(a.month), "$count", Money.format(total), if (count > 0) Money.format(total / count) else "—"),
+                    header = false,
+                    modifier = Modifier.height(TopRowHeight),
+                )
+            }
+        }
+    }
+}
+
+private val TableWeights = floatArrayOf(1.1f, 0.9f, 1.3f, 1.3f)
+
+/** A [FrequencyTable] line: the month left, the numbers right-aligned. */
+@Composable
+private fun TableRow(cells: List<String>, header: Boolean, modifier: Modifier) {
+    val style = if (header) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodySmall
+    val color = if (header) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+    Row(modifier = modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        cells.forEachIndexed { i, text ->
+            Text(
+                text,
+                style = style,
+                color = color,
+                fontWeight = if (!header && i == 0) FontWeight.Medium else null,
+                textAlign = if (i == 0) TextAlign.Start else TextAlign.End,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(TableWeights[i]),
+            )
+        }
+    }
 }
 
 @Composable
 private fun TransfersCard(data: TradesInsightUi, state: AnalysisUiState, animate: Boolean) {
-    val flow = remember(data) { transferFlow(data.transfers) }
+    // The card merges accounts whose bar is shorter than their two-line label (gaps between the
+    // bars take about 24dp); full screen shows every account.
+    val full = LocalFullscreenChart.current != null
+    val minShare = if (full) 0.0 else (lineOf(MaterialTheme.typography.labelSmall) * 2 / (FlowHeight - 24.dp)).toDouble()
+    val flow = remember(data, minShare) { transferFlow(data.transfers, minShare) }
     if (flow == null) return Empty(height = listHeight(FlowHeight + GapDp))
     TransferFlowChart(
         flow,
         state.accountNames,
         stringResource(R.string.analysis_flow_other),
         introProgress(animate),
-        Modifier.fillMaxWidth().height(plotHeight(FlowHeight)),
+        // Full screen: all the room but the total line under it.
+        Modifier.fillMaxWidth().height(listHeight(FlowHeight, reserve = GapDp + lineOf(MaterialTheme.typography.bodySmall))),
     )
     DetailLine(stringResource(R.string.analysis_flow_total, flow.count, Money.format(flow.total)))
 }

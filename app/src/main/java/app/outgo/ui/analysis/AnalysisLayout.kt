@@ -397,16 +397,25 @@ data class ChartCard(
     val accountId: Long? = null,
     /** Only for [ChartType.hasToggles]: the accounts (categories) switched off, so one added later shows. */
     val hidden: List<Long> = emptyList(),
+    /** Only for [hasMetric]: shades and ranks by trade count instead of amount. */
+    val byCount: Boolean = false,
 )
 
 /**
- * `TYPE.MODE.accountId.zero.ids.month.hidden` per card, `;`-separated; hidden is `,`-separated. zero
+ * The day calendar and the weekday-and-time grid (month or year): shade by amount or by trade count
+ * ([ChartCard.byCount]), set in the gear sheet along with their kind.
+ */
+val ChartType.hasMetric: Boolean get() = (base ?: this).let { it == ChartType.TRADE_WEEK || it == ChartType.TRADE_CALENDAR }
+
+/**
+ * `TYPE.MODE.accountId.zero.ids.month.hidden.metric` per card, `;`-separated; hidden is `,`-separated,
+ * metric is `C` for [ChartCard.byCount] or empty. zero
  * belonged to the removed "Auto / With 0" axis chip (every axis now takes in 0), ids and month to
  * the removed budget and savings charts: all three are always written empty, so hidden keeps its
  * place. Older versions read the first parts and ignore the rest.
  */
 fun encodeLayout(cards: List<ChartCard>): String = cards.joinToString(";") {
-    "${it.type.name}.${it.mode.name}.${it.accountId ?: ""}...." + it.hidden.joinToString(",")
+    "${it.type.name}.${it.mode.name}.${it.accountId ?: ""}...." + it.hidden.joinToString(",") + "." + (if (it.byCount) "C" else "")
 }
 
 /**
@@ -422,6 +431,7 @@ fun decodeLayout(value: String?, defaults: List<ChartType>, offered: Set<ChartTy
         ChartCard(
             0, type, mode, parts.getOrNull(2)?.toLongOrNull(),
             parts.getOrNull(6)?.split(',')?.mapNotNull { it.toLongOrNull() }.orEmpty(),
+            byCount = parts.getOrNull(7) == "C",
         )
     }
 }

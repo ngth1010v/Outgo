@@ -409,6 +409,9 @@
     <string name="analysis_account_months_title">Số dư tài khoản 5 tháng gần nhất</string>
     <string name="analysis_subaccount_months_title">Số dư tài khoản con 5 tháng gần nhất</string>
     <string name="analysis_chart_settings">Cài đặt biểu đồ</string>
+    <string name="analysis_options_kind">Loại giao dịch</string>
+    <string name="analysis_options_show_by">Hiển thị theo</string>
+    <string name="analysis_show_by_amount">Số tiền</string>
     <string name="analysis_options_parent_category">Danh mục cha</string>
     <string name="analysis_options_parent_account">Tài khoản cha</string>
     <string name="analysis_options_budget">Ngân sách</string>
@@ -453,6 +456,9 @@
     <string name="analysis_open">Xem</string>
     <string name="analysis_busiest">Nhiều nhất: %1$s</string>
     <string name="analysis_tap_hint">Chạm vào một ô để xem chi tiết</string>
+    <string name="analysis_tap_bucket_hint">Chạm vào một cột để xem các giao dịch</string>
+    <string name="analysis_col_total">Tổng</string>
+    <string name="analysis_col_average">Trung bình</string>
     <string name="analysis_share_of_trades">Tỷ lệ số giao dịch</string>
     <string name="analysis_share_of_money">Tỷ lệ số tiền</string>
     <string name="analysis_legend_trades">Số giao dịch</string>

@@ -467,7 +467,7 @@ private fun ChartList(
 
 /** A card's title-row chips, or null for a chart without any. */
 private fun cardAction(card: ChartCard, state: AnalysisUiState, month: Int, onChange: (ChartCard) -> Unit): (@Composable () -> Unit)? =
-    if (card.type.hasMode || card.type.hasParent || card.type.hasToggles || card.type.pick != null) {
+    if (card.type.hasMode || card.type.hasParent || card.type.hasToggles || card.type.pick != null || card.type.hasMetric) {
         { CardChips(card, state, month, onChange) }
     } else {
         null
@@ -511,10 +511,11 @@ private val FullscreenPadding = 12.dp
 private fun CardChips(card: ChartCard, state: AnalysisUiState, month: Int, onChange: (ChartCard) -> Unit) {
     var showOptions by remember { mutableStateOf(false) }
     Row(verticalAlignment = Alignment.CenterVertically) {
-        if (card.type.hasMode) {
+        // A hasMetric chart picks its kind in the gear sheet, next to its amount / count switch.
+        if (card.type.hasMode && !card.type.hasMetric) {
             ChoiceChip(modeLabel(card.mode), AnalysisMode.entries.map { it to modeLabel(it) }) { onChange(card.copy(mode = it)) }
         }
-        if (card.type.pick != null || card.type.hasParent || card.type.hasToggles) {
+        if (card.type.pick != null || card.type.hasParent || card.type.hasToggles || card.type.hasMetric) {
             IconButton(onClick = { showOptions = true }, modifier = Modifier.size(28.dp)) {
                 Icon(
                     painter = painterResource(R.drawable.ph_gear_six),
@@ -558,7 +559,7 @@ private fun chartOptions(card: ChartCard, state: AnalysisUiState, month: Int): C
         emptyList()
     }
     val pickedId = card.accountId?.takeIf { picked -> pick.any { it.id == picked } } ?: pick.firstOrNull()?.id
-    return ChartOptions(pickTitle, pick, pickedId, shown)
+    return ChartOptions(pickTitle, pick, pickedId, shown, metric = type.hasMetric)
 }
 
 /** What a [ChartType.hasParent]/[ChartType.hasToggles] chart picks from: categories of its kind, or accounts. */

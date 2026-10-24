@@ -1,54 +1,71 @@
 # PROCESS
 
 **Status:** DONE
-**Started:** 2026-10-24 20:19
-**Last updated:** 2026-10-24 20:45
+**Started:** 2026-10-24 18:25
+**Last updated:** 2026-10-24 18:45
 
 ## Task
-"add a 'extend' icon on the right of current 'info' icon in each chart; when user click to it, the app
-will show the full screen version of this chart". User answers:
-- Stay portrait. Charts that would want landscape (line charts) -> drawn normally but taller, with the
-  legend as rows (one row per line + its value).
-- Every chart gets the icon (including Summary / list cards).
-- Same controls (mode chip, gear settings) work in full screen; changes apply to the card too.
+Full-screen ("extend") versions of Analysis charts:
+- Transfer flows: plot takes almost all the screen height (only the total line under it).
+- Day calendar: square cells; tapping a day also lists that day's trades.
+- Weekday and time: new setting "Show by: Amount / Transactions" (card and full screen); full
+  screen adds a list of weekday-time slots sorted by that setting.
+
+User answers:
+- The setting lives in the gear sheet, saved per card.
+- Week list: only slots with trades; row = rank, "Mon 8h–12h", amount and trade count (the
+  sorted-by value on top), share bar; tapping a row selects the cell.
+- Day list follows the mode chip, sorted by time; tapping a row opens the trade editor.
+- Also asked for: Transaction sizes (tap a bucket, list its trades) and Transactions per month
+  (table: month, count, total, average) in full screen.
+
+Follow-up (same day):
+- Weekday and time: Expense/Income/All moved from the title chip into the gear sheet.
+- Day calendar: gets the Amount/Transactions setting too; both settings in the gear sheet.
+- Transfer flows: card merges accounts whose bar is shorter than their label into "Other" (both
+  sides; a lone small one stays itself), replacing the fixed top-5 rule; full screen shows every
+  account. Every bar is at least its label's height, so small accounts stay readable.
+- Test data: 8 accounts (Ví điện tử, Tiết kiệm, Momo, ZaloPay, ShopeePay, Techcombank, VCB,
+  Sổ tiết kiệm) and 17 transfers in Sep/Oct 2026, from scratchpad `seed_transfers.py`.
 
 ## Plan
-1. [x] Expand icon after the (i) in `Section`'s title row (AnalysisSections.kt), via LocalSectionExpand.
-2. [x] Full-screen view: ChartList (AnalysisScreen.kt) keeps `expandedId`; `FullscreenCard` shows the same
-   card through the root overlay with BackHandler.
-3. [x] Content grows: LocalFullscreenChart + plotHeight()/listHeight(); legend -> LegendRows with values;
-   pie stacks vertically.
-4. [x] Icons ph_arrows_out_simple / ph_arrows_in_simple, strings en + vi.
-5. [x] Build + emulator check.
-
-Decision: a Compose Dialog was tried first and dropped: it sizes its window to the first measured
-content (screen minus bars, 2200px of 2400), so the bottom bar showed through and the status bar
-icons turned white. Now `ui/component/OverlayHost.kt` (OverlayHost, ShowOverlay) draws over the whole
-app from OutgoRoot (ui/nav/OutgoNavHost.kt), in the activity's own window.
+1. [x] `ChartCard.byCount` + `ChartType.hasMetric`; layout string gets an 8th part (`C` or empty).
+2. [x] Gear sheet: "Show by" segmented switch (ChartOptionsSheet.kt).
+3. [x] WeekHeatmap takes values (amounts or counts); CalendarHeatmap `square` mode (own height, only
+   the month's week rows); PairedShareBars tap-to-select.
+4. [x] Cards (AnalysisInsightCards.kt): full-screen Column of the content height, list takes the rest
+   by weight. Shared `BarRow` / `TradeList` (Top trades now uses them too).
+5. [x] Strings en + vi.
+6. [x] Build + emulator check.
 
 ## Done
-- See Plan. Files: AnalysisSections.kt, AnalysisInsightCards.kt, AnalysisScreen.kt, OutgoNavHost.kt,
-  ui/component/OverlayHost.kt, res/drawable/ph_arrows_{out,in}_simple.xml, values{,-vi}/strings.xml.
+- Files: AnalysisLayout.kt, AnalysisScreen.kt, ChartOptionsSheet.kt, AnalysisInsightCharts.kt,
+  AnalysisInsightCards.kt, AnalysisInsights.kt (`SizeBucketsUi.bucketOf`, unused WeekGridUi helpers
+  removed), values{,-vi}/strings.xml.
 
 ## Doing now
 - Nothing.
 
 ## Not done yet
-- Optional: regenerate the Baseline Profile with the expand transition in `animationJourney`.
+- Optional: regenerate the Baseline Profile.
 
 ## Tests / verification
 | Case | How | Result |
 |------|-----|--------|
 | builds | `gradlew.bat installDebug` | pass |
-| line chart full screen + legend rows | emulator, month page | pass |
-| pie full screen | emulator | pass |
-| stacked bars, 8 categories | emulator | pass |
-| summary + mode chip in full screen, change kept on card | emulator | pass (card set back to All) |
-| gear sheet over full screen | emulator | pass |
-| close icon / Back | emulator | pass |
-| year page | emulator | pass |
-| Trades/Savings/Budgets charts | none on the emulator's layouts | not run |
-| dark theme | app theme setting is light | not run |
+| transfer flow full height | emulator | pass |
+| calendar square cells, 5-week month has no empty row | emulator | pass |
+| calendar day tap lists trades + Open | emulator | pass |
+| week list sorted by amount, then by count after gear switch | emulator | pass |
+| sizes bucket tap lists trades | emulator | pass |
+| frequency table | emulator | pass |
+| card (non full screen) layouts unchanged | emulator | pass |
+| gear sheet: kind + show by, calendar and week | emulator | pass |
+| calendar All + Transactions shades by count, saved (`C` in layout) | emulator + DB | pass |
+| transfer card merges small, full screen shows all 12 accounts readable | emulator | pass |
+| year page week chart | not opened | not run |
+| dark theme | not run | not run |
 
 ## Notes for resuming
-- Emulator already has 617 test trades; don't wipe.
+- Emulator test data: 300 trades Jul–Oct 2026; don't wipe. The month layout was edited directly in
+  the DB to add the calendar, week, sizes and frequency charts.

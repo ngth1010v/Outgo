@@ -423,6 +423,9 @@
     <string name="analysis_account_months_title">Account balance, last 5 months</string>
     <string name="analysis_subaccount_months_title">Subaccount balance, last 5 months</string>
     <string name="analysis_chart_settings">Chart settings</string>
+    <string name="analysis_options_kind">Transaction type</string>
+    <string name="analysis_options_show_by">Show by</string>
+    <string name="analysis_show_by_amount">Amount</string>
     <string name="analysis_options_parent_category">Parent category</string>
     <string name="analysis_options_parent_account">Parent account</string>
     <string name="analysis_options_budget">Budget</string>
@@ -467,6 +470,9 @@
     <string name="analysis_open">Open</string>
     <string name="analysis_busiest">Busiest: %1$s</string>
     <string name="analysis_tap_hint">Tap a cell for details</string>
+    <string name="analysis_tap_bucket_hint">Tap a bar to list its transactions</string>
+    <string name="analysis_col_total">Total</string>
+    <string name="analysis_col_average">Average</string>
     <string name="analysis_share_of_trades">Share of transactions</string>
     <string name="analysis_share_of_money">Share of money</string>
     <string name="analysis_legend_trades">Transactions</string>

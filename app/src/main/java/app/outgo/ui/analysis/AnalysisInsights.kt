@@ -136,11 +136,7 @@ const val DAY_SLOTS = 6
 
 /** [WEEK_DAYS] rows (Monday first) of [DAY_SLOTS] cells: the amount and the count of the trades in each. */
 @Immutable
-data class WeekGridUi(val amounts: List<Long>, val counts: List<Int>) {
-    val max: Long get() = amounts.maxOrNull() ?: 0L
-    fun amount(weekday: Int, slot: Int) = amounts[weekday * DAY_SLOTS + slot]
-    fun count(weekday: Int, slot: Int) = counts[weekday * DAY_SLOTS + slot]
-}
+data class WeekGridUi(val amounts: List<Long>, val counts: List<Int>)
 
 const val WEEK_DAYS = 7
 
@@ -170,7 +166,10 @@ data class SizeBucketsUi(
     val sums: List<Long>,
     val countShare: List<Float>,
     val sumShare: List<Float>,
-)
+) {
+    /** The bucket [amount] falls in. */
+    fun bucketOf(amount: Long): Int = edges.indexOfFirst { amount < it }.let { if (it < 0) edges.size else it }
+}
 
 /** Edges the size buckets pick from: 1, 3, 10, 30… whole units, as minor units. */
 private val SizeLadder: List<Long> = generateSequence(1L) { it * 10 }.take(13).flatMap { listOf(it, it * 3) }
@@ -227,10 +226,7 @@ fun MonthActivity.total(mode: AnalysisMode): Long = when (mode) {
     AnalysisMode.ALL -> expenseTotal + incomeTotal
 }
 
-/** Most nodes a side of the transfer flow chart draws; the smaller ones beyond it join an "other" node. */
-const val FLOW_NODES = 5
-
-/** Id of a flow node standing for the accounts beyond [FLOW_NODES]. */
+/** Id of a flow node standing for the accounts too small to draw on their own. */
 const val OTHER_NODE = -1L
 
 @Immutable
@@ -243,11 +239,16 @@ data class FlowLink(val from: Long, val to: Long, val total: Long, val count: In
 @Immutable
 data class TransferFlowUi(val sources: List<FlowNode>, val targets: List<FlowNode>, val links: List<FlowLink>, val total: Long, val count: Int)
 
-fun transferFlow(transfers: List<TransferTotal>): TransferFlowUi? {
+/**
+ * [transfers] as a flow. On each side, accounts under [minShare] of the total (too thin for their
+ * label) join one [OTHER_NODE], unless only one would: it then stays itself. 0 keeps every account.
+ */
+fun transferFlow(transfers: List<TransferTotal>, minShare: Double = 0.0): TransferFlowUi? {
     if (transfers.isEmpty()) return null
     fun keep(totals: Map<Long, Long>): Set<Long> {
-        val sorted = totals.entries.sortedByDescending { it.value }
-        return if (sorted.size <= FLOW_NODES) sorted.map { it.key }.toSet() else sorted.take(FLOW_NODES - 1).map { it.key }.toSet()
+        val all = totals.values.sum().coerceAtLeast(1L).toDouble()
+        val (big, small) = totals.keys.partition { totals.getValue(it) / all >= minShare }
+        return if (small.size <= 1) totals.keys else big.toSet()
     }
     val fromKeep = keep(transfers.groupBy { it.fromAccountId }.mapValues { (_, l) -> l.sumOf { it.total } })
     val toKeep = keep(transfers.groupBy { it.toAccountId!! }.mapValues { (_, l) -> l.sumOf { it.total } })

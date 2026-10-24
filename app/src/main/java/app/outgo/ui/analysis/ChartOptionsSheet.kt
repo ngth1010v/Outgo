@@ -1,6 +1,7 @@
 package app.outgo.ui.analysis
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,6 +13,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -22,6 +25,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.outgo.R
+import app.outgo.ui.component.OutgoSegmentedButton
 import app.outgo.ui.component.PickCell
 
 /** One icon cell of [ChartOptionsSheet]: an account, category, savings account or budget. */
@@ -31,9 +35,11 @@ data class OptionItem(val id: Long, val name: String, val iconId: Long?, val col
 /**
  * What a chart's settings sheet offers: [pick] to choose one of ([pickedId] is ringed) under
  * [pickTitle], and [shown] to switch on and off. Either list may be empty, and is then left out.
+ * [metric] (only for [ChartType.hasMetric]) adds the Expense / Income / All switch, which such a
+ * chart has here instead of a title-row chip, and the amount / trade count switch.
  */
 @Immutable
-data class ChartOptions(val pickTitle: String, val pick: List<OptionItem>, val pickedId: Long?, val shown: List<OptionItem>)
+data class ChartOptions(val pickTitle: String, val pick: List<OptionItem>, val pickedId: Long?, val shown: List<OptionItem>, val metric: Boolean = false)
 
 private const val CellsPerRow = 5
 
@@ -53,6 +59,40 @@ fun ChartOptionsSheet(title: String, card: ChartCard, options: ChartOptions, onC
         ) {
             item(key = "title") {
                 Text(title, style = MaterialTheme.typography.titleMedium)
+            }
+            if (options.metric) {
+                item(key = "mode") {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SectionTitle(stringResource(R.string.analysis_options_kind))
+                        val modes = AnalysisMode.entries
+                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                            modes.forEachIndexed { i, mode ->
+                                OutgoSegmentedButton(
+                                    selected = card.mode == mode,
+                                    onClick = { if (card.mode != mode) onChange(card.copy(mode = mode)) },
+                                    shape = SegmentedButtonDefaults.itemShape(i, modes.size),
+                                ) { Text(modeLabel(mode), maxLines = 1) }
+                            }
+                        }
+                    }
+                }
+                item(key = "metric") {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                        SectionTitle(stringResource(R.string.analysis_options_show_by))
+                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                            OutgoSegmentedButton(
+                                selected = !card.byCount,
+                                onClick = { if (card.byCount) onChange(card.copy(byCount = false)) },
+                                shape = SegmentedButtonDefaults.itemShape(0, 2),
+                            ) { Text(stringResource(R.string.analysis_show_by_amount), maxLines = 1) }
+                            OutgoSegmentedButton(
+                                selected = card.byCount,
+                                onClick = { if (!card.byCount) onChange(card.copy(byCount = true)) },
+                                shape = SegmentedButtonDefaults.itemShape(1, 2),
+                            ) { Text(stringResource(R.string.analysis_legend_trades), maxLines = 1) }
+                        }
+                    }
+                }
             }
             if (options.pick.isNotEmpty()) {
                 item(key = "pickTitle") { SectionTitle(options.pickTitle) }
