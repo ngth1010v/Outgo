@@ -31,6 +31,7 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import app.outgo.R
+import app.outgo.ui.theme.CardColor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -264,7 +265,7 @@ fun <T> TreeList(
                         .then(slideItem(slide = slide))
                         .then(gap)
                         .padding(start = 20.dp)
-                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
+                        .background(CardColor, RoundedCornerShape(12.dp)),
                 )
                 is AddParentEntry -> PlusRow(
                     label = addParentLabel,
@@ -272,7 +273,7 @@ fun <T> TreeList(
                     modifier = Modifier
                         .then(slideItem(slide = slide))
                         .then(gap)
-                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
+                        .background(CardColor, RoundedCornerShape(12.dp)),
                 )
             }
         }
