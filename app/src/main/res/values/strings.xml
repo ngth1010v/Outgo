@@ -422,7 +422,13 @@
     <string name="analysis_subaccount_share_title">Subaccount balance breakdown</string>
     <string name="analysis_account_months_title">Account balance, last 5 months</string>
     <string name="analysis_subaccount_months_title">Subaccount balance, last 5 months</string>
-    <string name="analysis_shown_count">%1$d of %2$d</string>
+    <string name="analysis_chart_settings">Chart settings</string>
+    <string name="analysis_options_parent_category">Parent category</string>
+    <string name="analysis_options_parent_account">Parent account</string>
+    <string name="analysis_options_budget">Budget</string>
+    <string name="analysis_options_savings">Savings account</string>
+    <string name="analysis_options_shown">Shown: %1$d of %2$d</string>
+    <string name="analysis_options_none">None</string>
     <string name="progress_per_day">%1$s/day</string>
     <string name="progress_today_spend">%1$s can spend today</string>
     <string name="progress_today_over">%1$s over today\'s budget</string>

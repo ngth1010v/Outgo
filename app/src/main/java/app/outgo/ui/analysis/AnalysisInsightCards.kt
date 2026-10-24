@@ -140,11 +140,11 @@ fun insightChartName(type: ChartType): String = stringResource(
     },
 )
 
-/** What a [ChartType.pick] card's chip offers in [month]: savings accounts or budgets, (id, name). */
-fun pickOptions(type: ChartType, month: Int, state: AnalysisUiState): List<Pair<Long, String>> = when (type.pick) {
-    Pick.SAVINGS -> state.monthSavingsInsights[month]?.dataOrNull?.pace?.map { it.ref.id to it.ref.name }
-    Pick.SAVINGS_BALANCE -> state.monthSavingsInsights[month]?.dataOrNull?.sourceAccounts?.map { it.id to it.name }
-    Pick.BUDGET -> state.monthBudgetInsights[month]?.dataOrNull?.forecast?.map { it.ref.id to it.ref.name }
+/** What a [ChartType.pick] card's settings sheet offers in [month]: savings accounts or budgets. */
+fun pickOptions(type: ChartType, month: Int, state: AnalysisUiState): List<InsightRef> = when (type.pick) {
+    Pick.SAVINGS -> state.monthSavingsInsights[month]?.dataOrNull?.pace?.map { it.ref }
+    Pick.SAVINGS_BALANCE -> state.monthSavingsInsights[month]?.dataOrNull?.sourceAccounts
+    Pick.BUDGET -> state.monthBudgetInsights[month]?.dataOrNull?.forecast?.map { it.ref }
     null -> null
 }.orEmpty()
 

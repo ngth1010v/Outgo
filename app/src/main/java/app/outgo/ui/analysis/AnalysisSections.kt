@@ -183,12 +183,9 @@ fun Section(title: String, modifier: Modifier = Modifier, content: @Composable (
 private val SectionTitleHeight = 28.dp
 private val SectionGap = 8.dp
 
-/**
- * A compact dropdown in a section's title row: the current choice and a caret. With [checked] it is
- * a multi-pick: each option shows a tick and the menu stays open while options are toggled.
- */
+/** A compact dropdown in a section's title row: the current choice and a caret. */
 @Composable
-fun <T> ChoiceChip(label: String, options: List<Pair<T, String>>, checked: ((T) -> Boolean)? = null, onSelect: (T) -> Unit) {
+fun <T> ChoiceChip(label: String, options: List<Pair<T, String>>, onSelect: (T) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
         Row(
@@ -218,18 +215,8 @@ fun <T> ChoiceChip(label: String, options: List<Pair<T, String>>, checked: ((T) 
                 DropdownMenuItem(
                     text = { Text(text) },
                     onClick = {
-                        if (checked == null) open = false
+                        open = false
                         onSelect(value)
-                    },
-                    leadingIcon = checked?.let { isChecked ->
-                        {
-                            Icon(
-                                painter = painterResource(R.drawable.ph_check),
-                                contentDescription = null,
-                                tint = if (isChecked(value)) MaterialTheme.colorScheme.primary else Color.Transparent,
-                                modifier = Modifier.size(16.dp),
-                            )
-                        }
                     },
                 )
             }

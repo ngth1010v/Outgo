@@ -408,7 +408,13 @@
     <string name="analysis_subaccount_share_title">Cơ cấu số dư tài khoản con</string>
     <string name="analysis_account_months_title">Số dư tài khoản 5 tháng gần nhất</string>
     <string name="analysis_subaccount_months_title">Số dư tài khoản con 5 tháng gần nhất</string>
-    <string name="analysis_shown_count">%1$d/%2$d</string>
+    <string name="analysis_chart_settings">Cài đặt biểu đồ</string>
+    <string name="analysis_options_parent_category">Danh mục cha</string>
+    <string name="analysis_options_parent_account">Tài khoản cha</string>
+    <string name="analysis_options_budget">Ngân sách</string>
+    <string name="analysis_options_savings">Tài khoản tiết kiệm</string>
+    <string name="analysis_options_shown">Hiển thị: %1$d/%2$d</string>
+    <string name="analysis_options_none">Bỏ chọn</string>
     <string name="progress_per_day">%1$s/ngày</string>
     <string name="progress_today_spend">%1$s có thể chi hôm nay</string>
     <string name="progress_today_over">%1$s vượt ngân sách hôm nay</string>

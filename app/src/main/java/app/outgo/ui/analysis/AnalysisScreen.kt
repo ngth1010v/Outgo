@@ -447,30 +447,56 @@ private fun ChartList(
 
 @Composable
 private fun CardChips(card: ChartCard, state: AnalysisUiState, month: Int, onChange: (ChartCard) -> Unit) {
+    var showOptions by remember { mutableStateOf(false) }
     Row(verticalAlignment = Alignment.CenterVertically) {
-        if (card.type.pick != null) {
-            val options = pickOptions(card.type, month, state)
-            val id = card.accountId?.takeIf { picked -> options.any { it.first == picked } } ?: options.firstOrNull()?.first
-            ChoiceChip(options.firstOrNull { it.first == id }?.second ?: "—", options) { onChange(card.copy(accountId = it)) }
-        }
-        val tree = treeOf(card.type, state)
-        if (card.type.hasParent) {
-            val parents = tree.map { it.id to it.name }
-            val id = card.accountId?.takeIf { picked -> parents.any { it.first == picked } } ?: parents.firstOrNull()?.first
-            ChoiceChip(parents.firstOrNull { it.first == id }?.second ?: "—", parents) { onChange(card.copy(accountId = it)) }
-        }
-        if (card.type.hasToggles) {
-            val options = balanceGroups(tree, card.accountId, card.type.hasParent).map { it.first.id to it.first.name }
-            val shown = options.count { it.first !in card.hidden }
-            val label = if (shown == options.size) stringResource(R.string.analysis_accounts_all) else stringResource(R.string.analysis_shown_count, shown, options.size)
-            ChoiceChip(label, options, checked = { it !in card.hidden }) { id ->
-                onChange(card.copy(hidden = if (id in card.hidden) card.hidden - id else card.hidden + id))
-            }
-        }
         if (card.type.hasMode) {
             ChoiceChip(modeLabel(card.mode), AnalysisMode.entries.map { it to modeLabel(it) }) { onChange(card.copy(mode = it)) }
         }
+        if (card.type.pick != null || card.type.hasParent || card.type.hasToggles) {
+            IconButton(onClick = { showOptions = true }, modifier = Modifier.size(28.dp)) {
+                Icon(
+                    painter = painterResource(R.drawable.ph_gear_six),
+                    contentDescription = stringResource(R.string.analysis_chart_settings),
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
     }
+    if (showOptions) {
+        ChartOptionsSheet(
+            title = chartName(card.type),
+            card = card,
+            options = chartOptions(card, state, month),
+            onChange = onChange,
+            onDismiss = { showOptions = false },
+        )
+    }
+}
+
+/** What [card]'s settings sheet offers: one pick (a parent, savings account or budget) and the items to show. */
+@Composable
+private fun chartOptions(card: ChartCard, state: AnalysisUiState, month: Int): ChartOptions {
+    val type = card.type
+    val kind = type.categoryKind
+    val pick = when {
+        type.pick != null -> pickOptions(type, month, state).map { OptionItem(it.id, it.name, it.iconId, it.color) }
+        type.hasParent -> treeOf(type, state).map { OptionItem(it.id, it.name, it.iconId, it.color) }
+        else -> emptyList()
+    }
+    val pickTitle = when {
+        type.pick == Pick.BUDGET -> stringResource(R.string.analysis_options_budget)
+        type.pick != null -> stringResource(R.string.analysis_options_savings)
+        kind != null -> stringResource(R.string.analysis_options_parent_category)
+        else -> stringResource(R.string.analysis_options_parent_account)
+    }
+    val shown = if (type.hasToggles) {
+        balanceGroups(treeOf(type, state), card.accountId, type.hasParent).map { (node, _) -> OptionItem(node.id, node.name, node.iconId, node.color) }
+    } else {
+        emptyList()
+    }
+    val pickedId = card.accountId?.takeIf { picked -> pick.any { it.id == picked } } ?: pick.firstOrNull()?.id
+    return ChartOptions(pickTitle, pick, pickedId, shown)
 }
 
 /** What a [ChartType.hasParent]/[ChartType.hasToggles] chart picks from: categories of its kind, or accounts. */
@@ -626,7 +652,7 @@ private fun shortChartName(type: ChartType): String {
 
 /** The "+" sheet's name for a chart: never names a kind, since the card's own chip picks that. */
 @Composable
-private fun chartName(type: ChartType): String = if (type.insight != null) insightChartName(type) else stringResource(
+fun chartName(type: ChartType): String = if (type.insight != null) insightChartName(type) else stringResource(
     when (type) {
         ChartType.SUMMARY -> R.string.analysis_summary_title
         ChartType.ACCOUNT_DAILY -> R.string.analysis_account_daily_title
