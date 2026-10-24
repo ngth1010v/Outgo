@@ -24,6 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.derivedStateOf
@@ -143,27 +144,84 @@ val LocalSectionAction = compositionLocalOf<(@Composable () -> Unit)?> { null }
 /** The chart a section belongs to: its title row starts with an (i) opening [ChartInfoDialog]. */
 val LocalSectionInfo = compositionLocalOf<ChartType?> { null }
 
+/**
+ * Opens the card's full-screen view, or (inside it, see [LocalFullscreenChart]) closes it: drawn
+ * right after the (i) in the title row.
+ */
+val LocalSectionExpand = compositionLocalOf<(() -> Unit)?> { null }
+
+/**
+ * Set inside a chart's full-screen view: [height] is all the room under its title row. Plots then
+ * grow (see [plotHeight]), lists that scroll in a fixed box fill it (see [listHeight]), and a
+ * chart's legend turns into one row per line with its value (see [AccountLegend]).
+ */
+@Immutable
+class FullscreenChart(val height: Dp)
+
+val LocalFullscreenChart = compositionLocalOf<FullscreenChart?> { null }
+
+/** A plot's height: [normal] on the card, most of the screen in full screen, leaving room for its legend rows. */
+@Composable
+fun plotHeight(normal: Dp = BalanceHeight): Dp = LocalFullscreenChart.current?.let { maxOf(normal, it.height * FULLSCREEN_PLOT_SHARE) } ?: normal
+
+/** A scrolling list's box: [normal] on the card; in full screen all the room but [reserve] for the lines around it. */
+@Composable
+fun listHeight(normal: Dp, reserve: Dp = 0.dp): Dp = LocalFullscreenChart.current?.let { maxOf(normal, it.height - reserve) } ?: normal
+
+private const val FULLSCREEN_PLOT_SHARE = 0.6f
+private const val FULLSCREEN_PIE_SHARE = 0.45f
+
+@Composable
+private fun SectionIcon(
+    icon: Int,
+    description: String,
+    /** Taken off the box's start, so the glyph sits that much closer to the icon before it. */
+    pullStart: Dp = 0.dp,
+    onClick: () -> Unit,
+) {
+    Box(
+        contentAlignment = Alignment.CenterEnd,
+        modifier = Modifier
+            .size(width = SectionTitleHeight - pullStart, height = SectionTitleHeight)
+            .clip(androidx.compose.foundation.shape.CircleShape)
+            .clickable(onClick = onClick),
+    ) {
+        Icon(
+            painter = painterResource(icon),
+            contentDescription = description,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            // The same margin on the end as a centred glyph has.
+            modifier = Modifier.padding(end = (SectionTitleHeight - SectionIconSize) / 2).size(SectionIconSize),
+        )
+    }
+}
+
+private val SectionIconSize = 16.dp
+
+/** Brings the expand glyph to 7dp from the (i)'s, from the 12dp two centred glyphs leave. */
+private val ExpandIconPull = 5.dp
+
 @Composable
 fun Section(title: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     val action = LocalSectionAction.current
     val info = LocalSectionInfo.current
+    val expand = LocalSectionExpand.current
+    val fullscreen = LocalFullscreenChart.current != null
     var showInfo by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(SectionGap)) {
         Row(modifier = Modifier.fillMaxWidth().height(SectionTitleHeight), verticalAlignment = Alignment.CenterVertically) {
             if (info != null) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.size(SectionTitleHeight).clip(androidx.compose.foundation.shape.CircleShape).clickable { showInfo = true },
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ph_info),
-                        contentDescription = stringResource(R.string.analysis_info_open, title),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp),
-                    )
-                }
-                Spacer(Modifier.width(2.dp))
+                SectionIcon(R.drawable.ph_info, stringResource(R.string.analysis_info_open, title)) { showInfo = true }
             }
+            if (expand != null) {
+                val pull = if (info != null) ExpandIconPull else 0.dp
+                if (fullscreen) {
+                    SectionIcon(R.drawable.ph_arrows_in_simple, stringResource(R.string.analysis_fullscreen_close), pull, expand)
+                } else {
+                    SectionIcon(R.drawable.ph_arrows_out_simple, stringResource(R.string.analysis_fullscreen_open, title), pull, expand)
+                }
+            }
+            if (info != null || expand != null) Spacer(Modifier.width(2.dp))
             Text(
                 title,
                 style = MaterialTheme.typography.titleSmall,
@@ -397,7 +455,7 @@ private fun DailyLines(
 ) {
     Section(title, modifier.semantics { contentDescription = description }) {
         if (lines.isEmpty()) {
-            EmptyBox(BalanceHeight)
+            EmptyBox(listHeight(BalanceHeight))
         } else {
             // One focused line per chart, shared by the lines and their legend; a tap off both clears it.
             val focus = remember { AnalysisSelection() }
@@ -406,13 +464,13 @@ private fun DailyLines(
                 daysInMonth,
                 zero = true,
                 introProgress(animate),
-                Modifier.fillMaxWidth().height(BalanceHeight),
+                Modifier.fillMaxWidth().height(plotHeight()),
                 focusedId = focus.rootId,
                 onFocus = focus::toggle,
                 xLabels = xLabels,
                 counts = counts,
             )
-            AccountLegend(lines, focus.rootId, focus::toggle)
+            AccountLegend(lines, focus.rootId, focus::toggle, counts = counts)
         }
     }
 }
@@ -430,8 +488,16 @@ internal fun AccountLegend(
     onFocus: ((Long?) -> Unit)? = null,
     /** A short stroke in each line's own style (solid, dashed, dotted) in place of the colour block. */
     strokeSamples: Boolean = false,
+    /** The values are trade counts, not money: only the full-screen rows show them. */
+    counts: Boolean = false,
 ) {
     val anyFocused = focusedId != null && lines.any { it.accountId == focusedId }
+    // Full screen has the room for a row per line with its latest value; a key without values
+    // (a colour per kind of bar) stays a single row.
+    if (LocalFullscreenChart.current != null && lines.any { it.values.isNotEmpty() }) {
+        LegendRows(lines, focusedId, anyFocused, onFocus, strokeSamples, counts)
+        return
+    }
     val clear = if (onFocus == null) Modifier else Modifier.pointerInput(Unit) { detectTapGestures { onFocus(null) } }
     BoxWithConstraints(modifier = Modifier.fillMaxWidth().then(clear)) {
         Row(
@@ -478,6 +544,66 @@ internal fun AccountLegend(
     }
 }
 
+/**
+ * The full-screen legend: one row per line, with its icon, name and latest value (the month's end,
+ * or today's for a running month), filling the room under the plot and scrolling past it.
+ */
+@Composable
+private fun LegendRows(
+    lines: List<BalanceLine>,
+    focusedId: Long?,
+    anyFocused: Boolean,
+    onFocus: ((Long?) -> Unit)?,
+    strokeSamples: Boolean,
+    counts: Boolean,
+) {
+    // Under a plot: all the room but the plot and the gap above this list.
+    val height = listHeight(0.dp, reserve = plotHeight() + SectionGap)
+    Column(modifier = Modifier.fillMaxWidth().height(height).verticalScroll(rememberScrollState())) {
+        lines.forEach { line ->
+            val alpha by animateFloatAsState(if (!anyFocused || line.accountId == focusedId) 1f else 0.35f, label = "legendFocus")
+            val selected = anyFocused && line.accountId == focusedId
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(LegendRowHeight)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (selected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent)
+                    .then(if (onFocus == null) Modifier else Modifier.clickable { onFocus(line.accountId) })
+                    .padding(horizontal = 6.dp)
+                    .alpha(alpha),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                when {
+                    line.iconId != null -> IconView(iconId = line.iconId, size = 24.dp, color = line.color)
+                    strokeSamples -> LegendStroke(line)
+                    else -> Box(Modifier.size(12.dp).background(Color(line.color), RoundedCornerShape(3.dp)))
+                }
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    line.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                val value = line.values.lastOrNull()
+                if (value != null) {
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        if (counts) stringResource(R.string.analysis_trades_count, value.toInt()) else Money.format(value),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private val LegendRowHeight = 44.dp
+
 // ------------------------------------------------------------ account balances
 
 /**
@@ -515,9 +641,9 @@ fun BalanceMonthsSection(
     val description = stringResource(R.string.analysis_cd_daily_lines, title, lines.size)
     Section(title, modifier.semantics { contentDescription = description }) {
         if (lines.isEmpty()) {
-            EmptyBox(BalanceHeight)
+            EmptyBox(listHeight(BalanceHeight))
         } else {
-            StackedBalanceBars(lines, labels, introProgress(animate), Modifier.fillMaxWidth().height(BalanceHeight))
+            StackedBalanceBars(lines, labels, introProgress(animate), Modifier.fillMaxWidth().height(plotHeight()))
             AccountLegend(lines)
         }
     }
@@ -546,24 +672,37 @@ fun BalanceShareSection(
     val rowPx = with(LocalDensity.current) { ShareRowHeight.toPx() }
     Section(title, modifier.semantics { contentDescription = description }) {
         if (rows.isEmpty()) {
-            EmptyBox(ShareHeight)
+            EmptyBox(listHeight(ShareHeight))
         } else {
-            Row(modifier = Modifier.fillMaxWidth().height(ShareHeight), verticalAlignment = Alignment.CenterVertically) {
-                PieChart(
-                    rows = rows,
-                    selectedId = { selection.rootId },
-                    onSelect = { id ->
-                        selection.toggle(id)
-                        val index = rows.indexOfFirst { it.id == id }
-                        if (index >= 0 && selection.rootId == id) scope.launch { scroll.animateScrollTo((index * rowPx).toInt()) }
-                    },
-                    progress = introProgress(animate),
-                    // 40% of the row; the pie fits the smaller side and centres in it.
-                    modifier = Modifier.fillMaxWidth(0.4f).fillMaxHeight(),
-                )
-                Spacer(Modifier.width(10.dp))
-                Column(modifier = Modifier.weight(1f).fillMaxHeight().verticalScroll(scroll)) {
-                    rows.forEach { ShareRowItem(it, selection, kind, counts) }
+            val onSelect: (Long?) -> Unit = { id ->
+                selection.toggle(id)
+                val index = rows.indexOfFirst { it.id == id }
+                if (index >= 0 && selection.rootId == id) scope.launch { scroll.animateScrollTo((index * rowPx).toInt()) }
+            }
+            val full = LocalFullscreenChart.current
+            if (full != null) {
+                // Full screen: a big pie on top, its rows filling the room under it.
+                val pie = full.height * FULLSCREEN_PIE_SHARE
+                Column(modifier = Modifier.fillMaxWidth().height(full.height), verticalArrangement = Arrangement.spacedBy(SectionGap)) {
+                    PieChart(rows, { selection.rootId }, onSelect, introProgress(animate), Modifier.fillMaxWidth().height(pie))
+                    Column(modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(scroll)) {
+                        rows.forEach { ShareRowItem(it, selection, kind, counts) }
+                    }
+                }
+            } else {
+                Row(modifier = Modifier.fillMaxWidth().height(ShareHeight), verticalAlignment = Alignment.CenterVertically) {
+                    PieChart(
+                        rows = rows,
+                        selectedId = { selection.rootId },
+                        onSelect = onSelect,
+                        progress = introProgress(animate),
+                        // 40% of the row; the pie fits the smaller side and centres in it.
+                        modifier = Modifier.fillMaxWidth(0.4f).fillMaxHeight(),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f).fillMaxHeight().verticalScroll(scroll)) {
+                        rows.forEach { ShareRowItem(it, selection, kind, counts) }
+                    }
                 }
             }
         }

@@ -47,6 +47,9 @@ import app.outgo.ui.history.HistoryScreen
 import app.outgo.ui.history.HistoryTabScreen
 import app.outgo.ui.home.HomeScreen
 import app.outgo.ui.setting.SettingScreen
+import app.outgo.ui.component.LocalOverlayHost
+import app.outgo.ui.component.OverlayHost
+import app.outgo.ui.component.OverlayHostContent
 import app.outgo.ui.trade.TradeScreen
 import kotlinx.coroutines.delay
 
@@ -108,6 +111,10 @@ fun OutgoRoot(openSetting: Boolean = false) {
     val negativeBalance by remember { accounts.observeActive().map { all -> all.any { !it.isParent && it.balance < 0 } } }
         .collectAsState(initial = false)
 
+    // A page over the whole app, bottom bar included (a chart shown full screen).
+    val overlay = remember { OverlayHost() }
+    CompositionLocalProvider(LocalOverlayHost provides overlay) {
+    Box {
     Scaffold(
         bottomBar = {
             OutgoBottomBar(
@@ -224,6 +231,9 @@ fun OutgoRoot(openSetting: Boolean = false) {
             }
         }
         }
+    }
+    OverlayHostContent(overlay)
+    }
     }
 }
 

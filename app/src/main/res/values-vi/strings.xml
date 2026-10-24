@@ -509,6 +509,8 @@
     <string name="analysis_info_meaning">Ý nghĩa</string>
     <string name="analysis_info_how">Cách xem và sử dụng</string>
     <string name="analysis_info_open">Giới thiệu %1$s</string>
+    <string name="analysis_fullscreen_open">Phóng to %1$s</string>
+    <string name="analysis_fullscreen_close">Đóng toàn màn hình</string>
     <string name="analysis_add_chart_hint">Chạm vào một biểu đồ để thêm. Ấn giữ để xem giới thiệu về biểu đồ đó.</string>
     <string name="analysis_info_scope_account">từng tài khoản (cộng gộp các tài khoản con)</string>
     <string name="analysis_info_scope_subaccount">các tài khoản con của tài khoản chọn ở chip</string>

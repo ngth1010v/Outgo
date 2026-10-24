@@ -24,6 +24,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.BoxWithConstraints
+import app.outgo.ui.component.ShowOverlay
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -367,7 +374,8 @@ private fun ChartList(
     listState: LazyListState,
     viewModel: AnalysisViewModel,
     onDeleted: (LayoutSlot, Int, ChartCard) -> Unit,
-    chart: @Composable (ChartCard) -> Unit,
+    /** Draws a card's section; its content gets the given height (the card's, or the full screen's). */
+    chart: @Composable (ChartCard, Dp) -> Unit,
 ) {
     val reorder = rememberReorderState(listState)
     val scope = rememberCoroutineScope()
@@ -378,6 +386,8 @@ private fun ChartList(
     val isNear = { distanceToEdge() < with(density) { DeleteZoneReach.toPx() } }
     val isActive = { distanceToEdge() < with(density) { DeleteZoneWidth.toPx() } }
     var showAdd by remember { mutableStateOf(false) }
+    // The card shown full screen, by id: chip changes made there replace the card, so it is looked up again.
+    var expandedId by rememberSaveable(slot) { mutableStateOf<Long?>(null) }
     reorder.update(
         keys = cards.map { it.id },
         canDrag = { true },
@@ -401,11 +411,7 @@ private fun ChartList(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             items(cards, key = { it.id }, contentType = { it.type }) { card ->
-                val action: (@Composable () -> Unit)? = if (card.type.hasMode || card.type.hasParent || card.type.hasToggles || card.type.pick != null) {
-                    { CardChips(card, state, month) { viewModel.updateCard(slot, it) } }
-                } else {
-                    null
-                }
+                val action = cardAction(card, state, month) { viewModel.updateCard(slot, it) }
                 Box(
                     modifier = reorderableItem(reorder, card.id)
                         // Opaque, so a lifted card hides what it passes over; its shadow comes from the lift.
@@ -414,7 +420,11 @@ private fun ChartList(
                         // Fixed per chart and chip, never per data: every page lays out alike.
                         .height(chartHeight(card.type)),
                 ) {
-                    CompositionLocalProvider(LocalSectionAction provides action, LocalSectionInfo provides card.type) { chart(card) }
+                    CompositionLocalProvider(
+                        LocalSectionAction provides action,
+                        LocalSectionInfo provides card.type,
+                        LocalSectionExpand provides { expandedId = card.id },
+                    ) { chart(card, chartContentHeight(card.type)) }
                 }
             }
             item(key = "add", contentType = "add") {
@@ -432,6 +442,16 @@ private fun ChartList(
         if (reorder.draggingKey != null) DeleteZone(isNear, isActive, Modifier.align(Alignment.CenterEnd))
     }
 
+    val expanded = cards.firstOrNull { it.id == expandedId }
+    if (expanded != null) {
+        FullscreenCard(
+            card = expanded,
+            action = cardAction(expanded, state, month) { viewModel.updateCard(slot, it) },
+            onClose = { expandedId = null },
+            chart = chart,
+        )
+    }
+
     if (showAdd) {
         AddChartSheet(
             slot = slot,
@@ -444,6 +464,48 @@ private fun ChartList(
         )
     }
 }
+
+/** A card's title-row chips, or null for a chart without any. */
+private fun cardAction(card: ChartCard, state: AnalysisUiState, month: Int, onChange: (ChartCard) -> Unit): (@Composable () -> Unit)? =
+    if (card.type.hasMode || card.type.hasParent || card.type.hasToggles || card.type.pick != null) {
+        { CardChips(card, state, month, onChange) }
+    } else {
+        null
+    }
+
+/**
+ * One card over the whole app (see [ShowOverlay]), in portrait like the app: the same section with
+ * the same chips, its content given all the room under the title row (see [LocalFullscreenChart]).
+ * The arrows next to the (i), or Back, close it.
+ */
+@Composable
+private fun FullscreenCard(
+    card: ChartCard,
+    action: (@Composable () -> Unit)?,
+    onClose: () -> Unit,
+    chart: @Composable (ChartCard, Dp) -> Unit,
+) {
+    BackHandler(onBack = onClose)
+    ShowOverlay {
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(FullscreenPadding),
+        ) {
+            // The section's title row and the gap under it come off the top.
+            val content = maxHeight - chartHeight(card.type) + chartContentHeight(card.type)
+            CompositionLocalProvider(
+                LocalSectionAction provides action,
+                LocalSectionInfo provides card.type,
+                LocalSectionExpand provides onClose,
+                LocalFullscreenChart provides remember(content) { FullscreenChart(content) },
+            ) { chart(card, content) }
+        }
+    }
+}
+
+private val FullscreenPadding = 12.dp
 
 @Composable
 private fun CardChips(card: ChartCard, state: AnalysisUiState, month: Int, onChange: (ChartCard) -> Unit) {
@@ -730,8 +792,7 @@ private fun MonthPage(
     LoadTradesAfterFirstFrame(page, viewModel)
 
     val cards = state.layouts[LayoutSlot.MONTH] ?: return
-    ChartList(month, LayoutSlot.MONTH, cards, state, listState, viewModel, onDeleted) { card ->
-        val height = chartContentHeight(card.type)
+    ChartList(month, LayoutSlot.MONTH, cards, state, listState, viewModel, onDeleted) { card, height ->
         when (card.type) {
             ChartType.SUMMARY -> StageSection(summary, stringResource(R.string.analysis_summary_title), height) {
                 SummarySection(it, card.mode, state.monthTransfers[month]?.dataOrNull)
@@ -849,8 +910,7 @@ private fun YearPage(
     LoadTradesAfterFirstFrame(page, viewModel)
 
     val cards = state.layouts[LayoutSlot.YEAR] ?: return
-    ChartList(page.key, LayoutSlot.YEAR, cards, state, listState, viewModel, onDeleted) { card ->
-        val height = chartContentHeight(card.type)
+    ChartList(page.key, LayoutSlot.YEAR, cards, state, listState, viewModel, onDeleted) { card, height ->
         val base = card.type.base ?: card.type
         when {
             base == ChartType.SUMMARY -> StageSection(data.map { it.summary }, chartName(card.type), height) {

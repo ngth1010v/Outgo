@@ -1,42 +1,54 @@
 # PROCESS
 
 **Status:** DONE
-**Started:** 2026-10-24
-**Last updated:** 2026-10-24
+**Started:** 2026-10-24 20:19
+**Last updated:** 2026-10-24 20:45
 
 ## Task
-Follow-up on the draft screen's Impact tab: "chỉnh các budget/saving để nó có format giống bên home
-screen (có process bar / process chart)", with:
-- line chart: the drafts' change dashed — 3 lines: now / now + drafts / predict (plan) line
-- progress bar: the drafts' change faded
-User answers: plan line becomes dotted (only in Impact); right-side amount = after drafts + % vs last
-month + "(±draft)"; gap shading between with-drafts line and plan; chart collapsed, tap to open (like Home).
+"add a 'extend' icon on the right of current 'info' icon in each chart; when user click to it, the app
+will show the full screen version of this chart". User answers:
+- Stay portrait. Charts that would want landscape (line charts) -> drawn normally but taller, with the
+  legend as rows (one row per line + its value).
+- Every chart gets the icon (including Summary / list cards).
+- Same controls (mode chip, gear settings) work in full screen; changes apply to the card too.
 
 ## Plan
-1. [x] Chart: `BalanceLine.dotted`, `DailyBalanceChart(gapLines = …)`, `AccountLegend(strokeSamples = …)`.
-2. [x] `BudgetProgressBlock(draft: DraftOverlay?)`: faded bar part, dashed with-drafts line, dotted plan, pace texts after drafts.
-3. [x] `MonthAmountBlock` moved from HomeScreen to `ui/component/MonthAmountBlock.kt`, + `draftDelta`.
-4. [x] VM: `BudgetImpact.addedByDay` / `SavingImpact.addedByDay` via `runningByDay`.
-5. [x] DraftListScreen: `BudgetImpactRow` / `SavingImpactRow` like Home's rows.
-6. [x] Strings `progress_line_with_drafts` (EN/VI); removed unused `draft_impact_before_after`.
-7. [x] Build + emulator check.
-8. [x] Follow-up "lấy luôn saving/budget row bên home": Home's BudgetRow/SavingsAccountRow + their Card/over-budget badge moved to `ui/component/ProgressCards.kt` (`BudgetCard`, `SavingsCard`, optional `BudgetDraftChange`/`SavingDraftChange`); Home and the Impact tab both use them. Emulator: Impact cards look like Home's.
+1. [x] Expand icon after the (i) in `Section`'s title row (AnalysisSections.kt), via LocalSectionExpand.
+2. [x] Full-screen view: ChartList (AnalysisScreen.kt) keeps `expandedId`; `FullscreenCard` shows the same
+   card through the root overlay with BackHandler.
+3. [x] Content grows: LocalFullscreenChart + plotHeight()/listHeight(); legend -> LegendRows with values;
+   pie stacks vertically.
+4. [x] Icons ph_arrows_out_simple / ph_arrows_in_simple, strings en + vi.
+5. [x] Build + emulator check.
+
+Decision: a Compose Dialog was tried first and dropped: it sizes its window to the first measured
+content (screen minus bars, 2200px of 2400), so the bottom bar showed through and the status bar
+icons turned white. Now `ui/component/OverlayHost.kt` (OverlayHost, ShowOverlay) draws over the whole
+app from OutgoRoot (ui/nav/OutgoNavHost.kt), in the activity's own window.
 
 ## Done
-- All of the above. Home's rows pass no draft, so they draw as before.
+- See Plan. Files: AnalysisSections.kt, AnalysisInsightCards.kt, AnalysisScreen.kt, OutgoNavHost.kt,
+  ui/component/OverlayHost.kt, res/drawable/ph_arrows_{out,in}_simple.xml, values{,-vi}/strings.xml.
 
 ## Doing now
 - Nothing.
 
 ## Not done yet
-- Not committed. Baseline profile not regenerated.
+- Optional: regenerate the Baseline Profile with the expand transition in `animationJourney`.
 
 ## Tests / verification
 | Case | How | Result |
 |------|-----|--------|
-| builds | `gradlew.bat :app:assembleDebug` | pass |
-| budget row + chart | emulator, expense draft 120,000 in Đi chợ (child of Ăn uống) | 3 lines + legend samples, faded bar part, (-120,000) |
-| savings row + chart | emulator, income draft 300,000 into Quỹ khẩn cấp | dashed line jumps to 3.8M today, shading follows it |
+| builds | `gradlew.bat installDebug` | pass |
+| line chart full screen + legend rows | emulator, month page | pass |
+| pie full screen | emulator | pass |
+| stacked bars, 8 categories | emulator | pass |
+| summary + mode chip in full screen, change kept on card | emulator | pass (card set back to All) |
+| gear sheet over full screen | emulator | pass |
+| close icon / Back | emulator | pass |
+| year page | emulator | pass |
+| Trades/Savings/Budgets charts | none on the emulator's layouts | not run |
+| dark theme | app theme setting is light | not run |
 
 ## Notes for resuming
-- Drafts are memory-only: reinstalling the APK clears them.
+- Emulator already has 617 test trades; don't wipe.

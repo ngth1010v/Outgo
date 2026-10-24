@@ -523,6 +523,8 @@
     <string name="analysis_info_meaning">What it tells you</string>
     <string name="analysis_info_how">How to read and use it</string>
     <string name="analysis_info_open">About %1$s</string>
+    <string name="analysis_fullscreen_open">Expand %1$s</string>
+    <string name="analysis_fullscreen_close">Close full screen</string>
     <string name="analysis_add_chart_hint">Tap a chart to add it. Press and hold to learn what it shows.</string>
     <string name="analysis_info_scope_account">each account, with its subaccounts added up</string>
     <string name="analysis_info_scope_subaccount">the subaccounts of the account picked in the chip</string>

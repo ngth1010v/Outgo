@@ -295,7 +295,7 @@ private fun CalendarCard(card: ChartCard, data: TradesInsightUi, actions: Insigh
         selected = selected,
         onSelect = { selected = if (it == selected) null else it },
         progress = introProgress(animate),
-        modifier = Modifier.fillMaxWidth().height(CalendarHeight),
+        modifier = Modifier.fillMaxWidth().height(plotHeight(CalendarHeight)),
         today = remember(data.month) { LocalDate.now().takeIf { it.year * 100 + it.monthValue == data.month }?.dayOfMonth },
     )
     val signed: (Long) -> String = { if (card.mode == AnalysisMode.EXPENSE) Money.formatSigned(-it) else Money.formatSigned(it) }
@@ -335,7 +335,7 @@ private fun WeekCard(card: ChartCard, data: TradesInsightUi, animate: Boolean) {
         selected,
         onSelect = { selected = if (it == selected) null else it },
         progress = introProgress(animate),
-        modifier = Modifier.fillMaxWidth().height(CalendarHeight),
+        modifier = Modifier.fillMaxWidth().height(plotHeight(CalendarHeight)),
         // A weekday and hour, not a date: marked on every page.
         now = remember { LocalDateTime.now().let { (it.dayOfWeek.value - 1) * DAY_SLOTS + it.hour / (24 / DAY_SLOTS) } },
     )
@@ -357,7 +357,7 @@ private fun WeekCard(card: ChartCard, data: TradesInsightUi, animate: Boolean) {
 @Composable
 private fun SizesCard(card: ChartCard, data: TradesInsightUi, animate: Boolean) {
     val buckets = remember(data, card.mode) { sizeBuckets(data.trades, card.mode) }
-    if (buckets == null) return Empty(height = BalanceHeight)
+    if (buckets == null) return Empty(height = listHeight(BalanceHeight))
     val unitNames = units()
     val labels = remember(buckets, unitNames) {
         List(buckets.counts.size) { i -> if (i == 0) "<" + compactAmount(buckets.edges[0], unitNames) else compactAmount(buckets.edges[i - 1], unitNames) + "+" }
@@ -379,7 +379,7 @@ private fun SizesCard(card: ChartCard, data: TradesInsightUi, animate: Boolean) 
             )
         },
         progress = introProgress(animate),
-        modifier = Modifier.fillMaxWidth().height(BalanceHeight),
+        modifier = Modifier.fillMaxWidth().height(plotHeight()),
     )
     Legend(tradesShare to stringResource(R.string.analysis_share_of_trades), moneyShare to stringResource(R.string.analysis_share_of_money))
 }
@@ -399,13 +399,13 @@ private val TopDate = DateTimeFormatter.ofPattern("dd/MM HH:mm")
 @Composable
 private fun TopCard(card: ChartCard, data: TradesInsightUi, state: AnalysisUiState, actions: InsightActions) {
     val top = remember(data, card.mode) { topTrades(data.trades, card.mode) }
-    if (top.isEmpty()) return Empty(height = TopRowHeight * TOP_ROWS_SHOWN)
+    if (top.isEmpty()) return Empty(height = listHeight(TopRowHeight * TOP_ROWS_SHOWN))
     val categories = remember(state.expenseTree, state.incomeTree) {
         (state.expenseTree + state.incomeTree).flatMap { listOf(it) + it.children }.associateBy { it.id }
     }
     val largest = top.first().amount.coerceAtLeast(1L)
     val zone = ZoneId.systemDefault()
-    Column(modifier = Modifier.fillMaxWidth().height(TopRowHeight * TOP_ROWS_SHOWN).verticalScroll(rememberScrollState())) {
+    Column(modifier = Modifier.fillMaxWidth().height(listHeight(TopRowHeight * TOP_ROWS_SHOWN)).verticalScroll(rememberScrollState())) {
         top.forEachIndexed { i, t ->
             val category = t.categoryId?.let { categories[it] }
             val income = t.type == TradeType.INCOME
@@ -462,7 +462,7 @@ private fun monthLabels(months: List<Int>): List<String> {
 @Composable
 private fun FrequencyCard(card: ChartCard, data: TradesInsightUi, animate: Boolean) {
     val counts = remember(data, card.mode) { data.activity.map { it.count(card.mode).toLong() } }
-    if (counts.all { it == 0L }) return Empty(height = BalanceHeight)
+    if (counts.all { it == 0L }) return Empty(height = listHeight(BalanceHeight))
     val averages = remember(data, card.mode) { data.activity.map { a -> a.count(card.mode).let { if (it > 0) a.total(card.mode) / it else 0L } } }
     val labels = monthLabels(data.activity.map { it.month })
     val unitNames = units()
@@ -479,7 +479,7 @@ private fun FrequencyCard(card: ChartCard, data: TradesInsightUi, animate: Boole
         barText = { it.toString() },
         describe = { i -> listOf(labels[i] + ": " + tradesFormat(counts[i].toInt()), averageLabel + ": " + compactAmount(averages[i], unitNames)) },
         progress = introProgress(animate),
-        modifier = Modifier.fillMaxWidth().height(BalanceHeight),
+        modifier = Modifier.fillMaxWidth().height(plotHeight()),
     )
     Legend(barColor to stringResource(R.string.analysis_legend_trades), lineColor to averageLabel)
 }
@@ -487,13 +487,13 @@ private fun FrequencyCard(card: ChartCard, data: TradesInsightUi, animate: Boole
 @Composable
 private fun TransfersCard(data: TradesInsightUi, state: AnalysisUiState, animate: Boolean) {
     val flow = remember(data) { transferFlow(data.transfers) }
-    if (flow == null) return Empty(height = FlowHeight + GapDp)
+    if (flow == null) return Empty(height = listHeight(FlowHeight + GapDp))
     TransferFlowChart(
         flow,
         state.accountNames,
         stringResource(R.string.analysis_flow_other),
         introProgress(animate),
-        Modifier.fillMaxWidth().height(FlowHeight),
+        Modifier.fillMaxWidth().height(plotHeight(FlowHeight)),
     )
     DetailLine(stringResource(R.string.analysis_flow_total, flow.count, Money.format(flow.total)))
 }
@@ -529,7 +529,7 @@ private fun BulletRowItem(
 
 @Composable
 private fun SavingPaceCard(data: SavingsInsightUi, animate: Boolean) {
-    val height = bulletRowHeight() * BULLET_ROWS_SHOWN
+    val height = listHeight(bulletRowHeight() * BULLET_ROWS_SHOWN)
     if (data.pace.isEmpty()) return Empty(stringResource(R.string.analysis_no_targets), height)
     val live = data.elapsed < data.daysInMonth
     Column(modifier = Modifier.fillMaxWidth().height(height).verticalScroll(rememberScrollState())) {
@@ -577,11 +577,11 @@ private fun pacedLines(
 @Composable
 private fun SavingBurnupCard(card: ChartCard, data: SavingsInsightUi, animate: Boolean) {
     val id = picked(card, data.pace.map { it.ref.id })
-    val row = data.pace.firstOrNull { it.ref.id == id } ?: return Empty(stringResource(R.string.analysis_no_targets), BalanceHeight)
+    val row = data.pace.firstOrNull { it.ref.id == id } ?: return Empty(stringResource(R.string.analysis_no_targets), listHeight(BalanceHeight))
     val live = data.elapsed < data.daysInMonth
     val lines = pacedLines(row.ref, data.daily[row.ref.id].orEmpty(), data.daysInMonth, live, { d -> row.target * d / data.daysInMonth }, row.projected)
     val focus = remember { AnalysisSelection() }
-    DailyBalanceChart(lines, data.daysInMonth, zero = true, introProgress(animate), Modifier.fillMaxWidth().height(BalanceHeight), focusedId = focus.rootId, onFocus = focus::toggle)
+    DailyBalanceChart(lines, data.daysInMonth, zero = true, introProgress(animate), Modifier.fillMaxWidth().height(plotHeight()), focusedId = focus.rootId, onFocus = focus::toggle)
     AccountLegend(lines, focus.rootId, focus::toggle)
 }
 
@@ -609,6 +609,8 @@ private fun MonthGrid(
     val rowHeight = gridRowHeight()
     val empty = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f)
     val headerHeight = lineOf(MaterialTheme.typography.labelSmall)
+    // Full screen shows more rows: all the room but the header, the detail line and their gaps.
+    val rowsBox = listHeight(rowHeight * GRID_ROWS_SHOWN, reserve = headerHeight + GapDp + GapDp + lineOf(MaterialTheme.typography.bodySmall))
     // The header and the rows in one box, so the current month's cells get one border over the column.
     Box(modifier = Modifier.fillMaxWidth()) {
         Column(verticalArrangement = Arrangement.spacedBy(GapDp)) {
@@ -626,7 +628,7 @@ private fun MonthGrid(
                 }
                 Text(tailTitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.End, maxLines = 1, modifier = Modifier.width(tailWidth))
             }
-            Column(modifier = Modifier.fillMaxWidth().height(rowHeight * GRID_ROWS_SHOWN).verticalScroll(rememberScrollState())) {
+            Column(modifier = Modifier.fillMaxWidth().height(rowsBox).verticalScroll(rememberScrollState())) {
                 rows.forEach { row ->
                     Row(modifier = Modifier.fillMaxWidth().height(rowHeight), verticalAlignment = Alignment.CenterVertically) {
                         Row(modifier = Modifier.width(nameWidth), verticalAlignment = Alignment.CenterVertically) {
@@ -662,7 +664,7 @@ private fun MonthGrid(
         if (column >= 0 && rows.isNotEmpty()) {
             // The cells only, not the month number over them; down to the last row shown, not the
             // empty space under a short list.
-            val height = rowHeight * minOf(rows.size, GRID_ROWS_SHOWN)
+            val height = minOf(rowHeight * rows.size, rowsBox)
             Row(modifier = Modifier.fillMaxWidth().padding(top = headerHeight + GapDp).height(height)) {
                 Spacer(Modifier.width(nameWidth))
                 months.indices.forEach { i ->
@@ -683,7 +685,7 @@ private fun monthYear(month: Int): String = stringArrayResource(R.array.month_ab
 
 @Composable
 private fun SavingHistoryCard(card: ChartCard, data: SavingsInsightUi) {
-    if (data.history.isEmpty()) return Empty(stringResource(R.string.analysis_no_targets), insightContentHeight(ChartType.SAVING_HISTORY))
+    if (data.history.isEmpty()) return Empty(stringResource(R.string.analysis_no_targets), listHeight(insightContentHeight(ChartType.SAVING_HISTORY)))
     val pick = remember(data.month, card.id) { CellPick() }
     val noTarget = stringResource(R.string.analysis_no_target_month)
     val names = stringArrayResource(R.array.month_abbrev)
@@ -708,7 +710,7 @@ private fun SavingHistoryCard(card: ChartCard, data: SavingsInsightUi) {
 
 @Composable
 private fun SavingRateCard(data: SavingsInsightUi, animate: Boolean) {
-    if (data.saved.all { it == 0L }) return Empty(height = BalanceHeight)
+    if (data.saved.all { it == 0L }) return Empty(height = listHeight(BalanceHeight))
     // In basis points, so the line keeps two decimals of a percent as a Long.
     val rates = remember(data) { data.saved.zip(data.income) { s, i -> if (i > 0) s * 10_000 / i else 0L } }
     val labels = monthLabels(data.rateMonths)
@@ -730,7 +732,7 @@ private fun SavingRateCard(data: SavingsInsightUi, animate: Boolean) {
             )
         },
         progress = introProgress(animate),
-        modifier = Modifier.fillMaxWidth().height(BalanceHeight),
+        modifier = Modifier.fillMaxWidth().height(plotHeight()),
     )
     Legend(barColor to stringResource(R.string.analysis_legend_saved), lineColor to stringResource(R.string.analysis_legend_rate))
 }
@@ -780,9 +782,9 @@ private fun Waterfall(steps: List<WaterfallStep>, color: Int, rows: Int, animate
 private fun SavingSourcesCard(card: ChartCard, data: SavingsInsightUi, animate: Boolean) {
     val id = picked(card, data.sourceAccounts.map { it.id })
     val ref = data.sourceAccounts.firstOrNull { it.id == id }
-    val steps = ref?.let { data.sources[it.id] } ?: return Empty(stringResource(R.string.analysis_no_savings), WaterfallRowHeight * SAVING_STEPS)
+    val steps = ref?.let { data.sources[it.id] } ?: return Empty(stringResource(R.string.analysis_no_savings), listHeight(WaterfallRowHeight * SAVING_STEPS))
     // Nothing in, nothing out, nothing held: no story to tell.
-    if (steps.all { it.amount == 0L }) return Empty(height = WaterfallRowHeight * SAVING_STEPS)
+    if (steps.all { it.amount == 0L }) return Empty(height = listHeight(WaterfallRowHeight * SAVING_STEPS))
     Waterfall(steps, ref.color, SAVING_STEPS, animate, yearly = card.type.base != null)
 }
 
@@ -790,7 +792,7 @@ private fun SavingSourcesCard(card: ChartCard, data: SavingsInsightUi, animate: 
 
 @Composable
 private fun BudgetForecastCard(data: BudgetsInsightUi, animate: Boolean) {
-    val height = bulletRowHeight() * BULLET_ROWS_SHOWN
+    val height = listHeight(bulletRowHeight() * BULLET_ROWS_SHOWN)
     if (data.forecast.isEmpty()) return Empty(stringResource(R.string.analysis_no_budgets), height)
     Column(modifier = Modifier.fillMaxWidth().height(height).verticalScroll(rememberScrollState())) {
         data.forecast.forEach { row ->
@@ -815,20 +817,20 @@ private fun BudgetForecastCard(data: BudgetsInsightUi, animate: Boolean) {
 @Composable
 private fun BudgetBurndownCard(card: ChartCard, data: BudgetsInsightUi, animate: Boolean) {
     val id = picked(card, data.forecast.map { it.ref.id })
-    val row = data.forecast.firstOrNull { it.ref.id == id } ?: return Empty(stringResource(R.string.analysis_no_budgets), BalanceHeight)
-    val days = data.daily[row.ref.id] ?: return Empty(height = BalanceHeight)
+    val row = data.forecast.firstOrNull { it.ref.id == id } ?: return Empty(stringResource(R.string.analysis_no_budgets), listHeight(BalanceHeight))
+    val days = data.daily[row.ref.id] ?: return Empty(height = listHeight(BalanceHeight))
     val left = days.left
     val rate = if (data.elapsed > 0) row.spent / data.elapsed else 0L
     val end = (left.lastOrNull() ?: 0L) - rate * (data.daysInMonth - left.size)
     val lines = pacedLines(row.ref, left, data.daysInMonth, data.live, { d -> days.limit * (data.daysInMonth - d) / data.daysInMonth }, end)
     val focus = remember { AnalysisSelection() }
-    DailyBalanceChart(lines, data.daysInMonth, zero = true, introProgress(animate), Modifier.fillMaxWidth().height(BalanceHeight), focusedId = focus.rootId, onFocus = focus::toggle)
+    DailyBalanceChart(lines, data.daysInMonth, zero = true, introProgress(animate), Modifier.fillMaxWidth().height(plotHeight()), focusedId = focus.rootId, onFocus = focus::toggle)
     AccountLegend(lines, focus.rootId, focus::toggle)
 }
 
 @Composable
 private fun BudgetHistoryCard(card: ChartCard, data: BudgetsInsightUi) {
-    if (data.history.isEmpty()) return Empty(stringResource(R.string.analysis_no_budgets), insightContentHeight(ChartType.BUDGET_HISTORY))
+    if (data.history.isEmpty()) return Empty(stringResource(R.string.analysis_no_budgets), listHeight(insightContentHeight(ChartType.BUDGET_HISTORY)))
     val pick = remember(data.month, card.id) { CellPick() }
     val names = stringArrayResource(R.array.month_abbrev)
     val gridDetail = stringResource(R.string.analysis_grid_detail)
@@ -861,13 +863,13 @@ private fun BudgetHistoryCard(card: ChartCard, data: BudgetsInsightUi) {
 private fun BudgetWaterfallCard(card: ChartCard, data: BudgetsInsightUi, animate: Boolean) {
     val id = picked(card, data.forecast.map { it.ref.id })
     val row = data.forecast.firstOrNull { it.ref.id == id }
-    val steps = row?.let { data.waterfall[it.ref.id] } ?: return Empty(stringResource(R.string.analysis_no_budgets), WaterfallRowHeight * BUDGET_STEPS)
+    val steps = row?.let { data.waterfall[it.ref.id] } ?: return Empty(stringResource(R.string.analysis_no_budgets), listHeight(WaterfallRowHeight * BUDGET_STEPS))
     Waterfall(steps, row.ref.color, BUDGET_STEPS, animate)
 }
 
 @Composable
 private fun BudgetCoverageCard(data: BudgetsInsightUi, animate: Boolean, yearly: Boolean) {
-    if (data.coverage.all { line -> line.values.all { it == 0L } }) return Empty(height = BalanceHeight)
+    if (data.coverage.all { line -> line.values.all { it == 0L } }) return Empty(height = listHeight(BalanceHeight))
     val inside = MaterialTheme.colorScheme.primary
     val outside = BudgetWarningYellow
     val exempt = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
@@ -878,7 +880,7 @@ private fun BudgetCoverageCard(data: BudgetsInsightUi, animate: Boolean, yearly:
     )
     val colors = listOf(inside, outside, exempt).map { it.toArgb() }
     val lines = remember(data.coverage, names, colors) { data.coverage.mapIndexed { i, l -> l.copy(name = names[i], color = colors[i]) } }
-    StackedBalanceBars(lines, monthLabels(data.historyMonths), introProgress(animate), Modifier.fillMaxWidth().height(BalanceHeight))
+    StackedBalanceBars(lines, monthLabels(data.historyMonths), introProgress(animate), Modifier.fillMaxWidth().height(plotHeight()))
     AccountLegend(lines)
     // The year page's line covers the whole year, the month page's the month.
     val inBudget = if (yearly) lines[0].values.sum() else lines[0].values.last()
@@ -888,7 +890,7 @@ private fun BudgetCoverageCard(data: BudgetsInsightUi, animate: Boolean, yearly:
 
 @Composable
 private fun BudgetReachedCard(data: BudgetsInsightUi) {
-    val height = insightContentHeight(ChartType.BUDGET_REACHED)
+    val height = listHeight(insightContentHeight(ChartType.BUDGET_REACHED))
     if (data.reached.isEmpty()) return Empty(stringResource(R.string.analysis_no_budgets), height)
     val nameWidth = 84.dp
     val tailWidth = 40.dp
@@ -898,7 +900,7 @@ private fun BudgetReachedCard(data: BudgetsInsightUi) {
         DayDotAxis(31, Modifier.weight(1f).height(lineOf(MaterialTheme.typography.labelSmall)))
         Text(stringResource(R.string.analysis_reached_average), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.End, maxLines = 1, modifier = Modifier.width(tailWidth))
     }
-    Column(modifier = Modifier.fillMaxWidth().height(rowHeight * GRID_ROWS_SHOWN).verticalScroll(rememberScrollState())) {
+    Column(modifier = Modifier.fillMaxWidth().height(listHeight(rowHeight * GRID_ROWS_SHOWN, reserve = lineOf(MaterialTheme.typography.labelSmall) + GapDp)).verticalScroll(rememberScrollState())) {
         data.reached.forEach { row ->
             Row(modifier = Modifier.fillMaxWidth().height(rowHeight), verticalAlignment = Alignment.CenterVertically) {
                 Row(modifier = Modifier.width(nameWidth), verticalAlignment = Alignment.CenterVertically) {
