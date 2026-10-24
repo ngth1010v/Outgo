@@ -1,5 +1,7 @@
 package app.outgo.ui.analysis
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -11,6 +13,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -36,6 +39,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.lerp
 import app.outgo.R
 import app.outgo.ui.home.compactAmount
 import app.outgo.ui.theme.ExpenseRed
@@ -43,6 +47,8 @@ import app.outgo.ui.theme.IncomeGreen
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.sqrt
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.launch
 
 /**
  * Hand-drawn charts of the Trades, Savings and Budgets groups, in the idiom of [AnalysisCharts]:
@@ -412,7 +418,9 @@ fun BarLineChart(
 /**
  * The month's transfers as bands from the sending accounts (left) to the receiving ones (right),
  * each as thick as its amount, in the sender's colour. [names] gives each account's name and
- * colour; [OTHER_NODE] is named [otherLabel].
+ * colour; [OTHER_NODE] is named [otherLabel]. Tapping an account (its bar or label) focuses it:
+ * it, its bands and the accounts at their other ends stay bright while the rest fade. Tapping it
+ * again, or off every account, clears the focus.
  */
 @Composable
 fun TransferFlowChart(
@@ -436,8 +444,44 @@ fun TransferFlowChart(
         }
         side(flow.sources) to side(flow.targets)
     }
+    // The focused node as (side, id): side 0 is the senders, 1 the receivers. The side matters, since
+    // one account (and "other") can sit on both sides, and only the tapped one should light up.
+    var focused by remember(flow) { mutableStateOf<Pair<Int, Long>?>(null) }
+    // The focus before [focused], faded out as [mix] runs 0 to 1, so a tap on another account
+    // crossfades too. A plain field: [focused] already recomposes.
+    val before = remember(flow) { arrayOfNulls<Pair<Int, Long>>(1) }
+    val mix = remember(flow) { Animatable(1f) }
+    val scope = rememberCoroutineScope()
+    fun litBand(s: Pair<Int, Long>?, l: FlowLink) = s != null && (if (s.first == 0) l.from else l.to) == s.second
+    // Per side, the focused account and the ones its bands reach on the other side; null when nothing is focused.
+    fun litOf(s: Pair<Int, Long>?): Pair<Set<Long>, Set<Long>>? {
+        if (s == null) return null
+        val bands = flow.links.filter { litBand(s, it) }
+        return if (s.first == 0) setOf(s.second) to bands.map { it.to }.toSet() else bands.map { it.from }.toSet() to setOf(s.second)
+    }
+    val litNow = remember(flow, focused) { litOf(focused) }
+    val litBefore = remember(flow, focused) { litOf(before[0]) }
+    // Node spans (left side, right side) as last drawn, for the tap test.
+    val spans = remember { arrayOfNulls<Map<Long, Pair<Float, Float>>>(2) }
+    val tap = Modifier.pointerInput(flow) {
+        detectTapGestures { at ->
+            val s = if (at.x < size.width / 2f) 0 else 1
+            val half = 3.dp.toPx()
+            val id = spans[s].orEmpty().entries.firstOrNull { (_, span) -> at.y >= span.first - half && at.y <= span.first + span.second + half }?.key
+            val hit = id?.let { s to it }
+            val next = if (hit == null || hit == focused) null else hit
+            if (next == focused) return@detectTapGestures
+            // ponytail: a tap mid-fade restarts from the old focus (a small jump); blend three states if that shows.
+            before[0] = focused
+            focused = next
+            scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                mix.snapTo(0f)
+                mix.animateTo(1f, tween(durationMillis = 220))
+            }
+        }
+    }
 
-    Canvas(modifier = modifier.onSizeChanged { width = it.width }) {
+    Canvas(modifier = modifier.onSizeChanged { width = it.width }.then(tap)) {
         val nodeW = 6.dp.toPx()
         val gap = 6.dp.toPx()
         val leftX = labelW + Gap.toPx()
@@ -461,7 +505,15 @@ fun TransferFlowChart(
         }
         val src = layoutSide(flow.sources)
         val dst = layoutSide(flow.targets)
+        spans[0] = src
+        spans[1] = dst
         val p = progress()
+        val m = mix.value
+        val was = before[0]
+        val now = focused
+        // Band alpha under one focus: plain with none, bright if lit, faint if not.
+        fun bandA(s: Pair<Int, Long>?, l: FlowLink) = if (s == null) 0.4f else if (litBand(s, l)) 0.6f else 0.1f
+        fun nodeA(lit: Set<Long>?, id: Long) = if (lit == null || id in lit) 1f else 0.35f
 
         // Each band takes the next slice of its source node (in target order) and of its target node (in source order).
         val srcUsed = HashMap<Long, Float>()
@@ -492,25 +544,27 @@ fun TransferFlowChart(
                 cubicTo(mid, y1 + bandH, mid, y0 + h, x0, y0 + h)
                 close()
             }
-            drawPath(path, Color(colorOf(l.from)), alpha = 0.4f * p)
+            val bandAlpha = lerp(bandA(was, l), bandA(now, l), m)
+            drawPath(path, Color(colorOf(l.from)), alpha = bandAlpha * p)
         }
         // Nodes, then their labels: two lines centred on the node, nudged apart when nodes are thin.
-        fun labels(nodes: List<FlowNode>, spans: Map<Long, Pair<Float, Float>>, measured: List<Pair<TextLayoutResult, TextLayoutResult>>, x: Float, alignRight: Boolean) {
+        fun labels(nodes: List<FlowNode>, spans: Map<Long, Pair<Float, Float>>, measured: List<Pair<TextLayoutResult, TextLayoutResult>>, x: Float, alignRight: Boolean, wasLit: Set<Long>?, nowLit: Set<Long>?) {
             var floor = 0f
             nodes.forEachIndexed { i, n ->
                 val (y, h) = spans.getValue(n.id)
-                drawRect(Color(colorOf(n.id)), Offset(x, y), Size(nodeW, h), alpha = p)
+                val dim = lerp(nodeA(wasLit, n.id), nodeA(nowLit, n.id), m)
+                drawRect(Color(colorOf(n.id)), Offset(x, y), Size(nodeW, h), alpha = p * dim)
                 val (nameText, amountText) = measured[i]
                 val blockH = nameText.size.height + amountText.size.height
                 val top = (y + h / 2f - blockH / 2f).coerceAtLeast(floor).coerceAtMost(size.height - blockH)
                 floor = top + blockH
                 fun place(t: TextLayoutResult) = if (alignRight) x - Gap.toPx() - t.size.width else x + nodeW + Gap.toPx()
-                drawText(nameText, scheme.onSurface, Offset(place(nameText), top))
-                drawText(amountText, scheme.onSurfaceVariant, Offset(place(amountText), top + nameText.size.height))
+                drawText(nameText, scheme.onSurface, Offset(place(nameText), top), alpha = dim)
+                drawText(amountText, scheme.onSurfaceVariant, Offset(place(amountText), top + nameText.size.height), alpha = dim)
             }
         }
-        labels(flow.sources, src, texts.first, leftX, alignRight = true)
-        labels(flow.targets, dst, texts.second, rightX, alignRight = false)
+        labels(flow.sources, src, texts.first, leftX, alignRight = true, litBefore?.first, litNow?.first)
+        labels(flow.targets, dst, texts.second, rightX, alignRight = false, litBefore?.second, litNow?.second)
     }
 }
 

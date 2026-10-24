@@ -242,8 +242,9 @@ data class TransferFlowUi(val sources: List<FlowNode>, val targets: List<FlowNod
 /**
  * [transfers] as a flow. On each side, accounts under [minShare] of the total (too thin for their
  * label) join one [OTHER_NODE], unless only one would: it then stays itself. 0 keeps every account.
+ * Nodes follow [order] (the Accounts screen's), "other" last.
  */
-fun transferFlow(transfers: List<TransferTotal>, minShare: Double = 0.0): TransferFlowUi? {
+fun transferFlow(transfers: List<TransferTotal>, minShare: Double = 0.0, order: Map<Long, Int> = emptyMap()): TransferFlowUi? {
     if (transfers.isEmpty()) return null
     fun keep(totals: Map<Long, Long>): Set<Long> {
         val all = totals.values.sum().coerceAtLeast(1L).toDouble()
@@ -256,7 +257,7 @@ fun transferFlow(transfers: List<TransferTotal>, minShare: Double = 0.0): Transf
         .map { (key, l) -> FlowLink(key.first, key.second, l.sumOf { it.total }, l.sumOf { it.count }) }
     fun nodes(side: (FlowLink) -> Long) = links.groupBy(side).map { (id, l) -> FlowNode(id, l.sumOf { it.total }) }
         // "Other" always goes last, whatever its size.
-        .sortedWith(compareBy<FlowNode> { it.id == OTHER_NODE }.thenByDescending { it.total })
+        .sortedWith(compareBy<FlowNode> { it.id == OTHER_NODE }.thenBy { order[it.id] ?: Int.MAX_VALUE }.thenByDescending { it.total })
     val sources = nodes { it.from }
     val targets = nodes { it.to }
     val order = { list: List<FlowNode> -> list.withIndex().associate { (i, n) -> n.id to i } }

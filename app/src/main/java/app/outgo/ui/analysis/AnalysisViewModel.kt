@@ -74,6 +74,8 @@ data class AnalysisUiState(
     val monthBudgetInsights: Map<Int, Stage<BudgetsInsightUi>> = emptyMap(),
     /** id -> (name, iconId, color) of every account, archived ones too, for the transfer flow chart. */
     val accountNames: Map<Long, Triple<String, Long?, Int>> = emptyMap(),
+    /** id -> position on the Accounts screen, every account; the transfer flow chart's node order. */
+    val accountOrder: Map<Long, Int> = emptyMap(),
     /** Each year page's summary, Accounts and Categories data, by year. Its insights sit in the month maps above, keyed `yyyy00`. */
     val years: Map<Int, Stage<YearUi>> = emptyMap(),
 )
@@ -150,7 +152,14 @@ class AnalysisViewModel(
                 val tree = treeOf(shown.filter { it.isParent }, shown.filter { !it.isParent }, link = { it.id to it.parentId }) {
                     AccountNode(it.id, it.name, it.iconId, it.color)
                 }.filter { it.children.isNotEmpty() || it.id !in hadChildren }
-                _state.update { it.copy(accountTree = tree, accountPrivacy = privacy, accountNames = accounts) }
+                // The Accounts screen's order (each parent, then its subaccounts), archived ones too:
+                // old transfers can involve them.
+                val order = HashMap<Long, Int>()
+                list.filter { it.isParent }.forEach { parent ->
+                    order[parent.id] = order.size
+                    list.filter { it.parentId == parent.id }.forEach { order[it.id] = order.size }
+                }
+                _state.update { it.copy(accountTree = tree, accountPrivacy = privacy, accountNames = accounts, accountOrder = order) }
             }
         }
         viewModelScope.launch {

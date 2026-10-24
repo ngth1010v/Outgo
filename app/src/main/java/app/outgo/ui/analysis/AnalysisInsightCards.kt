@@ -637,7 +637,7 @@ private fun TransfersCard(data: TradesInsightUi, state: AnalysisUiState, animate
     // bars take about 24dp); full screen shows every account.
     val full = LocalFullscreenChart.current != null
     val minShare = if (full) 0.0 else (lineOf(MaterialTheme.typography.labelSmall) * 2 / (FlowHeight - 24.dp)).toDouble()
-    val flow = remember(data, minShare) { transferFlow(data.transfers, minShare) }
+    val flow = remember(data, minShare, state.accountOrder) { transferFlow(data.transfers, minShare, state.accountOrder) }
     if (flow == null) return Empty(height = listHeight(FlowHeight + GapDp))
     TransferFlowChart(
         flow,
