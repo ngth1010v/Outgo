@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import app.outgo.data.db.dao.AccountBalance
 import app.outgo.data.db.dao.BudgetMoveRow
 import app.outgo.data.db.dao.BudgetWithProgress
+import app.outgo.data.db.dao.CashFlowRow
 import app.outgo.data.db.dao.CategoryMonthStatRow
 import app.outgo.data.db.dao.SavingsTradeRow
 import app.outgo.data.db.dao.TradeSlim
@@ -65,6 +66,8 @@ data class TradesInsightUi(
     /** [INSIGHT_MONTH_COUNT] months, the page's own last. */
     val activity: List<MonthActivity>,
     val transfers: List<TransferTotal>,
+    /** Every trade of the period summed per parent account and parent category, for the cash flow chart. */
+    val cashFlow: List<CashFlowRow> = emptyList(),
 )
 
 /** Which kinds a [AnalysisMode] chip takes in. */
@@ -83,6 +86,7 @@ fun buildTradesInsight(
     /** The months whose trades the page covers: [month] alone, or a year's. [days] is [month]'s only. */
     period: List<Int> = listOf(month),
     activityMonths: List<Int> = MonthKey.lastN(month, INSIGHT_MONTH_COUNT),
+    cashFlow: List<CashFlowRow> = emptyList(),
 ): TradesInsightUi {
     val ym = yearMonthOf(month)
     val length = ym.lengthOfMonth()
@@ -115,6 +119,7 @@ fun buildTradesInsight(
         trades = inPeriod.sortedByDescending { it.amount },
         activity = activity,
         transfers = transfers.filter { it.toAccountId != null && it.total > 0 },
+        cashFlow = cashFlow,
     )
 }
 

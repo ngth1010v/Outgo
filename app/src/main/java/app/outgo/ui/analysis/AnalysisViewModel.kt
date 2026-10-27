@@ -402,10 +402,12 @@ class AnalysisViewModel(
                 val trades = async { tradeRepository.amountsAndTimesForMonths(listOf(month), TRADE_TYPES) }
                 val stats = async { statDao.categoryMonthStats(months.first(), month) }
                 val transfers = async { tradeRepository.transferTotalsForMonths(listOf(month)) }
+                val cash = async { tradeRepository.cashFlowForMonths(listOf(month)) }
                 val t = trades.await()
                 val st = stats.await()
                 val tr = transfers.await()
-                withContext(Dispatchers.Default) { buildTradesInsight(t, st, tr, month, zone) }
+                val cf = cash.await()
+                withContext(Dispatchers.Default) { buildTradesInsight(t, st, tr, month, zone, cashFlow = cf) }
             }
             InsightGroup.SAVINGS -> {
                 val months = MonthKey.lastN(month, SAVINGS_HISTORY_MONTH_COUNT)
@@ -445,10 +447,14 @@ class AnalysisViewModel(
                 val trades = async { tradeRepository.amountsAndTimesForMonths(months, TRADE_TYPES) }
                 val stats = async { statDao.categoryMonthStats(first, last) }
                 val transfers = async { tradeRepository.transferTotalsForMonths(months) }
+                val cash = async { tradeRepository.cashFlowForMonths(months) }
                 val t = trades.await()
                 val st = stats.await()
                 val tr = transfers.await()
-                withContext(Dispatchers.Default) { buildTradesInsight(t, st, tr, last, zone, period = months, activityMonths = months) }
+                val cf = cash.await()
+                withContext(Dispatchers.Default) {
+                    buildTradesInsight(t, st, tr, last, zone, period = months, activityMonths = months, cashFlow = cf)
+                }
             }
             InsightGroup.SAVINGS -> {
                 val all = accountRepository.observeAll().first()

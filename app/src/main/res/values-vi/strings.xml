@@ -720,4 +720,21 @@
     <plurals name="draft_impact_other_month">
         <item quantity="other">%1$d giao dịch nháp thuộc tháng khác, không tính ở đây.</item>
     </plurals>
+    <!-- Analysis: cash flow chart -->
+    <string name="analysis_trade_cash_flow_title">Dòng tiền</string>
+    <string name="analysis_year_trade_cash_flow_title">Dòng tiền trong năm</string>
+    <string name="analysis_cash_other_accounts">Tài khoản khác</string>
+    <string name="analysis_cash_adjust_in">Chỉnh tăng</string>
+    <string name="analysis_cash_adjust_out">Chỉnh giảm</string>
+    <string name="analysis_cash_transfers">Chuyển khoản</string>
+    <string name="analysis_cash_adjustments">Điều chỉnh</string>
+    <string name="analysis_cash_summary">Thu %1$s · Chi %2$s</string>
+    <string name="analysis_cash_kept_part">giữ lại %1$s</string>
+    <string name="analysis_cash_drawn_part">%1$s từ số dư</string>
+    <string name="analysis_cash_account_detail">%1$s: vào %2$s · ra %3$s</string>
+    <string name="analysis_cash_node_detail">%1$s: %2$s (%3$d%%)</string>
+    <string name="analysis_info_trade_cash_flow_about">Tiền trong tháng đến từ đâu, nằm ở tài khoản nào, rồi đi về đâu: thu nhập dọc cạnh trên và cạnh trái, các tài khoản ở giữa, chi tiêu dọc cạnh dưới và cạnh phải.</string>
+    <string name="analysis_info_year_trade_cash_flow_about">Tiền trong năm đến từ đâu, nằm ở tài khoản nào, rồi đi về đâu: thu nhập dọc cạnh trên và cạnh trái, các tài khoản ở giữa, chi tiêu dọc cạnh dưới và cạnh phải.</string>
+    <string name="analysis_info_trade_cash_flow_meaning">Tiền luôn chảy xuống dưới và sang phải. Mỗi danh mục là một thẻ mũi tên: đường nối của khoản thu đi ra từ mũi thẻ, hướng về tài khoản nhận tiền; đường nối của khoản chi đi từ tài khoản vào đuôi thẻ. Mỗi tài khoản cho biết nó tăng hay giảm bao nhiêu trong kỳ. Chuyển khoản nối từ tài khoản này sang tài khoản khác, có đầu mũi tên. Nút càng to và đường nối càng dày thì càng nhiều tiền đi qua, nhưng chỉ tương đối với nhau để các khoản nhỏ vẫn nhìn thấy được. Ngoài vài mục lớn nhất, phần còn lại được gộp vào Khác.</string>
+    <string name="analysis_info_trade_cash_flow_how">Các đường nối tự tìm đường vòng qua các nút và tránh nhau. Chạm vào một nút để làm nổi các đường nối của nó và xem tổng ở dòng dưới; danh mục được chạm cũng hiện tên và số tiền bên cạnh; dòng dưới cũng cho biết các tài khoản giữ lại bao nhiêu, hoặc đã lấy bao nhiêu từ tiền có sẵn. Nút bánh răng bật/tắt chuyển khoản, điều chỉnh và từng tài khoản.</string>
 </resources>

@@ -112,6 +112,23 @@ data class AccountFlow(
     val total: Long,
 )
 
+/**
+ * Analysis cash flow: trades summed per (type, account, receiving account, category), with
+ * subaccounts folded into their parent account and subcategories into their parent category.
+ * [toAccountId] is set only on a transfer, and [categoryId] (with its name, icon and colour) only on
+ * an expense or income.
+ */
+data class CashFlowRow(
+    val type: Int,
+    val accountId: Long,
+    val toAccountId: Long?,
+    val categoryId: Long?,
+    val categoryName: String?,
+    val categoryIconId: Long?,
+    val categoryColor: Int?,
+    val total: Long,
+)
+
 /** Pseudo trade type: the receiving account's side of a transfer. */
 const val FLOW_TRANSFER_IN = 5
 

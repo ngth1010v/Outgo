@@ -4,6 +4,7 @@ import app.outgo.data.db.dao.AccountBalance
 import app.outgo.data.db.dao.AccountFlow
 import app.outgo.data.db.dao.AccountMove
 import app.outgo.data.db.dao.BudgetMoveRow
+import app.outgo.data.db.dao.CashFlowRow
 import app.outgo.data.db.dao.SavingsTradeRow
 import app.outgo.data.db.dao.TradeDao
 import app.outgo.data.db.dao.TradeSlim
@@ -262,6 +263,9 @@ class TradeRepository(private val tradeDao: TradeDao) {
 
     suspend fun transferTotalsForMonths(monthKeys: List<Int>): List<TransferTotal> =
         withContext(Dispatchers.IO) { tradeDao.transferTotalsForMonths(monthKeys) }
+
+    suspend fun cashFlowForMonths(monthKeys: List<Int>): List<CashFlowRow> =
+        withContext(Dispatchers.IO) { tradeDao.cashFlowForMonths(monthKeys) }
 
     suspend fun accountFlows(fromMonth: Int, toMonth: Int): List<AccountFlow> =
         withContext(Dispatchers.IO) { tradeDao.accountFlows(fromMonth, toMonth) }

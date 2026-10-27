@@ -65,6 +65,15 @@ import java.time.format.DateTimeFormatter
 private val GapDp = 8.dp
 private val CalendarHeight = 168.dp
 private val FlowHeight = 168.dp
+private val CashFlowHeight = 300.dp
+
+/** Most income (or spending) carets the cash flow draws on the card, and in full screen. */
+private const val CASH_CARD_NODES = 4
+private const val CASH_FULL_NODES = 6
+
+/** Most accounts drawn on the card, and in full screen; the smaller ones join one "Other" account. */
+private const val CASH_CARD_ACCOUNTS = 3
+private const val CASH_FULL_ACCOUNTS = 4
 private val TopRowHeight = 40.dp
 private const val TOP_ROWS_SHOWN = 5
 private const val BULLET_ROWS_SHOWN = 4
@@ -92,6 +101,7 @@ fun insightContentHeight(type: ChartType): Dp {
     return when (type) {
         ChartType.TRADE_CALENDAR, ChartType.TRADE_WEEK -> CalendarHeight + GapDp + small
         ChartType.TRADE_TRANSFERS -> FlowHeight + GapDp + small
+        ChartType.TRADE_CASH_FLOW -> CashFlowHeight + GapDp + small
         ChartType.TRADE_TOP -> TopRowHeight * TOP_ROWS_SHOWN
         ChartType.SAVING_PACE, ChartType.BUDGET_FORECAST -> bulletRowHeight() * BULLET_ROWS_SHOWN
         // The section spaces every child it holds: header, rows, detail line.
@@ -114,6 +124,7 @@ fun insightChartName(type: ChartType): String = stringResource(
         ChartType.YEAR_TRADE_TOP -> R.string.analysis_year_trade_top_title
         ChartType.YEAR_TRADE_FREQUENCY -> R.string.analysis_year_trade_frequency_title
         ChartType.YEAR_TRADE_TRANSFERS -> R.string.analysis_year_trade_transfers_title
+        ChartType.YEAR_TRADE_CASH_FLOW -> R.string.analysis_year_trade_cash_flow_title
         ChartType.YEAR_SAVING_PACE -> R.string.analysis_year_saving_pace_title
         ChartType.YEAR_SAVING_HISTORY -> R.string.analysis_year_saving_history_title
         ChartType.YEAR_SAVING_RATE -> R.string.analysis_year_saving_rate_title
@@ -128,6 +139,7 @@ fun insightChartName(type: ChartType): String = stringResource(
         ChartType.TRADE_TOP -> R.string.analysis_trade_top_title
         ChartType.TRADE_FREQUENCY -> R.string.analysis_trade_frequency_title
         ChartType.TRADE_TRANSFERS -> R.string.analysis_trade_transfers_title
+        ChartType.TRADE_CASH_FLOW -> R.string.analysis_trade_cash_flow_title
         ChartType.SAVING_PACE -> R.string.analysis_saving_pace_title
         ChartType.SAVING_BURNUP -> R.string.analysis_saving_burnup_title
         ChartType.SAVING_HISTORY -> R.string.analysis_saving_history_title
@@ -171,6 +183,7 @@ fun InsightCard(card: ChartCard, height: Dp, state: AnalysisUiState, month: Int,
                     ChartType.TRADE_SIZES -> SizesCard(card, data, state, actions, animate)
                     ChartType.TRADE_TOP -> TopCard(card, data, state, actions)
                     ChartType.TRADE_FREQUENCY -> FrequencyCard(card, data, animate)
+                    ChartType.TRADE_CASH_FLOW -> CashFlowCard(card, data, state, animate)
                     else -> TransfersCard(data, state, animate)
                 }
             }
@@ -648,6 +661,60 @@ private fun TransfersCard(data: TradesInsightUi, state: AnalysisUiState, animate
         Modifier.fillMaxWidth().height(listHeight(FlowHeight, reserve = GapDp + lineOf(MaterialTheme.typography.bodySmall))),
     )
     DetailLine(stringResource(R.string.analysis_flow_total, flow.count, Money.format(flow.total)))
+}
+
+/**
+ * The cash flow node chart: accounts as rectangles, categories as carets around them, sizes relative
+ * to the money. The line under it sums the period up, or the tapped node.
+ */
+@Composable
+private fun CashFlowCard(card: ChartCard, data: TradesInsightUi, state: AnalysisUiState, animate: Boolean) {
+    val full = LocalFullscreenChart.current != null
+    val maxNodes = if (full) CASH_FULL_NODES else CASH_CARD_NODES
+    val maxAccounts = if (full) CASH_FULL_ACCOUNTS else CASH_CARD_ACCOUNTS
+    val flow = remember(data.cashFlow, state.accountNames, card.hidden, maxNodes, maxAccounts) {
+        buildCashFlow(data.cashFlow, state.accountNames, cashFlowOptions(card.hidden, maxNodes, maxAccounts))
+    }
+    val height = listHeight(CashFlowHeight, reserve = GapDp + lineOf(MaterialTheme.typography.bodySmall))
+    if (flow == null) return Empty(height = height)
+    var selected by remember(flow) { mutableStateOf<Int?>(null) }
+    val labels = CashLabels(
+        other = stringResource(R.string.analysis_flow_other),
+        otherAccounts = stringResource(R.string.analysis_cash_other_accounts),
+        adjustIn = stringResource(R.string.analysis_cash_adjust_in),
+        adjustOut = stringResource(R.string.analysis_cash_adjust_out),
+    )
+    val unitNames = units()
+    CashFlowChart(
+        flow,
+        full = full,
+        labels = labels,
+        units = unitNames,
+        selected = selected,
+        onSelect = { selected = it },
+        progress = introProgress(animate),
+        modifier = Modifier.fillMaxWidth().height(height),
+    )
+    val pick = selected
+    val detail = if (pick != null) {
+        val node = flow.nodes[pick]
+        val name = labels.of(node)
+        if (node.column == CashColumn.ACCOUNT) {
+            val into = flow.links.filter { it.to == pick }.sumOf { it.total }
+            val out = flow.links.filter { it.from == pick }.sumOf { it.total }
+            stringResource(R.string.analysis_cash_account_detail, name, compact(into), compact(out))
+        } else {
+            val whole = flow.column(node.column).sumOf { flow.nodes[it].total }
+            stringResource(R.string.analysis_cash_node_detail, name, Money.format(node.total), percent(node.total, whole))
+        }
+    } else {
+        listOfNotNull(
+            stringResource(R.string.analysis_cash_summary, compact(flow.income), compact(flow.expense)),
+            flow.kept.takeIf { it > 0 }?.let { stringResource(R.string.analysis_cash_kept_part, compact(it)) },
+            flow.fromBalance.takeIf { it > 0 }?.let { stringResource(R.string.analysis_cash_drawn_part, compact(it)) },
+        ).joinToString(" · ")
+    }
+    DetailLine(detail)
 }
 
 // ================================================================= SAVINGS

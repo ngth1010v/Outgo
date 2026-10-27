@@ -177,6 +177,31 @@ interface TradeDao {
     suspend fun transferTotalsForMonths(monthKeys: List<Int>): List<TransferTotal>
 
     /**
+     * Analysis cash flow: every trade of the given months summed per (type, parent account,
+     * receiving parent account, parent category). A pending transfer (amount 0) moved nothing yet.
+     */
+    @Query(
+        """
+        SELECT t.type AS type,
+               COALESCE(a.parent_id, t.account_id) AS accountId,
+               CASE WHEN t.type = 4 AND t.to_account_id IS NOT NULL THEN COALESCE(ta.parent_id, t.to_account_id) END AS toAccountId,
+               CASE WHEN t.type IN (0, 1) THEN pc.id END AS categoryId,
+               CASE WHEN t.type IN (0, 1) THEN pc.name END AS categoryName,
+               CASE WHEN t.type IN (0, 1) THEN pc.icon_id END AS categoryIconId,
+               CASE WHEN t.type IN (0, 1) THEN pc.color END AS categoryColor,
+               SUM(t.amount) AS total
+        FROM trade t
+        LEFT JOIN account a ON a.id = t.account_id
+        LEFT JOIN account ta ON ta.id = t.to_account_id
+        LEFT JOIN category c ON c.id = t.category_id
+        LEFT JOIN category pc ON pc.id = COALESCE(c.parent_id, c.id)
+        WHERE t.month_key IN (:monthKeys) AND t.amount > 0
+        GROUP BY 1, 2, 3, 4
+        """,
+    )
+    suspend fun cashFlowForMonths(monthKeys: List<Int>): List<CashFlowRow>
+
+    /**
      * Analysis accounts: per month, per account, per type, the summed amount. A transfer's
      * receiving end comes back as [FLOW_TRANSFER_IN], so every row is one account's own movement.
      */

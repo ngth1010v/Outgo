@@ -1,7 +1,19 @@
 package app.outgo.ui.analysis
 
+import androidx.annotation.DrawableRes
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,9 +40,12 @@ import app.outgo.R
 import app.outgo.ui.component.OutgoSegmentedButton
 import app.outgo.ui.component.PickCell
 
-/** One icon cell of [ChartOptionsSheet]: an account, category, savings account or budget. */
+/**
+ * One icon cell of [ChartOptionsSheet]: an account, category, savings account or budget, or (with
+ * [icon], a drawable instead of a stored icon) one of a chart's own switches.
+ */
 @Immutable
-data class OptionItem(val id: Long, val name: String, val iconId: Long?, val color: Int)
+data class OptionItem(val id: Long, val name: String, val iconId: Long?, val color: Int, @DrawableRes val icon: Int? = null)
 
 /**
  * What a chart's settings sheet offers: [pick] to choose one of ([pickedId] is ringed) under
@@ -132,9 +147,41 @@ private fun LazyListScope.cellRows(key: String, items: List<OptionItem>, selecte
     items(items.chunked(CellsPerRow), key = { "$key-${it.first().id}" }) { row ->
         Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
             row.forEach { item ->
-                PickCell(item.name, item.iconId, item.color, selected(item.id), { onClick(item.id) }, Modifier.weight(1f), wrap = true)
+                if (item.icon != null) {
+                    SwitchCell(item.name, item.icon, Color(item.color), selected(item.id), { onClick(item.id) }, Modifier.weight(1f))
+                } else {
+                    PickCell(item.name, item.iconId, item.color, selected(item.id), { onClick(item.id) }, Modifier.weight(1f), wrap = true)
+                }
             }
             repeat(CellsPerRow - row.size) { Spacer(Modifier.weight(1f)) }
         }
+    }
+}
+
+/** A chart switch drawn like a [PickCell]: a drawable on a tinted disc, ringed while on. */
+@Composable
+private fun SwitchCell(name: String, @DrawableRes icon: Int, color: Color, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = modifier.clickable(onClick = onClick).padding(4.dp)) {
+        val ring = MaterialTheme.colorScheme.primary
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .then(
+                    if (selected) {
+                        Modifier.drawBehind {
+                            val width = 2.dp.toPx()
+                            drawCircle(ring, radius = (size.minDimension - width) / 2, style = Stroke(width))
+                        }
+                    } else {
+                        Modifier
+                    },
+                )
+                .padding(4.dp)
+                .background(color.copy(alpha = 0.18f), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(painterResource(icon), contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
+        }
+        Text(name, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center)
     }
 }

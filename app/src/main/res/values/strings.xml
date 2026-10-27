@@ -739,4 +739,21 @@
         <item quantity="one">%1$d draft is in another month and isn\'t counted here.</item>
         <item quantity="other">%1$d drafts are in other months and aren\'t counted here.</item>
     </plurals>
+    <!-- Analysis: cash flow chart -->
+    <string name="analysis_trade_cash_flow_title">Cash flow</string>
+    <string name="analysis_year_trade_cash_flow_title">Cash flow, year</string>
+    <string name="analysis_cash_other_accounts">Other accounts</string>
+    <string name="analysis_cash_adjust_in">Adjust +</string>
+    <string name="analysis_cash_adjust_out">Adjust −</string>
+    <string name="analysis_cash_transfers">Transfers</string>
+    <string name="analysis_cash_adjustments">Adjustments</string>
+    <string name="analysis_cash_summary">Income %1$s · Spent %2$s</string>
+    <string name="analysis_cash_kept_part">kept %1$s</string>
+    <string name="analysis_cash_drawn_part">%1$s from balance</string>
+    <string name="analysis_cash_account_detail">%1$s: in %2$s · out %3$s</string>
+    <string name="analysis_cash_node_detail">%1$s: %2$s (%3$d%%)</string>
+    <string name="analysis_info_trade_cash_flow_about">Where this month\'s money came from, which account held it, and where it went: income along the top and left edges, your accounts in the middle, spending along the bottom and right edges.</string>
+    <string name="analysis_info_year_trade_cash_flow_about">Where this year\'s money came from, which account held it, and where it went: income along the top and left edges, your accounts in the middle, spending along the bottom and right edges.</string>
+    <string name="analysis_info_trade_cash_flow_meaning">Money always flows down and to the right. Each category is an arrow tag: an income\'s link leaves its point toward the account the money went into, a spending\'s link comes from the account into its tail. Each account shows how much it gained or lost this period. Transfers run from one account to another, with an arrowhead. The bigger a node and the thicker a link, the more money went through it, but only relative to each other, so small amounts stay visible. Beyond the largest few, the rest join Other.</string>
+    <string name="analysis_info_trade_cash_flow_how">Links find their own way around the nodes and each other. Tap a node to light up its links and read its total below; a tapped category also shows its name and amount beside it; the line below also says how much the accounts kept, or took from money they already had. The gear switches transfers, adjustments and single accounts on and off.</string>
 </resources>

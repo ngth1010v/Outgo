@@ -75,6 +75,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -553,13 +554,30 @@ private fun chartOptions(card: ChartCard, state: AnalysisUiState, month: Int): C
         kind != null -> stringResource(R.string.analysis_options_parent_category)
         else -> stringResource(R.string.analysis_options_parent_account)
     }
-    val shown = if (type.hasToggles) {
+    val shown = if ((type.base ?: type) == ChartType.TRADE_CASH_FLOW) {
+        // The parent accounts the period's money moved through (the chart draws a hidden-balance
+        // account's flows too, so it can be switched off here), and any already switched off.
+        val rows = state.monthTradeInsights[month]?.dataOrNull?.cashFlow.orEmpty()
+        val ids = rows.flatMapTo(HashSet()) { listOfNotNull(it.accountId, it.toAccountId) } + card.hidden.filter { it >= 0 }
+        cashFlowSwitches() + state.accountNames.filterKeys { it in ids }
+            .map { (id, a) -> OptionItem(id, a.first, a.second, a.third) }
+    } else if (type.hasToggles) {
         balanceGroups(treeOf(type, state), card.accountId, type.hasParent).map { (node, _) -> OptionItem(node.id, node.name, node.iconId, node.color) }
     } else {
         emptyList()
     }
     val pickedId = card.accountId?.takeIf { picked -> pick.any { it.id == picked } } ?: pick.firstOrNull()?.id
     return ChartOptions(pickTitle, pick, pickedId, shown, metric = type.hasMetric)
+}
+
+/** The cash flow card's own switches, before its accounts; see [cashFlowOptions]. */
+@Composable
+private fun cashFlowSwitches(): List<OptionItem> {
+    val color = MaterialTheme.colorScheme.primary.toArgb()
+    return listOf(
+        OptionItem(CASH_HIDE_TRANSFERS, stringResource(R.string.analysis_cash_transfers), null, color, R.drawable.ph_swap_horizontal),
+        OptionItem(CASH_HIDE_ADJUSTMENTS, stringResource(R.string.analysis_cash_adjustments), null, color, R.drawable.ph_pencil_simple),
+    )
 }
 
 /** What a [ChartType.hasParent]/[ChartType.hasToggles] chart picks from: categories of its kind, or accounts. */

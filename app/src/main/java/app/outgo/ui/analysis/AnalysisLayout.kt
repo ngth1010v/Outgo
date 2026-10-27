@@ -90,6 +90,11 @@ enum class ChartType(
     TRADE_FREQUENCY(R.drawable.ic_chart_frequency, insight = InsightGroup.TRADES),
     /** Transfers as flows from the sending accounts to the receiving ones. */
     TRADE_TRANSFERS(R.drawable.ic_chart_flow, hasMode = false, insight = InsightGroup.TRADES),
+    /**
+     * Where the money came from, which account held it and where it went (a Sankey diagram). Its
+     * toggles are the switches of [cashFlowOptions] and the parent accounts.
+     */
+    TRADE_CASH_FLOW(R.drawable.ic_chart_cash_flow, hasMode = false, hasToggles = true, insight = InsightGroup.TRADES),
 
     // Savings, month pages only. Progress an account hides stays hidden here unless kept in Analysis.
     /** Each target's progress against where an even pace would be by today. */
@@ -161,6 +166,7 @@ enum class ChartType(
     YEAR_TRADE_TOP(R.drawable.ic_chart_top, TRADE_TOP),
     YEAR_TRADE_FREQUENCY(R.drawable.ic_chart_frequency, TRADE_FREQUENCY),
     YEAR_TRADE_TRANSFERS(R.drawable.ic_chart_flow, TRADE_TRANSFERS),
+    YEAR_TRADE_CASH_FLOW(R.drawable.ic_chart_cash_flow, TRADE_CASH_FLOW),
 
     // Year page, Savings: the year's targets added up, and the year's months.
     YEAR_SAVING_PACE(R.drawable.ic_chart_saving_pace, SAVING_PACE),
@@ -307,7 +313,7 @@ enum class LayoutSlot(
 val TradeCharts
     get() = listOf(
         ChartType.TRADE_CALENDAR, ChartType.TRADE_WEEK, ChartType.TRADE_SIZES,
-        ChartType.TRADE_TOP, ChartType.TRADE_FREQUENCY, ChartType.TRADE_TRANSFERS,
+        ChartType.TRADE_TOP, ChartType.TRADE_FREQUENCY, ChartType.TRADE_TRANSFERS, ChartType.TRADE_CASH_FLOW,
     )
 
 val SavingCharts
@@ -325,7 +331,7 @@ val BudgetCharts
 val YearTradeCharts
     get() = listOf(
         ChartType.YEAR_TRADE_WEEK, ChartType.YEAR_TRADE_SIZES, ChartType.YEAR_TRADE_TOP,
-        ChartType.YEAR_TRADE_FREQUENCY, ChartType.YEAR_TRADE_TRANSFERS,
+        ChartType.YEAR_TRADE_FREQUENCY, ChartType.YEAR_TRADE_TRANSFERS, ChartType.YEAR_TRADE_CASH_FLOW,
     )
 
 val YearSavingCharts
