@@ -24,8 +24,24 @@ fun MoneyTextField(
     enabled: Boolean = true,
     isError: Boolean = false,
     supportingText: (@Composable () -> Unit)? = null,
+    /** 48dp tall, as a [CompactOutlinedTextField]; ignores [enabled], [isError] and [supportingText]. */
+    compact: Boolean = false,
 ) {
     val cursor = rememberMoneyInputCursor()
+    val keyboard = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done)
+    if (compact) {
+        CompactOutlinedTextField(
+            value = cursor.value(text),
+            onValueChange = { new ->
+                val cleaned = cursor.onValueChange(text, new)
+                if (cleaned != text) onTextChange(cleaned)
+            },
+            label = label,
+            keyboardOptions = keyboard,
+            modifier = modifier.then(cursor.modifier { text }),
+        )
+        return
+    }
     OutlinedTextField(
         value = cursor.value(text),
         onValueChange = { new ->
@@ -37,7 +53,7 @@ fun MoneyTextField(
         isError = isError,
         supportingText = supportingText,
         singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
+        keyboardOptions = keyboard,
         modifier = modifier.then(cursor.modifier { text }),
     )
 }

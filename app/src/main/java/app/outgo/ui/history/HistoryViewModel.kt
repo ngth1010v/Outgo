@@ -31,11 +31,16 @@ import kotlinx.coroutines.withContext
  */
 data class HistoryFilter(
     val type: Int? = null,
+    /** A parent account: with no [subAccountId], all its subaccounts. */
     val accountId: Long? = null,
+    /** One of [accountId]'s subaccounts. */
+    val subAccountId: Long? = null,
     val categoryId: Long? = null,
     val subCategoryId: Long? = null,
     val budgetId: Long? = null,
+    /** Transfers only, like [accountId]. */
     val toAccountId: Long? = null,
+    val toSubAccountId: Long? = null,
     val automatic: Boolean? = null,
     val fromDay: Long? = null,
     val toDay: Long? = null,
@@ -49,6 +54,12 @@ data class HistoryFilter(
     /** [type] [ADJUSTMENT]: balance adjustments, both ways. */
     val isAdjustment: Boolean get() = type == ADJUSTMENT
 
+    /** The "From" account the query matches: the subaccount, else the parent (and so all its subaccounts). */
+    val fromAccount: Long? get() = subAccountId ?: accountId
+
+    /** The "To" account the query matches, transfers only; see [fromAccount]. */
+    val toAccount: Long? get() = (toSubAccountId ?: toAccountId).takeIf { isTransfer }
+
     /** Expense or income: the types that have categories. */
     val hasCategories: Boolean get() = type == TradeType.EXPENSE || type == TradeType.INCOME
 
@@ -59,9 +70,9 @@ data class HistoryFilter(
             ADJUSTMENT -> listOf(TradeType.ADJUST_IN, TradeType.ADJUST_OUT)
             else -> listOf(type)
         },
-        accountId = accountId,
+        accountId = fromAccount,
         eitherAccount = type == null,
-        toAccountId = toAccountId.takeIf { isTransfer },
+        toAccountId = toAccount,
         categoryId = subCategoryId ?: budgetId.takeIf { isTransfer },
         parentId = categoryId.takeIf { subCategoryId == null && hasCategories },
         automatic = automatic.takeIf { isTransfer },
@@ -160,8 +171,8 @@ class HistoryViewModel(
         tradeType == null -> tradeRepository.historyPage(filter.toQuery(), before, PAGE_SIZE)
         !filter.isEmpty -> tradeRepository.filteredPage(
             tradeType, before,
-            accountId = filter.accountId,
-            toAccountId = filter.toAccountId,
+            accountId = filter.fromAccount,
+            toAccountId = filter.toAccount,
             categoryId = filter.subCategoryId ?: filter.budgetId,
             parentId = filter.categoryId.takeIf { filter.subCategoryId == null },
             automatic = filter.automatic,

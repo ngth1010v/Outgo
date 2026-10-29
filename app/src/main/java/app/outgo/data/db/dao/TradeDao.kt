@@ -49,14 +49,14 @@ interface TradeDao {
      * The History tab's filtered list, newest first, after the (occurred_at, id) cursor. Each
      * null filter matches everything. [categoryId] matches a trade's category or, on a transfer,
      * its budget (manual: category_id, automatic: offset_category_id); [parentId] matches a parent
-     * category and all its children; [automatic] matches automatic budget transfers or the rest.
+     * category and all its children; [accountId] and [toAccountId] match an account and its subaccounts; [automatic] matches automatic budget transfers or the rest.
      */
     @Query(
         """
         SELECT * FROM trade
         WHERE type = :type AND (occurred_at, id) < (:beforeOccurredAt, :beforeId)
-            AND (:accountId IS NULL OR account_id = :accountId)
-            AND (:toAccountId IS NULL OR to_account_id = :toAccountId)
+            AND (:accountId IS NULL OR account_id IN (SELECT id FROM account WHERE id = :accountId OR parent_id = :accountId))
+            AND (:toAccountId IS NULL OR to_account_id IN (SELECT id FROM account WHERE id = :toAccountId OR parent_id = :toAccountId))
             AND (:categoryId IS NULL OR COALESCE(category_id, offset_category_id) = :categoryId)
             AND (:parentId IS NULL OR category_id = :parentId
                 OR category_id IN (SELECT id FROM category WHERE parent_id = :parentId))
@@ -96,15 +96,16 @@ interface TradeDao {
     /**
      * The History tab's list: every type in [types], newest first, after the (occurred_at, id)
      * cursor. Each null filter matches everything. [accountId] matches the "From" account, and with
-     * [eitherAccount] the "To" one too. [toMillis] is exclusive; [notePattern] is a LIKE pattern
+     * [eitherAccount] the "To" one too; an account id also matches its subaccounts. [toMillis] is exclusive; [notePattern] is a LIKE pattern
      * with '\' as its escape character.
      */
     @Query(
         """
         SELECT * FROM trade
         WHERE type IN (:types) AND (occurred_at, id) < (:beforeOccurredAt, :beforeId)
-            AND (:accountId IS NULL OR account_id = :accountId OR (:eitherAccount AND to_account_id = :accountId))
-            AND (:toAccountId IS NULL OR to_account_id = :toAccountId)
+            AND (:accountId IS NULL OR account_id IN (SELECT id FROM account WHERE id = :accountId OR parent_id = :accountId)
+                OR (:eitherAccount AND to_account_id IN (SELECT id FROM account WHERE id = :accountId OR parent_id = :accountId)))
+            AND (:toAccountId IS NULL OR to_account_id IN (SELECT id FROM account WHERE id = :toAccountId OR parent_id = :toAccountId))
             AND (:categoryId IS NULL OR COALESCE(category_id, offset_category_id) = :categoryId)
             AND (:parentId IS NULL OR category_id = :parentId
                 OR category_id IN (SELECT id FROM category WHERE parent_id = :parentId))

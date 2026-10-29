@@ -3,15 +3,14 @@ package app.outgo.ui.history
 import app.outgo.ui.component.MoneyTextField
 import android.app.DatePickerDialog
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -25,9 +24,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -36,7 +34,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -52,7 +49,11 @@ import app.outgo.domain.CategoryKind
 import app.outgo.domain.TradeType
 import app.outgo.ui.category.OffsetPicker
 import app.outgo.ui.category.PickOption
+import app.outgo.ui.component.BudgetSheet
+import app.outgo.ui.component.CompactOutlinedTextField
+import app.outgo.ui.component.GroupedPickerSheet
 import app.outgo.ui.component.IconView
+import app.outgo.ui.component.PickCell
 import app.outgo.ui.component.lighten
 import app.outgo.util.Money
 import app.outgo.util.formatDate
@@ -70,6 +71,10 @@ private fun budgetItem(categoryId: Long, budgets: List<BudgetWithProgress>, cate
     budgets.firstOrNull { it.categoryId == categoryId }?.let { FilterItem(it.displayName, it.displayIconId, it.categoryColor) }
         ?: categoriesById[categoryId]?.item()
 
+/** A parent account, then its subaccount when one is picked. */
+private fun accountItems(parentId: Long?, subId: Long?, accountsById: Map<Long, AccountEntity>): List<FilterItem> =
+    listOfNotNull(parentId?.let { accountsById[it]?.item() }, subId?.let { accountsById[it]?.item() })
+
 @Composable
 private fun typeLabel(type: Int?): String = stringResource(
     when (type) {
@@ -83,7 +88,8 @@ private fun typeLabel(type: Int?): String = stringResource(
 
 /**
  * The row atop the History list: the current filter on the left, the filter button on the right.
- * `<type> | <account> | <category>/<subcategory>`, or for transfers `<type> | <kind> | <from>/<budget> > <to>`,
+ * `<type> | <account>/<subaccount> | <category>/<subcategory>`, or for transfers
+ * `<type> | <kind> | <from>/<subaccount>/<budget> > <to>/<subaccount>`,
  * then the dates, the note searched and the amount range.
  */
 @Composable
@@ -115,12 +121,10 @@ internal fun HistoryFilterRow(
                     filter.automatic?.let {
                         groups += listOf(text(stringResource(if (it) R.string.history_filter_automatic else R.string.history_filter_manual)))
                     }
-                    groups += listOfNotNull(
-                        filter.accountId?.let { accountsById[it]?.item() },
-                        filter.budgetId?.let { budgetItem(it, budgets, categoriesById) },
-                    )
+                    groups += accountItems(filter.accountId, filter.subAccountId, accountsById) +
+                        listOfNotNull(filter.budgetId?.let { budgetItem(it, budgets, categoriesById) })
                 } else {
-                    groups += listOfNotNull(filter.accountId?.let { accountsById[it]?.item() })
+                    groups += accountItems(filter.accountId, filter.subAccountId, accountsById)
                     groups += listOfNotNull(
                         filter.categoryId?.let { categoriesById[it]?.item() },
                         filter.subCategoryId?.let { categoriesById[it]?.item() },
@@ -146,15 +150,15 @@ internal fun HistoryFilterRow(
                     if (index > 0) Separator("|")
                     ChipGroup(group)
                 }
-                val toAccount = filter.toAccountId?.takeIf { filter.isTransfer }?.let { accountsById[it]?.item() }
-                if (toAccount != null) {
+                val toAccount = if (filter.isTransfer) accountItems(filter.toAccountId, filter.toSubAccountId, accountsById) else emptyList()
+                if (toAccount.isNotEmpty()) {
                     Icon(
                         painterResource(R.drawable.ph_arrow_right),
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(14.dp),
                     )
-                    FilterChip(toAccount)
+                    ChipGroup(toAccount)
                 }
             }
         }
@@ -214,14 +218,13 @@ internal fun HistoryFilterSheet(
     onDismiss: () -> Unit,
 ) {
     val any = stringResource(R.string.history_filter_any)
-    fun <T> options(items: List<T>, pick: (T) -> PickOption<Long?>) = listOf(PickOption<Long?>(null, any)) + items.map(pick)
-    val accounts = options(accountsById.values.filter { !it.archived && !it.isParent }.sortedBy { it.sortOrder }) {
-        PickOption(it.id, it.name, it.iconId, it.color)
-    }
     val kind = if (filter.type == TradeType.INCOME) CategoryKind.INCOME else CategoryKind.EXPENSE
-    fun categories(parentId: Long?) = options(
+    fun categories(parentId: Long?) = anyAnd(
+        any,
         categoriesById.values.filter { it.parentId == parentId && !it.archived && (parentId != null || it.type == kind) }.sortedBy { it.sortOrder },
     ) { PickOption(it.id, it.name, it.iconId, it.color) }
+    val categoryTitle = stringResource(R.string.trade_select_category_title)
+    val categoryHint = stringResource(R.string.trade_search_category_hint)
 
     // Opened tall: the sheet has text fields, and the keyboard would cover a half-open one.
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
@@ -239,9 +242,21 @@ internal fun HistoryFilterSheet(
             ) {
                 // Category, budget and transfer picks belong to one type: a new type drops them.
                 if (it != filter.type) {
-                    onChange(filter.copy(type = it, categoryId = null, subCategoryId = null, budgetId = null, toAccountId = null, automatic = null))
+                    onChange(
+                        filter.copy(
+                            type = it, categoryId = null, subCategoryId = null, budgetId = null,
+                            toAccountId = null, toSubAccountId = null, automatic = null,
+                        ),
+                    )
                 }
             }
+            // Right under the type, whatever it is: a new type keeps it.
+            AccountPicker(
+                stringResource(if (filter.isTransfer) R.string.history_filter_from else R.string.history_filter_account),
+                filter.accountId,
+                filter.subAccountId,
+                accountsById,
+            ) { parent, sub -> onChange(filter.copy(accountId = parent, subAccountId = sub)) }
             if (filter.isTransfer) {
                 OffsetPicker(
                     stringResource(R.string.history_filter_kind),
@@ -252,47 +267,71 @@ internal fun HistoryFilterSheet(
                         PickOption(false, stringResource(R.string.history_filter_manual)),
                     ),
                 ) { onChange(filter.copy(automatic = it)) }
-                OffsetPicker(stringResource(R.string.history_filter_from), filter.accountId, accounts) {
-                    onChange(filter.copy(accountId = it))
-                }
                 OffsetPicker(
                     stringResource(R.string.history_filter_budget),
                     filter.budgetId,
-                    options(budgets.filter { it.categoryId != null }) {
+                    anyAnd(any, budgets.filter { it.categoryId != null }) {
                         PickOption(it.categoryId, it.displayName, it.displayIconId, it.categoryColor)
                     },
-                ) { onChange(filter.copy(budgetId = it)) }
-                OffsetPicker(stringResource(R.string.history_filter_to), filter.toAccountId, accounts) {
-                    onChange(filter.copy(toAccountId = it))
-                }
-            } else {
-                OffsetPicker(stringResource(R.string.history_filter_account), filter.accountId, accounts) {
-                    onChange(filter.copy(accountId = it))
-                }
+                    sheet = { dismiss ->
+                        BudgetSheet(
+                            budgets = budgets,
+                            selectedId = filter.budgetId,
+                            onSelect = { onChange(filter.copy(budgetId = it)); dismiss() },
+                            onDismiss = dismiss,
+                            noneLabel = any,
+                        )
+                    },
+                ) {}
+                AccountPicker(
+                    stringResource(R.string.history_filter_to),
+                    filter.toAccountId,
+                    filter.toSubAccountId,
+                    accountsById,
+                ) { parent, sub -> onChange(filter.copy(toAccountId = parent, toSubAccountId = sub)) }
+            } else if (filter.hasCategories) {
                 // Categories are per type: pick Expense or Income first (adjustments have none).
-                if (filter.hasCategories) {
-                    OffsetPicker(stringResource(R.string.history_filter_category), filter.categoryId, categories(null)) {
-                        // Another parent's subcategory no longer applies.
-                        if (it != filter.categoryId) onChange(filter.copy(categoryId = it, subCategoryId = null))
-                    }
-                    // A subcategory needs its category.
-                    filter.categoryId?.let { parentId ->
-                        OffsetPicker(
-                            stringResource(R.string.history_filter_subcategory),
-                            filter.subCategoryId,
-                            categories(parentId),
-                            indent = true,
-                        ) { onChange(filter.copy(subCategoryId = it)) }
-                    }
+                val parents = categories(null)
+                OffsetPicker(
+                    stringResource(R.string.history_filter_category),
+                    filter.categoryId,
+                    parents,
+                    sheet = { dismiss ->
+                        GridPickerSheet(categoryTitle, categoryHint, parents, filter.categoryId, section = "", dismiss) {
+                            // Another parent's subcategory no longer applies.
+                            if (it != filter.categoryId) onChange(filter.copy(categoryId = it, subCategoryId = null))
+                        }
+                    },
+                ) {}
+                // A subcategory needs its category.
+                filter.categoryId?.let { parentId ->
+                    val children = categories(parentId)
+                    OffsetPicker(
+                        stringResource(R.string.history_filter_subcategory),
+                        filter.subCategoryId,
+                        children,
+                        indent = true,
+                        sheet = { dismiss ->
+                            GridPickerSheet(
+                                categoryTitle, categoryHint, children, filter.subCategoryId,
+                                section = categoriesById[parentId]?.name.orEmpty(), dismiss,
+                            ) { onChange(filter.copy(subCategoryId = it)) }
+                        },
+                    ) {}
                 }
             }
-            DateField(stringResource(R.string.history_filter_from_date), filter.fromDay) { onChange(filter.copy(fromDay = it)) }
-            DateField(stringResource(R.string.history_filter_to_date), filter.toDay) { onChange(filter.copy(toDay = it)) }
-            OutlinedTextField(
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                DateField(stringResource(R.string.history_filter_from_date), filter.fromDay, Modifier.weight(1f)) {
+                    onChange(filter.copy(fromDay = it))
+                }
+                DateField(stringResource(R.string.history_filter_to_date), filter.toDay, Modifier.weight(1f)) {
+                    onChange(filter.copy(toDay = it))
+                }
+            }
+            CompactOutlinedTextField(
                 value = filter.note,
                 onValueChange = { onChange(filter.copy(note = it.take(100))) },
-                label = { Text(stringResource(R.string.history_filter_note)) },
-                singleLine = true,
+                label = stringResource(R.string.history_filter_note),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -311,54 +350,137 @@ internal fun HistoryFilterSheet(
     }
 }
 
-/** A day picked in the system date picker, shown like an [OffsetPicker] row; × clears it. */
+/** "Any", then [items] as picker options. */
+private fun <T> anyAnd(any: String, items: List<T>, pick: (T) -> PickOption<Long?>): List<PickOption<Long?>> =
+    listOf(PickOption<Long?>(null, any)) + items.map(pick)
+
+/**
+ * A parent account row, then, once one is picked, an indented subaccount row. A parent alone matches
+ * all its subaccounts. [onChange] gets the new parent and subaccount.
+ */
 @Composable
-private fun DateField(label: String, dayStart: Long?, onChange: (Long?) -> Unit) {
+private fun AccountPicker(
+    label: String,
+    parentId: Long?,
+    subId: Long?,
+    accountsById: Map<Long, AccountEntity>,
+    onChange: (parent: Long?, sub: Long?) -> Unit,
+) {
+    val any = stringResource(R.string.history_filter_any)
+    val title = stringResource(R.string.trade_select_account_title)
+    val hint = stringResource(R.string.trade_search_account_hint)
+    val active = accountsById.values.filter { !it.archived }.sortedBy { it.sortOrder }
+    fun options(accounts: List<AccountEntity>) = anyAnd(any, accounts) { PickOption(it.id, it.name, it.iconId, it.color) }
+    val parents = options(active.filter { it.isParent })
+    OffsetPicker(
+        label,
+        parentId,
+        parents,
+        sheet = { dismiss ->
+            // Another parent's subaccount no longer applies.
+            GridPickerSheet(title, hint, parents, parentId, section = "", dismiss) { if (it != parentId) onChange(it, null) }
+        },
+    ) {}
+    parentId?.let { parent ->
+        val subs = options(active.filter { it.parentId == parent })
+        OffsetPicker(
+            stringResource(R.string.history_filter_subaccount),
+            subId,
+            subs,
+            indent = true,
+            sheet = { dismiss ->
+                GridPickerSheet(title, hint, subs, subId, section = accountsById[parent]?.name.orEmpty(), dismiss) { onChange(parent, it) }
+            },
+        ) {}
+    }
+}
+
+/** One cell of [GridPickerSheet]; [SECTION_ID] is its one section. */
+private data class GridPick(val id: Long, val parentId: Long?, val name: String, val iconId: Long?, val color: Int)
+
+private const val SECTION_ID = -1L
+
+/**
+ * [options] as a grid of icons, like the Trade screen's pickers: "Any" (the first option, null) as a
+ * button on top, the rest in one section titled [section] (none when blank). A pick closes it.
+ */
+@Composable
+private fun GridPickerSheet(
+    title: String,
+    searchHint: String,
+    options: List<PickOption<Long?>>,
+    selectedId: Long?,
+    section: String,
+    dismiss: () -> Unit,
+    onSelect: (Long?) -> Unit,
+) {
+    val items = remember(options, section) {
+        listOf(GridPick(SECTION_ID, null, section, null, 0)) +
+            options.mapNotNull { o -> o.value?.let { GridPick(it, SECTION_ID, o.label, o.iconId, o.color ?: 0) } }
+    }
+    GroupedPickerSheet(
+        title = title,
+        searchHint = searchHint,
+        items = items,
+        parentId = { it.parentId },
+        id = { it.id },
+        name = { it.name },
+        selectedId = selectedId,
+        cell = { item, selected, onClick, modifier -> PickCell(item.name, item.iconId, item.color, selected, onClick, modifier, wrap = true) },
+        onSelect = { onSelect(it.id); dismiss() },
+        onDismiss = dismiss,
+        header = {
+            TextButton(onClick = { onSelect(null); dismiss() }) { Text(options.first().label) }
+        },
+    )
+}
+
+/**
+ * A day picked in the system date picker, drawn like the amount fields: an outlined field with its
+ * label inside; × clears it.
+ */
+@Composable
+private fun DateField(label: String, dayStart: Long?, modifier: Modifier, onChange: (Long?) -> Unit) {
     val context = LocalContext.current
-    val shape = OutlinedTextFieldDefaults.shape
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .clip(shape)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
-            .clickable {
-                val cal = Calendar.getInstance().apply { dayStart?.let { timeInMillis = it } }
-                DatePickerDialog(
-                    context,
-                    { _, year, month, day ->
-                        val picked = Calendar.getInstance().apply {
-                            clear()
-                            set(year, month, day)
-                        }
-                        onChange(picked.timeInMillis)
-                    },
-                    cal.get(Calendar.YEAR),
-                    cal.get(Calendar.MONTH),
-                    cal.get(Calendar.DAY_OF_MONTH),
-                ).show()
-            }
-            .padding(start = 12.dp),
-    ) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-        Text(
-            dayStart?.let(::formatDate) ?: stringResource(R.string.history_filter_any),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
+    Box(modifier) {
+        CompactOutlinedTextField(
+            value = dayStart?.let(::formatDate).orEmpty(),
+            onValueChange = {},
+            readOnly = true,
+            label = label,
+            trailingIcon = {
+                if (dayStart == null) {
+                    Icon(painterResource(R.drawable.ph_caret_down), contentDescription = null, modifier = Modifier.size(12.dp))
+                } else {
+                    IconButton(onClick = { onChange(null) }) {
+                        Icon(painterResource(R.drawable.ph_x), contentDescription = null, modifier = Modifier.size(16.dp))
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
         )
-        if (dayStart == null) {
-            Icon(
-                painter = painterResource(R.drawable.ph_caret_down),
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = 4.dp, end = 12.dp).size(12.dp),
-            )
-        } else {
-            IconButton(onClick = { onChange(null) }, modifier = Modifier.size(40.dp)) {
-                Icon(painterResource(R.drawable.ph_x), contentDescription = null, modifier = Modifier.size(16.dp))
-            }
-        }
+        // Taps open the date picker instead of focusing the field; the × (48dp wide) stays tappable.
+        Box(
+            Modifier
+                .matchParentSize()
+                .padding(end = if (dayStart == null) 0.dp else 48.dp)
+                .clickable(interactionSource = null, indication = null) {
+                    val cal = Calendar.getInstance().apply { dayStart?.let { timeInMillis = it } }
+                    DatePickerDialog(
+                        context,
+                        { _, year, month, day ->
+                            val picked = Calendar.getInstance().apply {
+                                clear()
+                                set(year, month, day)
+                            }
+                            onChange(picked.timeInMillis)
+                        },
+                        cal.get(Calendar.YEAR),
+                        cal.get(Calendar.MONTH),
+                        cal.get(Calendar.DAY_OF_MONTH),
+                    ).show()
+                },
+        )
     }
 }
 
@@ -375,5 +497,6 @@ private fun AmountFilterField(label: String, amount: Long?, modifier: Modifier, 
         },
         label = label,
         modifier = modifier,
+        compact = true,
     )
 }

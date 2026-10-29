@@ -37,6 +37,7 @@
     <string name="history_filter_any">All</string>
     <string name="history_filter_type">Type</string>
     <string name="history_filter_account">Account</string>
+    <string name="history_filter_subaccount">Subaccount</string>
     <string name="history_filter_category">Category</string>
     <string name="history_filter_subcategory">Subcategory</string>
     <string name="history_filter_kind">Kind</string>

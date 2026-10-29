@@ -34,6 +34,7 @@
     <string name="history_filter_any">Tất cả</string>
     <string name="history_filter_type">Loại</string>
     <string name="history_filter_account">Tài khoản</string>
+    <string name="history_filter_subaccount">Tài khoản con</string>
     <string name="history_filter_category">Danh mục</string>
     <string name="history_filter_subcategory">Danh mục con</string>
     <string name="history_filter_kind">Loại</string>

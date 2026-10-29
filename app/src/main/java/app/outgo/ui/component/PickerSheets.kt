@@ -150,7 +150,10 @@ fun BudgetSheet(
     )
 }
 
-/** Children grouped under their parent's name, five per row, filtered by a search on the children's names. */
+/**
+ * Children grouped under their parent's name, five per row, filtered by a search on the children's names.
+ * A parent with a blank name heads its section with no title.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun <T> GroupedPickerSheet(
@@ -206,8 +209,11 @@ fun <T> GroupedPickerSheet(
                 groups.forEach { (parent, children) ->
                     item(key = id(parent)) {
                         Column {
-                            Text(name(parent), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium)
-                            Spacer(Modifier.height(8.dp))
+                            // A blank parent name: one untitled section (a flat grid).
+                            if (name(parent).isNotBlank()) {
+                                Text(name(parent), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium)
+                                Spacer(Modifier.height(8.dp))
+                            }
                             children.chunked(5).forEach { rowItems ->
                                 Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                                     rowItems.forEach { child ->
