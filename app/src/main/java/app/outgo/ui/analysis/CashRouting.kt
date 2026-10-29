@@ -13,7 +13,9 @@ import kotlin.math.min
  * cell and more per bend, more again where it crosses another link, and a great deal where it would
  * run along another one (so links keep their own lanes, [CashNodeMetrics.linkGap] apart); it never
  * goes through a node, nor out past the carets' tips and tails ([CashNodeLayout.frame]), so it never
- * goes round to the far side of a caret. A link may leave or enter an account by any of its sides.
+ * goes round to the far side of a caret. A link may leave or enter an account by any of its sides,
+ * along the straight part only (clear of the [CashNodeMetrics.accountRadius] corners), and keeps
+ * [CashNodeMetrics.accountMargin] away from every account it neither leaves nor enters.
  * Links leaving or entering the same caret may share their run: they read as one band that splits.
  * The largest links are routed first, so they get the straightest ways.
  *
@@ -81,6 +83,26 @@ internal fun routeCashLinks(
         block(b[0], b[1], b[2], b[3])
         if (!hub[i] && labelW[i] > 0f) block(layout.labelX[i] - labelW[i] / 2f, layout.labelTop[i], layout.labelX[i] + labelW[i] / 2f, layout.labelTop[i] + labelH[i])
     }
+    // A thin ring around each account that only its own links may cross: -1 none, -2 several
+    // accounts', else the account's node index.
+    val halo = IntArray(cells) { -1 }
+    nodes.indices.filter { hub[it] }.forEach { i ->
+        val b = boxes[i]
+        val mg = m.accountMargin
+        val c0 = max(0, floor((b[0] - mg) / g - 0.5f).toInt() + 1)
+        val c1 = min(cols - 1, ceil((b[2] + mg) / g - 0.5f).toInt() - 1)
+        val r0 = max(0, floor((b[1] - mg) / g - 0.5f).toInt() + 1)
+        val r1 = min(rows - 1, ceil((b[3] + mg) / g - 0.5f).toInt() - 1)
+        for (cy in r0..r1) for (cx in c0..c1) {
+            val cell = cy * cols + cx
+            if (!blocked[cell]) halo[cell] = if (halo[cell] == -1 || halo[cell] == i) i else -2
+        }
+    }
+    // The same rings, as boxes, for [spread].
+    val keepOut = nodes.indices.map { i ->
+        val b = boxes[i]
+        if (hub[i]) floatArrayOf(b[0] - m.accountMargin, b[1] - m.accountMargin, b[2] + m.accountMargin, b[3] + m.accountMargin) else b
+    }
     // Nothing runs out past the carets: the frame's outside is blocked too.
     val frame = layout.frame
     for (r in 0 until rows) for (c in 0 until cols) {
@@ -139,6 +161,8 @@ internal fun routeCashLinks(
                 if (bc !in 0 until cols || br !in 0 until rows) return -1
                 val b = br * cols + bc
                 if (abs(k) <= wide && blocked[b]) return -1
+                val near = halo[b]
+                if (abs(k) <= wide && near != -1 && near != link.from && near != link.to) return -1
                 val along = if (lv) ownH[b] else ownV[b]
                 if (along != -1 && along != owner) cost += ALONG
             }
@@ -149,21 +173,25 @@ internal fun routeCashLinks(
 
         // A port: the cell next to the node, the way the link moves there, and the point on the
         // node's edge (or the caret's tip or notch) it is drawn from or to.
-        data class Port(val cell: Int, val dir: Int, val x: Float, val y: Float, val bias: Int)
+        // [run]: on a lengthened port, the cells between the node and [cell], in path order; [runCost]
+        // what entering them costs.
+        data class Port(val cell: Int, val dir: Int, val x: Float, val y: Float, val bias: Int, val run: IntArray = IntArray(0), val runCost: Int = 0)
         fun accountPorts(i: Int, out: Boolean): List<Port> {
             val (left, top, right, bottom) = boxes[i].toList()
             val ports = ArrayList<Port>()
+            // Only the straight part of a side: the rounded corners are no place to start or end.
+            val corner = m.accountRadius
             val inset = w / 2f + g / 2f
             // Every lane along each side the link fits on; the middle ones cheapest, so a lone link
             // sits centred.
             for (c in col(left + inset)..col(right - inset)) {
-                if (cx(c) - w / 2f < left || cx(c) + w / 2f > right) continue
+                if (cx(c) - w / 2f < left + corner || cx(c) + w / 2f > right - corner) continue
                 val bias = abs(cx(c) - layout.x[i]).toInt() / g.toInt()
                 ports += Port(row(top - g / 2f) * cols + c, if (out) UP else DOWN, cx(c), top, bias)
                 ports += Port(row(bottom + g / 2f) * cols + c, if (out) DOWN else UP, cx(c), bottom, bias)
             }
             for (r in row(top + inset)..row(bottom - inset)) {
-                if (cy(r) - w / 2f < top || cy(r) + w / 2f > bottom) continue
+                if (cy(r) - w / 2f < top + corner || cy(r) + w / 2f > bottom - corner) continue
                 val bias = abs(cy(r) - layout.y[i]).toInt() / g.toInt()
                 ports += Port(r * cols + col(left - g / 2f), if (out) LEFT else RIGHT, left, cy(r), bias)
                 ports += Port(r * cols + col(right + g / 2f), if (out) RIGHT else LEFT, right, cy(r), bias)
@@ -181,76 +209,117 @@ internal fun routeCashLinks(
             }
             return Port(cell, dir, px, py, 0)
         }
-        val starts = if (hub[link.from]) accountPorts(link.from, out = true) else listOf(caretPort(link.from, out = true))
-        val goals = if (hub[link.to]) accountPorts(link.to, out = false) else listOf(caretPort(link.to, out = false))
-        if (starts.isEmpty() || goals.isEmpty()) {
+        // An account's port moved [lead] cells out, so the link runs straight that far from or into the
+        // account: room for its bend, and a transfer's arrowhead. Null where that run is blocked.
+        fun lengthen(p: Port, lead: Int, out: Boolean): Port? {
+            if (lead <= 1) return p
+            // Out: away from the node, the way the link moves. In: back against it.
+            val sx = if (out) DX[p.dir] else -DX[p.dir]
+            val sy = if (out) DY[p.dir] else -DY[p.dir]
+            val cells = IntArray(lead) { k ->
+                val c = p.cell % cols + sx * k
+                val r = p.cell / cols + sy * k
+                if (c !in 0 until cols || r !in 0 until rows) return null
+                r * cols + c
+            }
+            // Path order: out, from the node; in, towards it.
+            val run = if (out) cells.copyOfRange(0, lead - 1) else cells.copyOfRange(1, lead).reversedArray()
+            var cost = 0
+            for (cell in run) {
+                val e = enter(cell, p.dir)
+                if (e < 0) return null
+                cost += e
+            }
+            return p.copy(cell = cells[lead - 1], run = run, runCost = cost)
+        }
+        fun lead(room: Float) = ceil(room / g + 0.5f).toInt()
+        val bendRoom = m.linkCorner + w / 2f
+        val leadOut = lead(bendRoom)
+        val leadIn = lead(if (flow.isTransfer(link)) bendRoom + max(w * ARROW_LENGTH, m.arrow) else bendRoom)
+        val plainStarts = if (hub[link.from]) accountPorts(link.from, out = true) else listOf(caretPort(link.from, out = true))
+        val plainGoals = if (hub[link.to]) accountPorts(link.to, out = false) else listOf(caretPort(link.to, out = false))
+        if (plainStarts.isEmpty() || plainGoals.isEmpty()) {
             // An account too small for this link on every side: straight between the middles.
             routes[l] = floatArrayOf(layout.x[link.from], layout.y[link.from], layout.x[link.to], layout.y[link.to])
             return@forEach
         }
 
-        // A*, over (cell, direction it was entered in).
-        gCost.fill(Int.MAX_VALUE)
-        goals.forEach { goalDir[it.cell] = it.dir }
-        val gx0 = goals.minOf { it.cell % cols }
-        val gx1 = goals.maxOf { it.cell % cols }
-        val gy0 = goals.minOf { it.cell / cols }
-        val gy1 = goals.maxOf { it.cell / cols }
-        fun guess(cell: Int): Int {
-            val c = cell % cols
-            val r = cell / cols
-            val dx = if (c < gx0) gx0 - c else if (c > gx1) c - gx1 else 0
-            val dy = if (r < gy0) gy0 - r else if (r > gy1) r - gy1 else 0
-            return (dx + dy) * STEP
-        }
-        val open = PriorityQueue<Long>()
-        fun push(state: Int, cost: Int) {
-            gCost[state] = cost
-            open += ((cost + guess(state / 4)).toLong() shl 32) or state.toLong()
-        }
-        starts.forEach { p ->
-            val extra = enter(p.cell, p.dir)
-            if (extra < 0) return@forEach
-            val state = p.cell * 4 + p.dir
-            val cost = extra + p.bias * 3
-            if (cost < gCost[state]) {
-                parent[state] = -1
-                push(state, cost)
+        // A*, over (cell, direction it was entered in). The goal state found, or -1.
+        fun search(starts: List<Port>, goals: List<Port>): Int {
+            if (starts.isEmpty() || goals.isEmpty()) return -1
+            gCost.fill(Int.MAX_VALUE)
+            goals.forEach { goalDir[it.cell] = it.dir }
+            val gx0 = goals.minOf { it.cell % cols }
+            val gx1 = goals.maxOf { it.cell % cols }
+            val gy0 = goals.minOf { it.cell / cols }
+            val gy1 = goals.maxOf { it.cell / cols }
+            fun guess(cell: Int): Int {
+                val c = cell % cols
+                val r = cell / cols
+                val dx = if (c < gx0) gx0 - c else if (c > gx1) c - gx1 else 0
+                val dy = if (r < gy0) gy0 - r else if (r > gy1) r - gy1 else 0
+                return (dx + dy) * STEP
             }
-        }
-        var found = -1
-        var looked = 0
-        while (open.isNotEmpty() && looked < SEARCH_LIMIT) {
-            val top = open.poll()
-            val state = (top and 0xffffffffL).toInt()
-            val cost = gCost[state]
-            if ((top ushr 32).toInt() - guess(state / 4) > cost) continue
-            looked++
-            val cell = state / 4
-            val dir = state % 4
-            if (goalDir[cell] == dir) {
-                found = state
-                break
+            val open = PriorityQueue<Long>()
+            fun push(state: Int, cost: Int) {
+                gCost[state] = cost
+                open += ((cost + guess(state / 4)).toLong() shl 32) or state.toLong()
             }
-            val c = cell % cols
-            val r = cell / cols
-            for (nd in 0 until 4) {
-                if (nd == (dir + 2) % 4) continue
-                val nc = c + DX[nd]
-                val nr = r + DY[nd]
-                if (nc !in 0 until cols || nr !in 0 until rows) continue
-                val next = nr * cols + nc
-                val extra = enter(next, nd)
-                if (extra < 0) continue
-                val nCost = cost + STEP + extra + if (nd != dir) BEND else 0
-                val ns = next * 4 + nd
-                if (nCost < gCost[ns]) {
-                    parent[ns] = state
-                    push(ns, nCost)
+            starts.forEach { p ->
+                val extra = enter(p.cell, p.dir)
+                if (extra < 0) return@forEach
+                val state = p.cell * 4 + p.dir
+                val cost = extra + p.runCost + p.bias * 3
+                if (cost < gCost[state]) {
+                    parent[state] = -1
+                    push(state, cost)
                 }
             }
+            var found = -1
+            var looked = 0
+            while (open.isNotEmpty() && looked < SEARCH_LIMIT) {
+                val top = open.poll()
+                val state = (top and 0xffffffffL).toInt()
+                val cost = gCost[state]
+                if ((top ushr 32).toInt() - guess(state / 4) > cost) continue
+                looked++
+                val cell = state / 4
+                val dir = state % 4
+                if (goalDir[cell] == dir) {
+                    found = state
+                    break
+                }
+                val c = cell % cols
+                val r = cell / cols
+                for (nd in 0 until 4) {
+                    if (nd == (dir + 2) % 4) continue
+                    val nc = c + DX[nd]
+                    val nr = r + DY[nd]
+                    if (nc !in 0 until cols || nr !in 0 until rows) continue
+                    val next = nr * cols + nc
+                    val extra = enter(next, nd)
+                    if (extra < 0) continue
+                    val nCost = cost + STEP + extra + if (nd != dir) BEND else 0
+                    val ns = next * 4 + nd
+                    if (nCost < gCost[ns]) {
+                        parent[ns] = state
+                        push(ns, nCost)
+                    }
+                }
+            }
+            goals.forEach { goalDir[it.cell] = -1 }
+            return found
         }
-        goals.forEach { goalDir[it.cell] = -1 }
+
+        // First with a straight run at each account end; where no way has room for that, without.
+        var starts = plainStarts.map { if (hub[link.from]) lengthen(it, leadOut, out = true) else it }.filterNotNull()
+        var goals = plainGoals.map { if (hub[link.to]) lengthen(it, leadIn, out = false) else it }.filterNotNull()
+        var found = search(starts, goals)
+        if (found < 0) {
+            starts = plainStarts
+            goals = plainGoals
+            found = search(starts, goals)
+        }
 
         if (found < 0) {
             // No way through: the plain way, out, across and in.
@@ -271,6 +340,9 @@ internal fun routeCashLinks(
         val first = path.first()
         val start = starts.first { it.cell == first / 4 && it.dir == first % 4 }
         val goal = goals.first { it.cell == found / 4 && it.dir == found % 4 }
+        // The straight runs at the ends belong to the path too (no corners in them).
+        path.addAll(0, start.run.map { it * 4 + start.dir })
+        path.addAll(goal.run.map { it * 4 + goal.dir })
         val points = ArrayList<Float>()
         points += start.x
         points += start.y
@@ -303,7 +375,7 @@ internal fun routeCashLinks(
         }
     }
     val out = routes.map { it ?: FloatArray(0) }.toMutableList()
-    spread(flow, out, owners, boxes, layout.linkW, frame, m)
+    spread(flow, out, owners, keepOut, layout.linkW, frame, m)
     return out
 }
 
@@ -325,8 +397,9 @@ private fun spread(
     m: CashNodeMetrics,
 ) {
     val g = m.cell
-    val bendRoom = g * 3
-    val arrowRoom = g * 5
+    // Room a bend needs from a link's end, and a transfer's arrowhead too: as the router left it.
+    fun bendRoom(l: Int) = max(g * 3, m.linkCorner + linkW[l] / 2f)
+    fun arrowRoom(l: Int) = max(g * 5, max(linkW[l] * ARROW_LENGTH, m.arrow))
 
     class Step(val l: Int, val k: Int, val lv: Boolean, val lo: Float, val hi: Float, val a: Float, val b: Float, var target: Float = 0f)
 
@@ -401,7 +474,8 @@ private fun spread(
                     val after = if (lv) r[2 * k + 5] else r[2 * k + 4]
                     val here = if (lv) y0 else x0
                     if ((here - before) * (after - here) <= 0f) continue
-                    val endRoom = if (k + 2 == count - 1 && flow.isTransfer(flow.links[l])) bendRoom + arrowRoom else bendRoom
+                    val bendRoom = bendRoom(l)
+                    val endRoom = if (k + 2 == count - 1 && flow.isTransfer(flow.links[l])) bendRoom + arrowRoom(l) else bendRoom
                     val lo = min(before, after) + if (before < after) bendRoom else endRoom
                     val hi = max(before, after) - if (before < after) endRoom else bendRoom
                     if (hi <= lo) continue

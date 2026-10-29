@@ -158,6 +158,7 @@ class CashFlowTest {
     private val metrics = CashNodeMetrics(
         accountW = 150f..230f, accountH = 220f..320f, caret = 70f..110f, link = 4f..24f,
         labelGap = 6f, gap = 16f, lanes = 50f, cell = 8f, linkGap = 6f,
+        accountRadius = 20f, accountMargin = 8f, linkCorner = 16f, arrow = 18f,
     )
 
     private fun busyFlow() = buildCashFlow(
@@ -337,6 +338,79 @@ class CashFlowTest {
             val apart = if (pLevel) abs(p.y0 - q.y0) else abs(p.x0 - q.x0)
             val shared = if (pLevel) min(p.x1, q.x1) - max(p.x0, q.x0) else min(p.y1, q.y1) - max(p.y0, q.y0)
             if (shared > room) assertTrue("links ${p.l} and ${q.l} share a lane", apart >= room)
+        }
+    }
+
+    @Test
+    fun `links leave and enter accounts away from their rounded corners`() {
+        val flow = busyFlow()
+        for ((width, height) in listOf(1100f to 2000f, 1100f to 900f)) {
+            val g = layout(flow, width, height)
+            flow.links.forEachIndexed { l, link ->
+                val r = g.routes[l]
+                val half = g.linkW[l] / 2f
+                fun check(i: Int, x: Float, y: Float) {
+                    val b = g.box(flow, i)
+                    val c = metrics.accountRadius
+                    val onLevelSide = abs(y - b[1]) < 0.6f || abs(y - b[3]) < 0.6f
+                    if (onLevelSide) {
+                        assertTrue("link $l at a corner of $i", x - half >= b[0] + c - 0.5f && x + half <= b[2] - c + 0.5f)
+                    } else {
+                        assertTrue("link $l at a corner of $i", y - half >= b[1] + c - 0.5f && y + half <= b[3] - c + 0.5f)
+                    }
+                }
+                if (flow.nodes[link.from].column == CashColumn.ACCOUNT) check(link.from, r[0], r[1])
+                if (flow.nodes[link.to].column == CashColumn.ACCOUNT) check(link.to, r[r.size - 2], r[r.size - 1])
+            }
+        }
+    }
+
+    @Test
+    fun `links keep a margin from accounts they don't touch`() {
+        val flow = busyFlow()
+        for ((width, height) in listOf(1100f to 2000f, 1100f to 900f)) {
+            val g = layout(flow, width, height)
+            // The router works on a grid, so allow half a cell less than the margin.
+            val mg = metrics.accountMargin - metrics.cell / 2f
+            flow.links.forEachIndexed { l, link ->
+                val r = g.routes[l]
+                val half = g.linkW[l] / 2f
+                flow.column(CashColumn.ACCOUNT).filter { it != link.from && it != link.to }.forEach { i ->
+                    val b = g.box(flow, i)
+                    for (k in 2 until r.size step 2) {
+                        val x0 = min(r[k - 2], r[k]) - half
+                        val x1 = max(r[k - 2], r[k]) + half
+                        val y0 = min(r[k - 1], r[k + 1]) - half
+                        val y1 = max(r[k - 1], r[k + 1]) + half
+                        val hits = x1 > b[0] - mg && x0 < b[2] + mg && y1 > b[1] - mg && y0 < b[3] + mg
+                        assertTrue("link $l runs too close to account $i", !hits)
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `a bend next to an account leaves room for its rounding and the arrowhead`() {
+        val flow = busyFlow()
+        for ((width, height) in listOf(1100f to 2000f, 1100f to 900f)) {
+            val g = layout(flow, width, height)
+            flow.links.forEachIndexed { l, link ->
+                val r = g.routes[l]
+                if (r.size < 6) return@forEachIndexed // straight: no bend at all
+                val w = g.linkW[l]
+                val bend = metrics.linkCorner + w / 2f
+                if (flow.nodes[link.from].column == CashColumn.ACCOUNT) {
+                    val first = abs(r[2] - r[0]) + abs(r[3] - r[1])
+                    assertTrue("link $l bends right out of its account ($first)", first >= bend - 0.5f)
+                }
+                if (flow.nodes[link.to].column == CashColumn.ACCOUNT) {
+                    val k = r.size - 2
+                    val last = abs(r[k] - r[k - 2]) + abs(r[k + 1] - r[k - 1])
+                    val need = bend + if (flow.isTransfer(link)) max(w * ARROW_LENGTH, metrics.arrow) else 0f
+                    assertTrue("link $l bends right into its account ($last < $need)", last >= need - 0.5f)
+                }
+            }
         }
     }
 

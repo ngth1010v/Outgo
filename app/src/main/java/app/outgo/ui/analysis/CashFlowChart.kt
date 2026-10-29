@@ -1,5 +1,8 @@
 package app.outgo.ui.analysis
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material3.MaterialTheme
@@ -113,8 +116,8 @@ fun CashFlowChart(
         value = Triple(flow, caretTexts, layout)
     }
     val layout = made?.takeIf { it.first === flow && it.second === caretTexts }?.third
-    val drawing = remember(layout, labels, units, style, density) {
-        layout?.let { nodeDrawing(flow, it, caretTexts, labels, units, measurer, style, density, size.width.toFloat(), size.height.toFloat()) }
+    val drawing = remember(layout, labels, units, style, density, metrics) {
+        layout?.let { nodeDrawing(flow, it, caretTexts, labels, units, measurer, style, density, metrics, size.width.toFloat(), size.height.toFloat()) }
     }
     val icons = rememberNodeIcons(flow)
     val glyphs = CaretGlyphs(
@@ -124,6 +127,18 @@ fun CashFlowChart(
     )
     val select by rememberUpdatedState(onSelect)
     val picked by rememberUpdatedState(selected)
+    // The focus crossfades: [focusFrom] fades out while [focusTo] fades in, as [focusMix] runs 0 to 1.
+    var focusFrom by remember(flow) { mutableStateOf<Int?>(null) }
+    var focusTo by remember(flow) { mutableStateOf(selected) }
+    val focusMix = remember(flow) { Animatable(1f) }
+    LaunchedEffect(flow, selected) {
+        if (selected == focusTo) return@LaunchedEffect
+        // ponytail: a tap mid-fade restarts from the old focus (a small jump), like the transfer flows chart.
+        focusFrom = focusTo
+        focusTo = selected
+        focusMix.snapTo(0f)
+        focusMix.animateTo(1f, tween(durationMillis = FOCUS_MS, easing = FastOutSlowInEasing))
+    }
 
     Canvas(
         modifier = modifier
@@ -139,42 +154,58 @@ fun CashFlowChart(
         val d = drawing ?: return@Canvas
         val g = d.layout
         val p = progress()
-        val sel = selected
-        fun lit(l: Int) = sel == null || flow.links[l].from == sel || flow.links[l].to == sel
-        fun nodeLit(i: Int) = sel == null || i == sel || flow.links.any { (it.from == sel && it.to == i) || (it.to == sel && it.from == i) }
+        val n = flow.nodes.size
+        // A stale index (from data drawn before) counts as no focus.
+        val sel = focusTo?.takeIf { it < n }
+        val was = focusFrom?.takeIf { it < n }
+        val t = focusMix.value
+        // How much node [i] is focused: fading in, fading out, or not at all.
+        fun focus(i: Int) = (if (i == sel) t else 0f) + (if (i == was) 1f - t else 0f)
+        fun lit(s: Int?, l: Int) = s == null || flow.links[l].from == s || flow.links[l].to == s
+        fun nodeLit(s: Int?, i: Int) = s == null || i == s || flow.links.any { (it.from == s && it.to == i) || (it.to == s && it.from == i) }
+        // From the old focus's look to the new one's.
+        fun mix(old: Float, new: Float) = old + (new - old) * t
+        fun linkAlpha(s: Int?, l: Int) = when {
+            s == null -> 0.5f
+            lit(s, l) -> 0.8f
+            else -> 0.08f
+        }
 
         // Links first, the faded ones under the lit ones, so the selection reads on top.
-        flow.links.indices.sortedBy { lit(it) }.forEach { l ->
-            val alpha = p * when {
-                sel == null -> 0.5f
-                lit(l) -> 0.8f
-                else -> 0.08f
-            }
+        flow.links.indices.sortedBy { lit(sel, it) }.forEach { l ->
+            val alpha = p * mix(linkAlpha(was, l), linkAlpha(sel, l))
             drawPath(d.links[l], d.linkColor[l], alpha = alpha, style = Stroke(g.linkW[l], join = StrokeJoin.Round))
             d.arrows[l]?.let { drawPath(it, d.linkColor[l], alpha = alpha) }
         }
 
-        val radius = CornerRadius(10.dp.toPx())
-        val border = Stroke(1.5.dp.toPx(), join = StrokeJoin.Round)
+        val radius = CornerRadius(metrics.accountRadius)
+        val borderW = 1.5.dp.toPx()
+        val border = Stroke(borderW, join = StrokeJoin.Round)
         flow.nodes.indices.forEach { i ->
             val node = flow.nodes[i]
-            val fade = p * if (nodeLit(i)) 1f else 0.3f
+            val fade = p * mix(if (nodeLit(was, i)) 1f else 0.3f, if (nodeLit(sel, i)) 1f else 0.3f)
             val color = d.nodeColor[i]
+            val f = focus(i)
             if (node.column == CashColumn.ACCOUNT) {
                 val r = d.body[i]
                 // Opaque under the tint, so the links ending at its edges stop there.
                 drawRoundRect(scheme.surface, r.topLeft, r.size, radius, alpha = p)
                 drawRoundRect(color, r.topLeft, r.size, radius, alpha = 0.2f * fade)
-                if (i == sel) {
-                    val o = 2.5.dp.toPx()
-                    drawRoundRect(scheme.onSurface, r.topLeft - Offset(o, o), Size(r.width + 2 * o, r.height + 2 * o), CornerRadius(radius.x + o), style = Stroke(1.5.dp.toPx()))
+                if (f > 0f) {
+                    // The outline grows out from the edge as it fades in.
+                    val o = 2.5.dp.toPx() * f
+                    drawRoundRect(scheme.onSurface, r.topLeft - Offset(o, o), Size(r.width + 2 * o, r.height + 2 * o), CornerRadius(radius.x + o), alpha = f * p, style = Stroke(borderW))
                 }
                 val box = d.icon[i]
                 val bitmap = node.iconId?.let { icons[it] }
                 if (bitmap != null) drawBitmap(bitmap, box, fade, ColorFilter.tint(color))
             } else {
-                // The selection's outline under the caret, so it shows only around the edge.
-                if (i == sel) drawPath(d.shapes[i], scheme.onSurface, alpha = 0.9f * p, style = Stroke(6.5.dp.toPx(), join = StrokeJoin.Round))
+                // The selection's outline under the caret, so it shows only around the edge: about as
+                // thick as an account's outline, and growing out from the edge as it fades in.
+                if (f > 0f) {
+                    val w = borderW + (CARET_FOCUS_STROKE.toPx() - borderW) * f
+                    drawPath(d.shapes[i], scheme.onSurface, alpha = 0.9f * f * p, style = Stroke(w, join = StrokeJoin.Round))
+                }
                 // Opaque first, so a link passing under a faded caret stays hidden.
                 drawPath(d.shapes[i], scheme.surface, alpha = p)
                 drawPath(d.shapes[i], color, alpha = fade)
@@ -189,18 +220,20 @@ fun CashFlowChart(
             }
         }
         flow.nodes.indices.forEach { i ->
-            val faded = if (nodeLit(i)) 1f else 0.35f
-            d.texts[i].forEach { t -> drawText(t.text, (t.color ?: scheme.onSurface).copy(alpha = faded), t.at) }
+            val faded = mix(if (nodeLit(was, i)) 1f else 0.35f, if (nodeLit(sel, i)) 1f else 0.35f)
+            d.texts[i].forEach { tx -> drawText(tx.text, (tx.color ?: scheme.onSurface).copy(alpha = faded), tx.at) }
         }
-        // The selected caret's label, over everything.
-        if (sel != null) {
-            d.focus[sel].forEach { t ->
-                if (t.pill) {
+        // The focused caret's label, over everything, fading in (and the old one's fading out).
+        listOfNotNull(was, sel).distinct().forEach { s ->
+            val a = focus(s) * p
+            if (a <= 0f) return@forEach
+            d.focus[s].forEach { tx ->
+                if (tx.pill) {
                     val corner = CornerRadius(6.dp.toPx())
-                    drawRoundRect(scheme.surface, t.box.topLeft, t.box.size, corner, alpha = 0.95f * p)
-                    drawRoundRect(d.nodeColor[sel], t.box.topLeft, t.box.size, corner, alpha = p, style = Stroke(1.dp.toPx()))
+                    drawRoundRect(scheme.surface, tx.box.topLeft, tx.box.size, corner, alpha = 0.95f * a)
+                    drawRoundRect(d.nodeColor[s], tx.box.topLeft, tx.box.size, corner, alpha = a, style = Stroke(1.dp.toPx()))
                 }
-                drawText(t.text, t.color ?: scheme.onSurface, t.at)
+                drawText(tx.text, tx.color ?: scheme.onSurface, tx.at, alpha = a)
             }
         }
     }
@@ -226,6 +259,15 @@ data class CashLabels(
 /** A node's colour: its own, or grey for the special kinds and the joined ones. */
 fun cashNodeColor(node: CashNode): Color = Color(node.color ?: OTHER_COLOR)
 
+/** How long the focus takes to move from one node to another. */
+private const val FOCUS_MS = 220
+
+/**
+ * The focused caret's outline stroke, drawn under the caret, so about half of it shows outside the
+ * caret's own border: roughly an account outline's thickness.
+ */
+private val CARET_FOCUS_STROKE = 4.5.dp
+
 /** Room around a selected caret's label text, inside its backdrop. */
 private val LABEL_INSET = 3.dp
 
@@ -236,12 +278,14 @@ private fun cashMetrics(full: Boolean, density: Density): CashNodeMetrics = with
             accountW = 64.dp.toPx()..88.dp.toPx(), accountH = 92.dp.toPx()..128.dp.toPx(),
             caret = 30.dp.toPx()..44.dp.toPx(), link = 2.dp.toPx()..10.dp.toPx(),
             labelGap = 2.dp.toPx(), gap = 8.dp.toPx(), lanes = 32.dp.toPx(), cell = 4.dp.toPx(), linkGap = 3.dp.toPx(),
+            accountRadius = 10.dp.toPx(), accountMargin = 4.dp.toPx(), linkCorner = 8.dp.toPx(), arrow = 9.dp.toPx(),
         )
     } else {
         CashNodeMetrics(
             accountW = 54.dp.toPx()..66.dp.toPx(), accountH = 80.dp.toPx()..100.dp.toPx(),
             caret = 22.dp.toPx()..32.dp.toPx(), link = 1.5.dp.toPx()..7.dp.toPx(),
             labelGap = 1.dp.toPx(), gap = 4.dp.toPx(), lanes = 22.dp.toPx(), cell = 3.dp.toPx(), linkGap = 2.dp.toPx(),
+            accountRadius = 10.dp.toPx(), accountMargin = 3.dp.toPx(), linkCorner = 8.dp.toPx(), arrow = 9.dp.toPx(),
         )
     }
 }
@@ -354,6 +398,7 @@ private fun nodeDrawing(
     measurer: TextMeasurer,
     style: TextStyle,
     density: Density,
+    metrics: CashNodeMetrics,
     width: Float,
     height: Float,
 ): NodeDrawing = with(density) {
@@ -432,7 +477,7 @@ private fun nodeDrawing(
     }
 
     // Links: rounded corners; a transfer stops short of the receiver for its arrowhead.
-    val corner = 8.dp.toPx()
+    val corner = metrics.linkCorner
     val arrows = arrayOfNulls<Path>(flow.links.size)
     val links = flow.links.mapIndexed { l, link ->
         val pts = g.routes[l].copyOf()
@@ -444,7 +489,7 @@ private fun nodeDrawing(
             val len = max(hypot(dx, dy), 0.01f)
             val ux = dx / len
             val uy = dy / len
-            val arrowLen = min(max(w * 1.6f, 9.dp.toPx()), len)
+            val arrowLen = min(max(w * ARROW_LENGTH, metrics.arrow), len)
             val half = w / 2f + 4.dp.toPx()
             val tipX = pts[k]
             val tipY = pts[k + 1]

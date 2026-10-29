@@ -32,7 +32,18 @@ class CashNodeMetrics(
     val cell: Float,
     /** Least room between two links running side by side. */
     val linkGap: Float,
+    /** An account's rounded corners: links leave and enter only along the straight part of a side. */
+    val accountRadius: Float,
+    /** Least room between an account and a link that neither starts nor ends at it. */
+    val accountMargin: Float,
+    /** The radius a link's bends are drawn with. */
+    val linkCorner: Float,
+    /** A transfer's arrowhead's least length; a thick link's is [ARROW_LENGTH] times its width. */
+    val arrow: Float,
 )
+
+/** A transfer's arrowhead is at least this many times as long as the link is thick. */
+const val ARROW_LENGTH = 1.6f
 
 /** An account is at least this many times as tall as it is wide. */
 const val ACCOUNT_ASPECT = 1.15f
