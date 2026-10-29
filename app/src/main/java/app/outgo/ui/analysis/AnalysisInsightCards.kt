@@ -67,13 +67,11 @@ private val CalendarHeight = 168.dp
 private val FlowHeight = 168.dp
 private val CashFlowHeight = 300.dp
 
-/** Most income (or spending) carets the cash flow draws on the card, and in full screen. */
+/** Most income (or spending) carets the cash flow draws on the card; full screen draws them all. */
 private const val CASH_CARD_NODES = 4
-private const val CASH_FULL_NODES = 6
 
-/** Most accounts drawn on the card, and in full screen; the smaller ones join one "Other" account. */
+/** Most accounts drawn on the card, the smaller ones joining one "Other" account; full screen draws them all. */
 private const val CASH_CARD_ACCOUNTS = 3
-private const val CASH_FULL_ACCOUNTS = 4
 private val TopRowHeight = 40.dp
 private const val TOP_ROWS_SHOWN = 5
 private const val BULLET_ROWS_SHOWN = 4
@@ -670,11 +668,12 @@ private fun TransfersCard(data: TradesInsightUi, state: AnalysisUiState, animate
 @Composable
 private fun CashFlowCard(card: ChartCard, data: TradesInsightUi, state: AnalysisUiState, animate: Boolean) {
     val full = LocalFullscreenChart.current != null
-    val maxNodes = if (full) CASH_FULL_NODES else CASH_CARD_NODES
-    val maxAccounts = if (full) CASH_FULL_ACCOUNTS else CASH_CARD_ACCOUNTS
-    val flow = remember(data.cashFlow, state.accountNames, card.hidden, maxNodes, maxAccounts) {
-        buildCashFlow(data.cashFlow, state.accountNames, cashFlowOptions(card.hidden, maxNodes, maxAccounts))
-    }
+    // Full screen has room for everything: nothing joins "Other" there.
+    val maxNodes = if (full) NO_LIMIT else CASH_CARD_NODES
+    val maxAccounts = if (full) NO_LIMIT else CASH_CARD_ACCOUNTS
+    // Keyed on what the flow reads, so a full-screen-only setting doesn't rebuild it.
+    val options = cashFlowOptions(card, maxNodes, maxAccounts)
+    val flow = remember(data.cashFlow, state.accountNames, options) { buildCashFlow(data.cashFlow, state.accountNames, options) }
     val height = listHeight(CashFlowHeight, reserve = GapDp + lineOf(MaterialTheme.typography.bodySmall))
     if (flow == null) return Empty(height = height)
     var selected by remember(flow) { mutableStateOf<Int?>(null) }
@@ -694,6 +693,8 @@ private fun CashFlowCard(card: ChartCard, data: TradesInsightUi, state: Analysis
         onSelect = { selected = it },
         progress = introProgress(animate),
         modifier = Modifier.fillMaxWidth().height(height),
+        scroll = full && !card.fitScreen,
+        detail = card.accountDetail,
     )
     val pick = selected
     val detail = if (pick != null) {

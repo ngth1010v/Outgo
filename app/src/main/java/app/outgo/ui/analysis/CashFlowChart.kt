@@ -5,6 +5,13 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
@@ -54,6 +61,7 @@ import app.outgo.ui.theme.IncomeGreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
@@ -81,28 +89,41 @@ fun CashFlowChart(
     onSelect: (Int?) -> Unit,
     progress: () -> Float,
     modifier: Modifier = Modifier,
+    /** Grows past [modifier]'s height when the nodes need it, and scrolls. */
+    scroll: Boolean = false,
+    /** Accounts show their name and net change; otherwise just their icon, the rest on focus. */
+    detail: Boolean = true,
 ) {
     val scheme = MaterialTheme.colorScheme
     val style = MaterialTheme.typography.labelSmall
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
     var size by remember { mutableStateOf(IntSize.Zero) }
-    val metrics = remember(full, density) { cashMetrics(full, density) }
+    val metrics = remember(full, detail, density) { cashMetrics(full, detail, density) }
     // Accounts only as tall as their content needs, plus half the room the size alone would leave.
-    val sizes = remember(flow, metrics, labels, units, style) {
+    val sizes = remember(flow, metrics, labels, units, style, detail) {
         val plain = cashNodeSizes(flow, metrics)
         val contentH = FloatArray(flow.nodes.size) { i ->
             val node = flow.nodes[i]
-            if (node.column == CashColumn.ACCOUNT) accountContent(node, plain.w[i], labels, units, measurer, style, density).height else 0f
+            when {
+                node.column != CashColumn.ACCOUNT -> 0f
+                detail -> accountContent(node, plain.w[i], labels, units, measurer, style, density).height
+                else -> accountIcon(plain.w[i], density)
+            }
         }
         plain.halveAccountPadding(contentH)
     }
-    // Caret labels, shown only for the selected caret: the layout leaves no room for them.
-    val caretTexts = remember(flow, labels, units, style, full, density) {
+    // Focus labels, shown only for the selected node: the layout leaves no room for them. Every
+    // caret has one, and an icon-only account (its name and net change).
+    val caretTexts = remember(flow, labels, units, style, full, density, detail) {
         val maxW = with(density) { (if (full) 96.dp else 72.dp).toPx() }
         flow.nodes.map { node ->
-            if (node.column == CashColumn.ACCOUNT) null
-            else measurer.line(labels.of(node), style, maxW) to measurer.line(compactAmount(node.total, units), style, maxW)
+            when {
+                node.column != CashColumn.ACCOUNT ->
+                    measurer.line(labels.of(node), style, maxW) to measurer.line(compactAmount(node.total, units), style, maxW)
+                detail -> null
+                else -> measurer.line(labels.of(node), style, maxW) to measurer.line(signedNet(node, units), style, maxW)
+            }
         }
     }
     // Kept with the flow and texts it was made for: the state keeps its last value while a new one is
@@ -115,9 +136,11 @@ fun CashFlowChart(
         }
         value = Triple(flow, caretTexts, layout)
     }
-    val layout = made?.takeIf { it.first === flow && it.second === caretTexts }?.third
-    val drawing = remember(layout, labels, units, style, density, metrics) {
-        layout?.let { nodeDrawing(flow, it, caretTexts, labels, units, measurer, style, density, metrics, size.width.toFloat(), size.height.toFloat()) }
+    // By value, like produceState's keys: an equal flow rebuilt (a setting that changes nothing drawn)
+    // keeps the layout, since produceState does not start again for it.
+    val layout = made?.takeIf { it.first == flow && it.second == caretTexts }?.third
+    val drawing = remember(layout, labels, units, style, density, metrics, detail) {
+        layout?.let { nodeDrawing(flow, it, caretTexts, labels, units, measurer, style, density, metrics, detail, size.width.toFloat(), size.height.toFloat()) }
     }
     val icons = rememberNodeIcons(flow)
     val glyphs = CaretGlyphs(
@@ -140,101 +163,134 @@ fun CashFlowChart(
         focusMix.animateTo(1f, tween(durationMillis = FOCUS_MS, easing = FastOutSlowInEasing))
     }
 
-    Canvas(
-        modifier = modifier
-            .onSizeChanged { size = it }
-            .pointerInput(drawing) {
-                val d = drawing ?: return@pointerInput
-                detectTapGestures { at ->
-                    val hit = d.hits.indexOfFirst { it.contains(at) }.takeIf { it >= 0 }
-                    select(if (hit == null || hit == picked) null else hit)
-                }
-            },
-    ) {
-        val d = drawing ?: return@Canvas
-        val g = d.layout
-        val p = progress()
-        val n = flow.nodes.size
-        // A stale index (from data drawn before) counts as no focus.
-        val sel = focusTo?.takeIf { it < n }
-        val was = focusFrom?.takeIf { it < n }
-        val t = focusMix.value
-        // How much node [i] is focused: fading in, fading out, or not at all.
-        fun focus(i: Int) = (if (i == sel) t else 0f) + (if (i == was) 1f - t else 0f)
-        fun lit(s: Int?, l: Int) = s == null || flow.links[l].from == s || flow.links[l].to == s
-        fun nodeLit(s: Int?, i: Int) = s == null || i == s || flow.links.any { (it.from == s && it.to == i) || (it.to == s && it.from == i) }
-        // From the old focus's look to the new one's.
-        fun mix(old: Float, new: Float) = old + (new - old) * t
-        fun linkAlpha(s: Int?, l: Int) = when {
-            s == null -> 0.5f
-            lit(s, l) -> 0.8f
-            else -> 0.08f
-        }
+    // Full screen may scroll: the chart is then as tall as its nodes need at their own size.
+    TallIfScrolling(scroll, modifier, { width ->
+        val none = FloatArray(flow.nodes.size)
+        cashNaturalHeight(flow, width, sizes, none, none, metrics)
+    }, keys = listOf(flow, sizes, metrics)) { inner ->
+        Canvas(
+            modifier = inner
+                .onSizeChanged { size = it }
+                .pointerInput(drawing) {
+                    val d = drawing ?: return@pointerInput
+                    detectTapGestures { at ->
+                        val hit = d.hits.indexOfFirst { it.contains(at) }.takeIf { it >= 0 }
+                        select(if (hit == null || hit == picked) null else hit)
+                    }
+                },
+        ) {
+            val d = drawing ?: return@Canvas
+            val g = d.layout
+            val p = progress()
+            val n = flow.nodes.size
+            // A stale index (from data drawn before) counts as no focus.
+            val sel = focusTo?.takeIf { it < n }
+            val was = focusFrom?.takeIf { it < n }
+            val t = focusMix.value
+            // How much node [i] is focused: fading in, fading out, or not at all.
+            fun focus(i: Int) = (if (i == sel) t else 0f) + (if (i == was) 1f - t else 0f)
+            fun lit(s: Int?, l: Int) = s == null || flow.links[l].from == s || flow.links[l].to == s
+            fun nodeLit(s: Int?, i: Int) = s == null || i == s || flow.links.any { (it.from == s && it.to == i) || (it.to == s && it.from == i) }
+            // From the old focus's look to the new one's.
+            fun mix(old: Float, new: Float) = old + (new - old) * t
+            fun linkAlpha(s: Int?, l: Int) = when {
+                s == null -> 0.5f
+                lit(s, l) -> 0.8f
+                else -> 0.08f
+            }
 
-        // Links first, the faded ones under the lit ones, so the selection reads on top.
-        flow.links.indices.sortedBy { lit(sel, it) }.forEach { l ->
-            val alpha = p * mix(linkAlpha(was, l), linkAlpha(sel, l))
-            drawPath(d.links[l], d.linkColor[l], alpha = alpha, style = Stroke(g.linkW[l], join = StrokeJoin.Round))
-            d.arrows[l]?.let { drawPath(it, d.linkColor[l], alpha = alpha) }
-        }
+            // Links first, the faded ones under the lit ones, so the selection reads on top.
+            flow.links.indices.sortedBy { lit(sel, it) }.forEach { l ->
+                val alpha = p * mix(linkAlpha(was, l), linkAlpha(sel, l))
+                drawPath(d.links[l], d.linkColor[l], alpha = alpha, style = Stroke(g.linkW[l], join = StrokeJoin.Round))
+                d.arrows[l]?.let { drawPath(it, d.linkColor[l], alpha = alpha) }
+            }
 
-        val radius = CornerRadius(metrics.accountRadius)
-        val borderW = 1.5.dp.toPx()
-        val border = Stroke(borderW, join = StrokeJoin.Round)
-        flow.nodes.indices.forEach { i ->
-            val node = flow.nodes[i]
-            val fade = p * mix(if (nodeLit(was, i)) 1f else 0.3f, if (nodeLit(sel, i)) 1f else 0.3f)
-            val color = d.nodeColor[i]
-            val f = focus(i)
-            if (node.column == CashColumn.ACCOUNT) {
-                val r = d.body[i]
-                // Opaque under the tint, so the links ending at its edges stop there.
-                drawRoundRect(scheme.surface, r.topLeft, r.size, radius, alpha = p)
-                drawRoundRect(color, r.topLeft, r.size, radius, alpha = 0.2f * fade)
-                if (f > 0f) {
-                    // The outline grows out from the edge as it fades in.
-                    val o = 2.5.dp.toPx() * f
-                    drawRoundRect(scheme.onSurface, r.topLeft - Offset(o, o), Size(r.width + 2 * o, r.height + 2 * o), CornerRadius(radius.x + o), alpha = f * p, style = Stroke(borderW))
+            val radius = CornerRadius(metrics.accountRadius)
+            val borderW = 1.5.dp.toPx()
+            val border = Stroke(borderW, join = StrokeJoin.Round)
+            flow.nodes.indices.forEach { i ->
+                val node = flow.nodes[i]
+                val fade = p * mix(if (nodeLit(was, i)) 1f else 0.3f, if (nodeLit(sel, i)) 1f else 0.3f)
+                val color = d.nodeColor[i]
+                val f = focus(i)
+                if (node.column == CashColumn.ACCOUNT) {
+                    val r = d.body[i]
+                    // Opaque under the tint, so the links ending at its edges stop there.
+                    drawRoundRect(scheme.surface, r.topLeft, r.size, radius, alpha = p)
+                    drawRoundRect(color, r.topLeft, r.size, radius, alpha = 0.2f * fade)
+                    if (f > 0f) {
+                        // The outline grows out from the edge as it fades in.
+                        val o = 2.5.dp.toPx() * f
+                        drawRoundRect(scheme.onSurface, r.topLeft - Offset(o, o), Size(r.width + 2 * o, r.height + 2 * o), CornerRadius(radius.x + o), alpha = f * p, style = Stroke(borderW))
+                    }
+                    val box = d.icon[i]
+                    val bitmap = node.iconId?.let { icons[it] }
+                    when {
+                        bitmap != null -> drawBitmap(bitmap, box, fade, ColorFilter.tint(color))
+                        // The joined accounts have no icon of their own: the same dots as "Other" carets.
+                        node.refId == OTHER_NODE -> drawGlyph(glyphs.other, box, fade, ColorFilter.tint(color))
+                    }
+                } else {
+                    // The selection's outline under the caret, so it shows only around the edge: about as
+                    // thick as an account's outline, and growing out from the edge as it fades in.
+                    if (f > 0f) {
+                        val w = borderW + (CARET_FOCUS_STROKE.toPx() - borderW) * f
+                        drawPath(d.shapes[i], scheme.onSurface, alpha = 0.9f * f * p, style = Stroke(w, join = StrokeJoin.Round))
+                    }
+                    // Opaque first, so a link passing under a faded caret stays hidden.
+                    drawPath(d.shapes[i], scheme.surface, alpha = p)
+                    drawPath(d.shapes[i], color, alpha = fade)
+                    drawPath(d.shapes[i], color, alpha = fade, style = border)
+                    val box = d.icon[i]
+                    val bitmap = node.iconId?.let { icons[it] }
+                    val tint = ColorFilter.tint(Color.White)
+                    when {
+                        bitmap != null -> drawBitmap(bitmap, box, fade, tint)
+                        node.iconId == null -> glyphs.of(node)?.let { drawGlyph(it, box, fade, tint) }
+                    }
                 }
-                val box = d.icon[i]
-                val bitmap = node.iconId?.let { icons[it] }
-                if (bitmap != null) drawBitmap(bitmap, box, fade, ColorFilter.tint(color))
-            } else {
-                // The selection's outline under the caret, so it shows only around the edge: about as
-                // thick as an account's outline, and growing out from the edge as it fades in.
-                if (f > 0f) {
-                    val w = borderW + (CARET_FOCUS_STROKE.toPx() - borderW) * f
-                    drawPath(d.shapes[i], scheme.onSurface, alpha = 0.9f * f * p, style = Stroke(w, join = StrokeJoin.Round))
-                }
-                // Opaque first, so a link passing under a faded caret stays hidden.
-                drawPath(d.shapes[i], scheme.surface, alpha = p)
-                drawPath(d.shapes[i], color, alpha = fade)
-                drawPath(d.shapes[i], color, alpha = fade, style = border)
-                val box = d.icon[i]
-                val bitmap = node.iconId?.let { icons[it] }
-                val tint = ColorFilter.tint(Color.White)
-                when {
-                    bitmap != null -> drawBitmap(bitmap, box, fade, tint)
-                    node.iconId == null -> glyphs.of(node)?.let { drawGlyph(it, box, fade, tint) }
+            }
+            flow.nodes.indices.forEach { i ->
+                val faded = mix(if (nodeLit(was, i)) 1f else 0.35f, if (nodeLit(sel, i)) 1f else 0.35f)
+                d.texts[i].forEach { tx -> drawText(tx.text, (tx.color ?: scheme.onSurface).copy(alpha = faded), tx.at) }
+            }
+            // The focused caret's label, over everything, fading in (and the old one's fading out).
+            listOfNotNull(was, sel).distinct().forEach { s ->
+                val a = focus(s) * p
+                if (a <= 0f) return@forEach
+                d.focus[s].forEach { tx ->
+                    if (tx.pill) {
+                        val corner = CornerRadius(6.dp.toPx())
+                        drawRoundRect(scheme.surface, tx.box.topLeft, tx.box.size, corner, alpha = 0.95f * a)
+                        drawRoundRect(d.nodeColor[s], tx.box.topLeft, tx.box.size, corner, alpha = a, style = Stroke(1.dp.toPx()))
+                    }
+                    drawText(tx.text, tx.color ?: scheme.onSurface, tx.at, alpha = a)
                 }
             }
         }
-        flow.nodes.indices.forEach { i ->
-            val faded = mix(if (nodeLit(was, i)) 1f else 0.35f, if (nodeLit(sel, i)) 1f else 0.35f)
-            d.texts[i].forEach { tx -> drawText(tx.text, (tx.color ?: scheme.onSurface).copy(alpha = faded), tx.at) }
-        }
-        // The focused caret's label, over everything, fading in (and the old one's fading out).
-        listOfNotNull(was, sel).distinct().forEach { s ->
-            val a = focus(s) * p
-            if (a <= 0f) return@forEach
-            d.focus[s].forEach { tx ->
-                if (tx.pill) {
-                    val corner = CornerRadius(6.dp.toPx())
-                    drawRoundRect(scheme.surface, tx.box.topLeft, tx.box.size, corner, alpha = 0.95f * a)
-                    drawRoundRect(d.nodeColor[s], tx.box.topLeft, tx.box.size, corner, alpha = a, style = Stroke(1.dp.toPx()))
-                }
-                drawText(tx.text, tx.color ?: scheme.onSurface, tx.at, alpha = a)
-            }
+    }
+}
+
+/**
+ * [content] filling [modifier]'s box, or with [scroll], as tall as [natural] (px, for the box's width)
+ * when that is more, scrolling. [keys] are what [natural] reads.
+ */
+@Composable
+private fun TallIfScrolling(
+    scroll: Boolean,
+    modifier: Modifier,
+    natural: (Float) -> Float,
+    keys: List<Any?>,
+    content: @Composable (Modifier) -> Unit,
+) {
+    // One structure either way, so switching keeps the chart (and its layout state) in place.
+    BoxWithConstraints(modifier) {
+        val width = constraints.maxWidth.toFloat()
+        val tall = if (scroll) remember(width, keys) { natural(width) } else 0f
+        val height = with(LocalDensity.current) { max(constraints.maxHeight.toFloat(), ceil(tall)).toDp() }
+        Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState(), enabled = scroll)) {
+            content(Modifier.fillMaxWidth().height(height))
         }
     }
 }
@@ -272,8 +328,8 @@ private val CARET_FOCUS_STROKE = 4.5.dp
 private val LABEL_INSET = 3.dp
 
 /** The chart's sizes, in px: roomier in full screen. */
-private fun cashMetrics(full: Boolean, density: Density): CashNodeMetrics = with(density) {
-    if (full) {
+private fun cashMetrics(full: Boolean, detail: Boolean, density: Density): CashNodeMetrics = with(density) {
+    val plain = if (full) {
         CashNodeMetrics(
             accountW = 64.dp.toPx()..88.dp.toPx(), accountH = 92.dp.toPx()..128.dp.toPx(),
             caret = 30.dp.toPx()..44.dp.toPx(), link = 2.dp.toPx()..10.dp.toPx(),
@@ -288,6 +344,15 @@ private fun cashMetrics(full: Boolean, density: Density): CashNodeMetrics = with
             accountRadius = 10.dp.toPx(), accountMargin = 3.dp.toPx(), linkCorner = 8.dp.toPx(), arrow = 9.dp.toPx(),
         )
     }
+    if (detail) return@with plain
+    // Icon-only accounts: about a caret's size, their corners rounder for their size.
+    val small = if (full) 36.dp.toPx()..48.dp.toPx() else 30.dp.toPx()..40.dp.toPx()
+    CashNodeMetrics(
+        accountW = small, accountH = small.start * ACCOUNT_ASPECT..small.endInclusive * ACCOUNT_ASPECT,
+        caret = plain.caret, link = plain.link, labelGap = plain.labelGap, gap = plain.gap, lanes = plain.lanes,
+        cell = plain.cell, linkGap = plain.linkGap, accountRadius = 8.dp.toPx(), accountMargin = plain.accountMargin,
+        linkCorner = plain.linkCorner, arrow = plain.arrow,
+    )
 }
 
 /** What a caret with no icon of its own shows. */
@@ -374,13 +439,28 @@ private fun accountContent(
 ): AccountContent = with(density) {
     val textW = width - 2 * 5.dp.toPx()
     val bold = style.copy(fontWeight = FontWeight.Medium)
-    val sign = if (node.net > 0) "+" else if (node.net < 0) "−" else ""
     AccountContent(
         icon = min(width * 0.36f, 24.dp.toPx()),
         name = measurer.line(labels.of(node), bold, textW, lines = 2),
-        net = measurer.line(sign + compactAmount(abs(node.net), units), bold, textW),
+        net = measurer.line(signedNet(node, units), bold, textW),
         gap = 4.dp.toPx(),
     )
+}
+
+/** An icon-only account's icon size in a rectangle [width] px wide. */
+private fun accountIcon(width: Float, density: Density): Float = with(density) { min(width * 0.56f, 24.dp.toPx()) }
+
+/** An account's net change with its sign: + kept, − drawn from its balance. */
+private fun signedNet(node: CashNode, units: Triple<String, String, String>): String {
+    val sign = if (node.net > 0) "+" else if (node.net < 0) "−" else ""
+    return sign + compactAmount(abs(node.net), units)
+}
+
+/** The colour an account's net change is written in. */
+private fun netColor(node: CashNode): Color? = when {
+    node.net > 0 -> IncomeGreen
+    node.net < 0 -> ExpenseRed
+    else -> null
 }
 
 /** Income links take the income's colour, spending links the spending's, transfers the sender's. */
@@ -399,6 +479,7 @@ private fun nodeDrawing(
     style: TextStyle,
     density: Density,
     metrics: CashNodeMetrics,
+    detail: Boolean,
     width: Float,
     height: Float,
 ): NodeDrawing = with(density) {
@@ -423,7 +504,13 @@ private fun nodeDrawing(
     val icon = ArrayList<Rect>()
     for (i in 0 until n) {
         val node = flow.nodes[i]
-        if (account[i]) {
+        if (account[i] && !detail) {
+            // Just the icon, centred; the name and net change show on focus.
+            val r = body[i]
+            val s = accountIcon(r.width, density)
+            icon += Rect(Offset(r.center.x - s / 2f, r.center.y - s / 2f), Size(s, s))
+            texts += emptyList<NodeText>()
+        } else if (account[i]) {
             val r = body[i]
             val c = accountContent(node, r.width, labels, units, measurer, style, density)
             val name = c.name
@@ -431,14 +518,9 @@ private fun nodeDrawing(
             var top = r.center.y - c.height / 2f
             icon += Rect(Offset(r.center.x - c.icon / 2f, top), Size(c.icon, c.icon))
             top += c.icon + c.gap
-            val netColor = when {
-                node.net > 0 -> IncomeGreen
-                node.net < 0 -> ExpenseRed
-                else -> null
-            }
             texts += listOf(
                 NodeText(name, Offset(r.center.x - name.size.width / 2f, top), null),
-                NodeText(net, Offset(r.center.x - net.size.width / 2f, top + name.size.height), netColor),
+                NodeText(net, Offset(r.center.x - net.size.width / 2f, top + name.size.height), netColor(node)),
             )
         } else {
             val s = g.h[i] * 0.56f
@@ -472,7 +554,7 @@ private fun nodeDrawing(
         val top = box.top + inset / 2f
         listOf(
             NodeText(name, Offset(box.center.x - name.size.width / 2f, top), null, box, pill = true),
-            NodeText(amount, Offset(box.center.x - amount.size.width / 2f, top + name.size.height), null),
+            NodeText(amount, Offset(box.center.x - amount.size.width / 2f, top + name.size.height), if (account[i]) netColor(flow.nodes[i]) else null),
         )
     }
 
@@ -508,9 +590,9 @@ private fun nodeDrawing(
         roundedPath(pts, corner)
     }
 
-    // A caret is small: its tap target reaches a finger's width around it.
+    // A caret (and an icon-only account) is small: its tap target reaches a finger's width around it.
     val finger = 6.dp.toPx()
-    val hits = (0 until n).map { i -> if (account[i]) body[i] else body[i].inflate(finger) }
+    val hits = (0 until n).map { i -> if (account[i] && detail) body[i] else body[i].inflate(finger) }
     NodeDrawing(g, body, shapes, icon, flow.nodes.map(::cashNodeColor), links, arrows.toList(), linkColors(flow), texts, focus, hits)
 }
 

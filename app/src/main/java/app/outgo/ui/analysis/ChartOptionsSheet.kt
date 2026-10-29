@@ -138,13 +138,19 @@ fun ChartOptionsSheet(title: String, card: ChartCard, options: ChartOptions, onC
 }
 
 @Composable
-private fun SectionTitle(text: String, modifier: Modifier = Modifier) {
+internal fun SectionTitle(text: String, modifier: Modifier = Modifier) {
     Text(text, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium, modifier = modifier)
 }
 
-/** [items] as rows of [CellsPerRow] icon cells, a ring around each [selected] one. */
-private fun LazyListScope.cellRows(key: String, items: List<OptionItem>, selected: (Long) -> Boolean, onClick: (Long) -> Unit) {
-    items(items.chunked(CellsPerRow), key = { "$key-${it.first().id}" }) { row ->
+/** [items] as rows of [perRow] icon cells, a ring around each [selected] one. */
+internal fun LazyListScope.cellRows(
+    key: String,
+    items: List<OptionItem>,
+    selected: (Long) -> Boolean,
+    perRow: Int = CellsPerRow,
+    onClick: (Long) -> Unit,
+) {
+    items(items.chunked(perRow), key = { "$key-${it.first().id}" }) { row ->
         Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
             row.forEach { item ->
                 if (item.icon != null) {
@@ -153,7 +159,7 @@ private fun LazyListScope.cellRows(key: String, items: List<OptionItem>, selecte
                     PickCell(item.name, item.iconId, item.color, selected(item.id), { onClick(item.id) }, Modifier.weight(1f), wrap = true)
                 }
             }
-            repeat(CellsPerRow - row.size) { Spacer(Modifier.weight(1f)) }
+            repeat(perRow - row.size) { Spacer(Modifier.weight(1f)) }
         }
     }
 }

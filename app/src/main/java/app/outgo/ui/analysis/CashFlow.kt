@@ -77,20 +77,61 @@ const val CASH_HIDE_ADJUSTMENTS = -3L
 data class CashFlowOptions(
     val transfers: Boolean = true,
     val adjustments: Boolean = true,
+    /**
+     * Accounts switched off: a parent's id hides it with all its subaccounts; a subaccount's id hides
+     * just it, while its parent is in [expandedAccounts].
+     */
     val hiddenAccounts: Set<Long> = emptySet(),
+    /** Categories switched off, the same way, with [expandedCategories]. */
+    val hiddenCategories: Set<Long> = emptySet(),
+    /** Parent accounts drawn as their subaccounts, each its own node. */
+    val expandedAccounts: Set<Long> = emptySet(),
+    /** Parent categories drawn as their sub-categories. */
+    val expandedCategories: Set<Long> = emptySet(),
     /** Most nodes a column draws; the smallest beyond it join an "Other" node. */
     val maxNodes: Int = 5,
     /** Most accounts drawn; the smallest beyond it join one "Other" account. */
     val maxAccounts: Int = maxNodes,
 )
 
-fun cashFlowOptions(hidden: List<Long>, maxNodes: Int, maxAccounts: Int = maxNodes) = CashFlowOptions(
-    transfers = CASH_HIDE_TRANSFERS !in hidden,
-    adjustments = CASH_HIDE_ADJUSTMENTS !in hidden,
-    hiddenAccounts = hidden.filterTo(HashSet()) { it >= 0 },
+/** [card]'s options; [maxNodes] and [maxAccounts] at [NO_LIMIT] never join anything into "Other". */
+fun cashFlowOptions(card: ChartCard, maxNodes: Int, maxAccounts: Int = maxNodes) = CashFlowOptions(
+    transfers = CASH_HIDE_TRANSFERS !in card.hidden,
+    adjustments = CASH_HIDE_ADJUSTMENTS !in card.hidden,
+    hiddenAccounts = card.hidden.filterTo(HashSet()) { it >= 0 },
+    hiddenCategories = card.hiddenCategories.toSet(),
+    expandedAccounts = card.expandedAccounts.toSet(),
+    expandedCategories = card.expandedCategories.toSet(),
     maxNodes = maxNodes.coerceAtLeast(2),
     maxAccounts = maxAccounts.coerceAtLeast(2),
 )
+
+/** A [CashFlowOptions] limit that never joins anything into "Other". */
+const val NO_LIMIT = Int.MAX_VALUE
+
+/**
+ * This row at the levels [options] picks: an account or category whose parent is expanded becomes
+ * its subaccount / sub-category, so the rest of the chart never knows the level.
+ */
+fun CashFlowRow.atLevel(options: CashFlowOptions): CashFlowRow {
+    val subCategory = categoryId != null && categoryId in options.expandedCategories
+    return copy(
+        accountId = if (accountId in options.expandedAccounts) subAccountId else accountId,
+        toAccountId = if (toAccountId != null && toAccountId in options.expandedAccounts) toSubAccountId else toAccountId,
+        categoryId = if (subCategory) subCategoryId else categoryId,
+        categoryName = if (subCategory) subCategoryName else categoryName,
+        categoryIconId = if (subCategory) subCategoryIconId else categoryIconId,
+        categoryColor = if (subCategory) subCategoryColor else categoryColor,
+    )
+}
+
+/** Whether these options show the account [sub] of [parent]. */
+fun CashFlowOptions.showsAccount(parent: Long, sub: Long): Boolean =
+    parent !in hiddenAccounts && (parent !in expandedAccounts || sub !in hiddenAccounts)
+
+/** Whether these options show the category [sub] of [parent]. */
+fun CashFlowOptions.showsCategory(parent: Long, sub: Long?): Boolean =
+    parent !in hiddenCategories && (parent !in expandedCategories || sub == null || sub !in hiddenCategories)
 
 private fun <K> MutableMap<K, Long>.add(key: K, amount: Long) {
     put(key, (get(key) ?: 0L) + amount)
@@ -105,8 +146,6 @@ fun buildCashFlow(
     accounts: Map<Long, Triple<String, Long?, Int>>,
     options: CashFlowOptions = CashFlowOptions(),
 ): CashFlowUi? {
-    fun visible(id: Long) = id !in options.hiddenAccounts
-
     // Raw sums, keyed by real account ids.
     val incomeLinks = HashMap<Pair<Long, Long>, Long>() // (category, account)
     val expenseLinks = HashMap<Pair<Long, Long>, Long>() // (account, category)
@@ -116,26 +155,29 @@ fun buildCashFlow(
     val otherIn = HashMap<Long, Long>()
     val otherOut = HashMap<Long, Long>()
     val transfers = HashMap<Pair<Long, Long>, Long>()
-    rows.forEach { r ->
-        if (r.total <= 0L) return@forEach
+    rows.forEach { raw ->
+        if (raw.total <= 0L) return@forEach
+        if (raw.categoryId != null && !options.showsCategory(raw.categoryId, raw.subCategoryId)) return@forEach
+        val r = raw.atLevel(options)
         val account = r.accountId
+        val shown = options.showsAccount(raw.accountId, raw.subAccountId)
         when (r.type) {
-            TradeType.INCOME -> if (visible(account) && r.categoryId != null) {
+            TradeType.INCOME -> if (shown && r.categoryId != null) {
                 incomeLinks.add(r.categoryId to account, r.total)
                 categories[r.categoryId] = r
             }
-            TradeType.EXPENSE -> if (visible(account) && r.categoryId != null) {
+            TradeType.EXPENSE -> if (shown && r.categoryId != null) {
                 expenseLinks.add(account to r.categoryId, r.total)
                 categories[r.categoryId] = r
             }
-            TradeType.ADJUST_IN -> if (options.adjustments && visible(account)) adjustIn.add(account, r.total)
-            TradeType.ADJUST_OUT -> if (options.adjustments && visible(account)) adjustOut.add(account, r.total)
+            TradeType.ADJUST_IN -> if (options.adjustments && shown) adjustIn.add(account, r.total)
+            TradeType.ADJUST_OUT -> if (options.adjustments && shown) adjustOut.add(account, r.total)
             TradeType.TRANSFER -> if (options.transfers) {
                 val to = r.toAccountId
-                // Between subaccounts of one parent: the money never left it.
+                // Between subaccounts of one parent (when parents are drawn): the money never left it.
                 if (to == account) return@forEach
-                val fromShown = visible(account)
-                val toShown = to != null && visible(to)
+                val fromShown = shown
+                val toShown = to != null && options.showsAccount(raw.toAccountId!!, raw.toSubAccountId ?: to)
                 when {
                     fromShown && toShown -> transfers.add(account to to!!, r.total)
                     fromShown -> otherOut.add(account, r.total)

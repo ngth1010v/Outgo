@@ -182,28 +182,28 @@ private const val BOTTOM = 2
 private const val RIGHT = 3
 
 /**
- * Lays [flow] out [width] by [height] px as a frame: incomes along the top edge and down the left
- * edge, spending along the bottom edge and down the right edge, the accounts in the middle. Money
- * only flows down and to the right: an income's caret points down (top row) or right (left column)
- * at its account, a spending's caret points down or right away from it, and an account takes money
- * in at its top and left sides and pays it out at its bottom and right sides.
- *
- * The accounts stand in a staircase from the top-left to the bottom-right, an account that gets more
- * from another by transfer than it sends back after that one, so transfers run down and right too.
- * Each caret goes as close as its row (or column) allows to the account it trades most with; the top
- * and bottom rows fill first, the carets that don't fit go to the columns. Then [routeCashLinks] finds
- * each link's way around the nodes and the other links. [sizes] come from [cashNodeSizes]; [labelW]
- * and [labelH] are each caret's label size (0 for accounts, whose label goes inside).
+ * The part of [layoutCashNodes] that needs only the width: the accounts' staircase order, each
+ * caret's account, and which edge each caret goes to (rows first, the rest to the columns).
  */
-fun layoutCashNodes(
-    flow: CashFlowUi,
-    width: Float,
-    height: Float,
-    sizes: CashNodeSizes,
-    labelW: FloatArray,
-    labelH: FloatArray,
-    m: CashNodeMetrics,
-): CashNodeLayout {
+private class FramePlan(
+    val w: FloatArray,
+    val h: FloatArray,
+    val hub: BooleanArray,
+    val order: List<Int>,
+    val step: (Int) -> Float,
+    val home: IntArray,
+    val incomes: List<Int>,
+    val spends: List<Int>,
+    val side: IntArray,
+    val leftW: Float,
+    val rightW: Float,
+    val topH: Float,
+    val bottomH: Float,
+    /** A column caret's room, label included. */
+    val colH: (Int) -> Float,
+)
+
+private fun planFrame(flow: CashFlowUi, width: Float, sizes: CashNodeSizes, labelW: FloatArray, labelH: FloatArray, m: CashNodeMetrics): FramePlan {
     val nodes = flow.nodes
     val n = nodes.size
     val links = flow.links
@@ -211,9 +211,6 @@ fun layoutCashNodes(
     val w = sizes.w.copyOf()
     val h = sizes.h.copyOf()
     val hub = BooleanArray(n) { nodes[it].column == CashColumn.ACCOUNT }
-    val g = m.cell
-    fun snapCentre(v: Float) = (floor(v / g) + 0.5f) * g
-    fun snapEdge(v: Float) = Math.round(v / g) * g
 
     // Accounts in transfer order: the receiver of a net transfer after its sender (capped, so a cycle
     // of transfers ends), then the busiest first.
@@ -274,6 +271,72 @@ fun layoutCashNodes(
     }
     val topH = incomes.filter { side[it] == TOP }.maxOfOrNull { rowH(it) } ?: 0f
     val bottomH = spends.filter { side[it] == BOTTOM }.maxOfOrNull { rowH(it) } ?: 0f
+
+    return FramePlan(w, h, hub, order, ::step, home, incomes, spends, side, leftW, rightW, topH, bottomH, ::colH)
+}
+
+/**
+ * How tall [layoutCashNodes] needs [width] px to be for every node to keep its own size: the
+ * accounts' staircase at full size with a lane between each two, and each side column's carets.
+ * A scrolling full screen draws the chart this tall (or the screen's height, if that is more).
+ */
+fun cashNaturalHeight(flow: CashFlowUi, width: Float, sizes: CashNodeSizes, labelW: FloatArray, labelH: FloatArray, m: CashNodeMetrics): Float {
+    val p = planFrame(flow, width, sizes, labelW, labelH, m)
+    // The staircase steps by the tallest account; a lane above, below and between each two, and a
+    // cell either end for the grid's rounding.
+    val tallest = p.order.maxOfOrNull { p.h[it] } ?: 0f
+    val accounts = tallest * p.order.size + m.lanes * (p.order.size + 1) + 2 * m.cell
+    fun column(edge: Int, ids: List<Int>): Float {
+        val inColumn = ids.filter { p.side[it] == edge }
+        return inColumn.sumOf { p.colH(it).toDouble() }.toFloat() + m.gap * (inColumn.size + 1)
+    }
+    val columns = max(column(LEFT, p.incomes), column(RIGHT, p.spends))
+    return p.topH + p.bottomH + max(accounts, columns)
+}
+
+/**
+ * Lays [flow] out [width] by [height] px as a frame: incomes along the top edge and down the left
+ * edge, spending along the bottom edge and down the right edge, the accounts in the middle. Money
+ * only flows down and to the right: an income's caret points down (top row) or right (left column)
+ * at its account, a spending's caret points down or right away from it, and an account takes money
+ * in at its top and left sides and pays it out at its bottom and right sides.
+ *
+ * The accounts stand in a staircase from the top-left to the bottom-right, an account that gets more
+ * from another by transfer than it sends back after that one, so transfers run down and right too.
+ * Each caret goes as close as its row (or column) allows to the account it trades most with; the top
+ * and bottom rows fill first, the carets that don't fit go to the columns. Then [routeCashLinks] finds
+ * each link's way around the nodes and the other links. [sizes] come from [cashNodeSizes]; [labelW]
+ * and [labelH] are each caret's label size (0 for accounts, whose label goes inside).
+ */
+fun layoutCashNodes(
+    flow: CashFlowUi,
+    width: Float,
+    height: Float,
+    sizes: CashNodeSizes,
+    labelW: FloatArray,
+    labelH: FloatArray,
+    m: CashNodeMetrics,
+): CashNodeLayout {
+    val p = planFrame(flow, width, sizes, labelW, labelH, m)
+    val nodes = flow.nodes
+    val n = nodes.size
+    val w = p.w
+    val h = p.h
+    val g = m.cell
+    fun snapCentre(v: Float) = (floor(v / g) + 0.5f) * g
+    fun snapEdge(v: Float) = Math.round(v / g) * g
+    val order = p.order
+    val step = p.step
+    val home = p.home
+    val incomes = p.incomes
+    val spends = p.spends
+    val side = p.side
+    val leftW = p.leftW
+    val rightW = p.rightW
+    val topH = p.topH
+    val bottomH = p.bottomH
+    fun rowW(i: Int) = max(h[i], labelW[i])
+    val colH = p.colH
 
     // The accounts' staircase, in the middle, from its top-left corner to its bottom-right one. Two
     // accounts in a row must clear each other one way or the other, with a lane between: if neither
@@ -356,13 +419,13 @@ fun layoutCashNodes(
         labelX[i] = cx
         labelTop[i] = tailY + w[i] + m.labelGap
     }
-    place(incomes.filter { side[it] == LEFT }, ::homeY, ::colH, topH, height - bottomH) { i, cy ->
+    place(incomes.filter { side[it] == LEFT }, ::homeY, colH, topH, height - bottomH) { i, cy ->
         x[i] = tipX - w[i] / 2f
         y[i] = cy - (m.labelGap + labelH[i]) / 2f
         labelX[i] = (tipX - labelW[i] / 2f).coerceAtMost(x[i])
         labelTop[i] = y[i] + h[i] / 2f + m.labelGap
     }
-    place(spends.filter { side[it] == RIGHT }, ::homeY, ::colH, topH, height - bottomH) { i, cy ->
+    place(spends.filter { side[it] == RIGHT }, ::homeY, colH, topH, height - bottomH) { i, cy ->
         x[i] = tailX + w[i] / 2f
         y[i] = cy - (m.labelGap + labelH[i]) / 2f
         labelX[i] = (tailX + labelW[i] / 2f).coerceAtLeast(x[i])

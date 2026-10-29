@@ -120,13 +120,23 @@ data class AccountFlow(
  */
 data class CashFlowRow(
     val type: Int,
+    /** The parent account (the account itself when it has none). */
     val accountId: Long,
     val toAccountId: Long?,
+    /** The parent category (the category itself when it has none). */
     val categoryId: Long?,
     val categoryName: String?,
     val categoryIconId: Long?,
     val categoryColor: Int?,
     val total: Long,
+    /** The account the trade is on (a subaccount); its parent is [accountId]. */
+    val subAccountId: Long = accountId,
+    val toSubAccountId: Long? = toAccountId,
+    /** The category the trade is on (a sub-category, or a parent that has none); its parent is [categoryId]. */
+    val subCategoryId: Long? = categoryId,
+    val subCategoryName: String? = categoryName,
+    val subCategoryIconId: Long? = categoryIconId,
+    val subCategoryColor: Int? = categoryColor,
 )
 
 /** Pseudo trade type: the receiving account's side of a transfer. */

@@ -527,7 +527,15 @@ private fun CardChips(card: ChartCard, state: AnalysisUiState, month: Int, onCha
             }
         }
     }
-    if (showOptions) {
+    if (showOptions && card.type.isCashFlow) {
+        CashFlowOptionsSheet(
+            title = chartName(card.type),
+            card = card,
+            tree = CashTree(state.allAccountTree, state.incomeTree, state.expenseTree),
+            onChange = onChange,
+            onDismiss = { showOptions = false },
+        )
+    } else if (showOptions) {
         ChartOptionsSheet(
             title = chartName(card.type),
             card = card,
@@ -554,14 +562,7 @@ private fun chartOptions(card: ChartCard, state: AnalysisUiState, month: Int): C
         kind != null -> stringResource(R.string.analysis_options_parent_category)
         else -> stringResource(R.string.analysis_options_parent_account)
     }
-    val shown = if ((type.base ?: type) == ChartType.TRADE_CASH_FLOW) {
-        // The parent accounts the period's money moved through (the chart draws a hidden-balance
-        // account's flows too, so it can be switched off here), and any already switched off.
-        val rows = state.monthTradeInsights[month]?.dataOrNull?.cashFlow.orEmpty()
-        val ids = rows.flatMapTo(HashSet()) { listOfNotNull(it.accountId, it.toAccountId) } + card.hidden.filter { it >= 0 }
-        cashFlowSwitches() + state.accountNames.filterKeys { it in ids }
-            .map { (id, a) -> OptionItem(id, a.first, a.second, a.third) }
-    } else if (type.hasToggles) {
+    val shown = if (type.hasToggles) {
         balanceGroups(treeOf(type, state), card.accountId, type.hasParent).map { (node, _) -> OptionItem(node.id, node.name, node.iconId, node.color) }
     } else {
         emptyList()
@@ -570,15 +571,7 @@ private fun chartOptions(card: ChartCard, state: AnalysisUiState, month: Int): C
     return ChartOptions(pickTitle, pick, pickedId, shown, metric = type.hasMetric)
 }
 
-/** The cash flow card's own switches, before its accounts; see [cashFlowOptions]. */
-@Composable
-private fun cashFlowSwitches(): List<OptionItem> {
-    val color = MaterialTheme.colorScheme.primary.toArgb()
-    return listOf(
-        OptionItem(CASH_HIDE_TRANSFERS, stringResource(R.string.analysis_cash_transfers), null, color, R.drawable.ph_swap_horizontal),
-        OptionItem(CASH_HIDE_ADJUSTMENTS, stringResource(R.string.analysis_cash_adjustments), null, color, R.drawable.ph_pencil_simple),
-    )
-}
+private val ChartType.isCashFlow: Boolean get() = (base ?: this) == ChartType.TRADE_CASH_FLOW
 
 /** What a [ChartType.hasParent]/[ChartType.hasToggles] chart picks from: categories of its kind, or accounts. */
 private fun treeOf(type: ChartType, state: AnalysisUiState): List<AccountNode> = when (type.categoryKind) {

@@ -91,8 +91,9 @@ enum class ChartType(
     /** Transfers as flows from the sending accounts to the receiving ones. */
     TRADE_TRANSFERS(R.drawable.ic_chart_flow, hasMode = false, insight = InsightGroup.TRADES),
     /**
-     * Where the money came from, which account held it and where it went (a Sankey diagram). Its
-     * toggles are the switches of [cashFlowOptions] and the parent accounts.
+     * Where the money came from, which account held it and where it went (a node chart). Its
+     * settings ([CashFlowOptionsSheet]) pick the account and category levels; its filter holds the
+     * switches of [cashFlowOptions], the accounts and the categories.
      */
     TRADE_CASH_FLOW(R.drawable.ic_chart_cash_flow, hasMode = false, hasToggles = true, insight = InsightGroup.TRADES),
 
@@ -405,6 +406,16 @@ data class ChartCard(
     val hidden: List<Long> = emptyList(),
     /** Only for [hasMetric]: shades and ranks by trade count instead of amount. */
     val byCount: Boolean = false,
+    /** Only for the cash flow: the categories switched off (parents, or sub-categories of [expandedCategories]). */
+    val hiddenCategories: List<Long> = emptyList(),
+    /** Only for the cash flow: full screen squeezes the chart into the screen instead of scrolling it. */
+    val fitScreen: Boolean = false,
+    /** Only for the cash flow: the parent accounts drawn as their subaccounts. */
+    val expandedAccounts: List<Long> = emptyList(),
+    /** Only for the cash flow: the parent categories drawn as their sub-categories. */
+    val expandedCategories: List<Long> = emptyList(),
+    /** Only for the cash flow: accounts show their name and net change, not just their icon. */
+    val accountDetail: Boolean = false,
 )
 
 /**
@@ -414,20 +425,25 @@ data class ChartCard(
 val ChartType.hasMetric: Boolean get() = (base ?: this).let { it == ChartType.TRADE_WEEK || it == ChartType.TRADE_CALENDAR }
 
 /**
- * `TYPE.MODE.accountId.zero.ids.month.hidden.metric` per card, `;`-separated; hidden is `,`-separated,
- * metric is `C` for [ChartCard.byCount] or empty. zero
+ * `TYPE.MODE.accountId.zero.ids.month.hidden.metric.flags.hiddenCategories.expandedAccounts.expandedCategories`
+ * per card, `;`-separated; the lists are `,`-separated, metric is `C` for [ChartCard.byCount] or empty,
+ * flags holds `F` for [ChartCard.fitScreen] and `D` for [ChartCard.accountDetail]. zero
  * belonged to the removed "Auto / With 0" axis chip (every axis now takes in 0), ids and month to
  * the removed budget and savings charts: all three are always written empty, so hidden keeps its
  * place. Older versions read the first parts and ignore the rest.
  */
 fun encodeLayout(cards: List<ChartCard>): String = cards.joinToString(";") {
-    "${it.type.name}.${it.mode.name}.${it.accountId ?: ""}...." + it.hidden.joinToString(",") + "." + (if (it.byCount) "C" else "")
+    "${it.type.name}.${it.mode.name}.${it.accountId ?: ""}...." + it.hidden.joinToString(",") + "." + (if (it.byCount) "C" else "") +
+        "." + (if (it.fitScreen) "F" else "") + (if (it.accountDetail) "D" else "") + "." + it.hiddenCategories.joinToString(",") +
+        "." + it.expandedAccounts.joinToString(",") + "." + it.expandedCategories.joinToString(",")
 }
 
 /**
  * Null [value] (never saved) gives [defaults]. Unknown charts — from a newer version's backup — and
  * charts not in [offered] are skipped rather than failing the whole list. Ids are 0; see [withIds].
  */
+private fun ids(part: String?): List<Long> = part?.split(',')?.mapNotNull { it.toLongOrNull() }.orEmpty()
+
 fun decodeLayout(value: String?, defaults: List<ChartType>, offered: Set<ChartType>): List<ChartCard> {
     if (value == null) return defaults.map { ChartCard(0, it) }
     return value.split(';').filter { it.isNotEmpty() }.mapNotNull { entry ->
@@ -438,6 +454,11 @@ fun decodeLayout(value: String?, defaults: List<ChartType>, offered: Set<ChartTy
             0, type, mode, parts.getOrNull(2)?.toLongOrNull(),
             parts.getOrNull(6)?.split(',')?.mapNotNull { it.toLongOrNull() }.orEmpty(),
             byCount = parts.getOrNull(7) == "C",
+            fitScreen = parts.getOrNull(8).orEmpty().contains('F'),
+            accountDetail = parts.getOrNull(8).orEmpty().contains('D'),
+            hiddenCategories = ids(parts.getOrNull(9)),
+            expandedAccounts = ids(parts.getOrNull(10)),
+            expandedCategories = ids(parts.getOrNull(11)),
         )
     }
 }

@@ -178,18 +178,25 @@ interface TradeDao {
     suspend fun transferTotalsForMonths(monthKeys: List<Int>): List<TransferTotal>
 
     /**
-     * Analysis cash flow: every trade of the given months summed per (type, parent account,
-     * receiving parent account, parent category). A pending transfer (amount 0) moved nothing yet.
+     * Analysis cash flow: every trade of the given months summed per (type, account, receiving
+     * account, category), each with its parent too, so the chart can show either level. A pending
+     * transfer (amount 0) moved nothing yet.
      */
     @Query(
         """
         SELECT t.type AS type,
                COALESCE(a.parent_id, t.account_id) AS accountId,
+               t.account_id AS subAccountId,
                CASE WHEN t.type = 4 AND t.to_account_id IS NOT NULL THEN COALESCE(ta.parent_id, t.to_account_id) END AS toAccountId,
+               CASE WHEN t.type = 4 THEN t.to_account_id END AS toSubAccountId,
                CASE WHEN t.type IN (0, 1) THEN pc.id END AS categoryId,
                CASE WHEN t.type IN (0, 1) THEN pc.name END AS categoryName,
                CASE WHEN t.type IN (0, 1) THEN pc.icon_id END AS categoryIconId,
                CASE WHEN t.type IN (0, 1) THEN pc.color END AS categoryColor,
+               CASE WHEN t.type IN (0, 1) THEN c.id END AS subCategoryId,
+               CASE WHEN t.type IN (0, 1) THEN c.name END AS subCategoryName,
+               CASE WHEN t.type IN (0, 1) THEN c.icon_id END AS subCategoryIconId,
+               CASE WHEN t.type IN (0, 1) THEN c.color END AS subCategoryColor,
                SUM(t.amount) AS total
         FROM trade t
         LEFT JOIN account a ON a.id = t.account_id
@@ -197,7 +204,7 @@ interface TradeDao {
         LEFT JOIN category c ON c.id = t.category_id
         LEFT JOIN category pc ON pc.id = COALESCE(c.parent_id, c.id)
         WHERE t.month_key IN (:monthKeys) AND t.amount > 0
-        GROUP BY 1, 2, 3, 4
+        GROUP BY 1, 3, 5, 10
         """,
     )
     suspend fun cashFlowForMonths(monthKeys: List<Int>): List<CashFlowRow>

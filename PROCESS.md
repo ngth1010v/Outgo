@@ -1,71 +1,48 @@
 # PROCESS
 
 **Status:** DONE
-**Started:** 2026-10-24 18:25
-**Last updated:** 2026-10-24 18:45
+**Started:** 2026-10-29 20:45
+**Last updated:** 2026-10-29 21:05
 
 ## Task
-Full-screen ("extend") versions of Analysis charts:
-- Transfer flows: plot takes almost all the screen height (only the total line under it).
-- Day calendar: square cells; tapping a day also lists that day's trades.
-- Weekday and time: new setting "Show by: Amount / Transactions" (card and full screen); full
-  screen adds a list of weekday-time slots sorted by that setting.
-
-User answers:
-- The setting lives in the gear sheet, saved per card.
-- Week list: only slots with trades; row = rank, "Mon 8h–12h", amount and trade count (the
-  sorted-by value on top), share bar; tapping a row selects the cell.
-- Day list follows the mode chip, sorted by time; tapping a row opens the trade editor.
-- Also asked for: Transaction sizes (tap a bucket, list its trades) and Transactions per month
-  (table: month, count, total, average) in full screen.
-
-Follow-up (same day):
-- Weekday and time: Expense/Income/All moved from the title chip into the gear sheet.
-- Day calendar: gets the Amount/Transactions setting too; both settings in the gear sheet.
-- Transfer flows: card merges accounts whose bar is shorter than their label into "Other" (both
-  sides; a lone small one stays itself), replacing the fixed top-5 rule; full screen shows every
-  account. Every bar is at least its label's height, so small accounts stay readable.
-- Test data: 8 accounts (Ví điện tử, Tiết kiệm, Momo, ZaloPay, ShopeePay, Techcombank, VCB,
-  Sổ tiết kiệm) and 17 transfers in Sep/Oct 2026, from scratchpad `seed_transfers.py`.
+User: redo the Cash flow chart's settings panel:
+- 3 parts filling most of the popup, switched by a segmented button at the top: Account / Category / Other.
+- Account part: one section per (parent) account: header row = icon, name, toggle (show/hide). When
+  shown: row "Show subaccount" + toggle. When on: grid of that account's subaccounts (toggle each).
+- Category part: same idea with categories.
+- Other part: toggles "Show balance adjust", "Fit to screen", "Show more detail for account".
+- Note: account box becomes icon only (like categories), detail shown on focus.
+Answers: keep "Show transfers" in Other; accounts icon-only by default, "Show more detail" ON = today's
+box; list ALL active accounts/categories; Category part = Income heading, then Expense heading.
 
 ## Plan
-1. [x] `ChartCard.byCount` + `ChartType.hasMetric`; layout string gets an 8th part (`C` or empty).
-2. [x] Gear sheet: "Show by" segmented switch (ChartOptionsSheet.kt).
-3. [x] WeekHeatmap takes values (amounts or counts); CalendarHeatmap `square` mode (own height, only
-   the month's week rows); PairedShareBars tap-to-select.
-4. [x] Cards (AnalysisInsightCards.kt): full-screen Column of the content height, list takes the rest
-   by weight. Shared `BarRow` / `TradeList` (Top trades now uses them too).
-5. [x] Strings en + vi.
-6. [x] Build + emulator check.
+1. [x] Model: ChartCard.expandedAccounts/expandedCategories/accountDetail (subAccounts/subCategories
+       dropped, never released). Encode part 8 flags F/D, 9 hiddenCategories, 10/11 expanded lists.
+2. [x] CashFlow.kt: atLevel per parent; showsAccount/showsCategory (parent hidden, or split + sub hidden).
+3. [x] VM: AnalysisUiState.allAccountTree (every active account).
+4. [x] CashFlowOptionsSheet.kt rewritten: tabs, sections w/ Switch rows, sub grid (cellRows), Other
+       switches. Filter sheet + cashFilterItems + cashFlowSwitches removed; old strings removed.
+5. [x] Chart: detail param; icon-only accounts (smaller metrics, radius 8dp), focus label name + net.
+6. [x] Strings en/vi; tests 28/28; emulator checked (3 tabs, sub grid, focus label, Other glyph, full screen).
 
 ## Done
-- Files: AnalysisLayout.kt, AnalysisScreen.kt, ChartOptionsSheet.kt, AnalysisInsightCharts.kt,
-  AnalysisInsightCards.kt, AnalysisInsights.kt (`SizeBucketsUi.bucketOf`, unused WeekGridUi helpers
-  removed), values{,-vi}/strings.xml.
+- See plan. New strings: analysis_cash_other, _show_subaccounts, _show_subcategories,
+  _show_transfers, _show_adjustments, _more_detail. Removed: analysis_cash_transfers, _adjustments,
+  _accounts, _categories, _subaccount, _subcategory, _filter, _filter_shown, _show, _full_screen, _scroll.
 
 ## Doing now
-- Nothing.
+- Nothing. Not committed (user did not ask).
 
 ## Not done yet
-- Optional: regenerate the Baseline Profile.
+- Nothing.
 
 ## Tests / verification
 | Case | How | Result |
 |------|-----|--------|
-| builds | `gradlew.bat installDebug` | pass |
-| transfer flow full height | emulator | pass |
-| calendar square cells, 5-week month has no empty row | emulator | pass |
-| calendar day tap lists trades + Open | emulator | pass |
-| week list sorted by amount, then by count after gear switch | emulator | pass |
-| sizes bucket tap lists trades | emulator | pass |
-| frequency table | emulator | pass |
-| card (non full screen) layouts unchanged | emulator | pass |
-| gear sheet: kind + show by, calendar and week | emulator | pass |
-| calendar All + Transactions shades by count, saved (`C` in layout) | emulator + DB | pass |
-| transfer card merges small, full screen shows all 12 accounts readable | emulator | pass |
-| year page week chart | not opened | not run |
-| dark theme | not run | not run |
+| unit tests | move BudgetCarryTest.kt + AnalysisLayoutTest.kt aside (already broken), `gradlew.bat :app:testDebugUnitTest --tests app.outgo.ui.analysis.CashFlowTest`, move back | 28/28 pass |
+| on device | `gradlew.bat :app:installDebug`; nav: tap (160,2335) then Analysis (684,2285); expand (138,318); gear in full screen (1010,204) | checked by screenshots |
 
 ## Notes for resuming
-- Emulator test data: 300 trades Jul–Oct 2026; don't wipe. The month layout was edited directly in
-  the DB to add the calendar, week, sizes and frequency charts.
+- JAVA_HOME = `C:\Users\LAPTOP\.gradle\jdks\eclipse_adoptium-21-amd64-windows.2`.
+- Previous (uncommitted) work in tree: sub levels, fit/scroll full screen, equal-flow fix.
+- Inline python heredocs with nested quotes broke bash; write scripts to the scratchpad instead.

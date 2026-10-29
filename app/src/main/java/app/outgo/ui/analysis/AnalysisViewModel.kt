@@ -59,6 +59,8 @@ data class AnalysisUiState(
     val layouts: Map<LayoutSlot, List<ChartCard>> = emptyMap(),
     /** Active parent accounts with their active subaccounts, in the user's order. */
     val accountTree: List<AccountNode> = emptyList(),
+    /** Every active account, hidden-balance ones too: the cash flow draws them, so its settings list them. */
+    val allAccountTree: List<AccountNode> = emptyList(),
     /**
      * Each active account's privacy settings as they apply, by id. Savings progress charts must skip
      * an account whose [AccountPrivacy.progressHiddenInAnalysis] is true, and never show a balance
@@ -159,7 +161,10 @@ class AnalysisViewModel(
                     order[parent.id] = order.size
                     list.filter { it.parentId == parent.id }.forEach { order[it.id] = order.size }
                 }
-                _state.update { it.copy(accountTree = tree, accountPrivacy = privacy, accountNames = accounts, accountOrder = order) }
+                val all = treeOf(active.filter { it.isParent }, active.filter { !it.isParent }, link = { it.id to it.parentId }) {
+                    AccountNode(it.id, it.name, it.iconId, it.color)
+                }
+                _state.update { it.copy(accountTree = tree, allAccountTree = all, accountPrivacy = privacy, accountNames = accounts, accountOrder = order) }
             }
         }
         viewModelScope.launch {
