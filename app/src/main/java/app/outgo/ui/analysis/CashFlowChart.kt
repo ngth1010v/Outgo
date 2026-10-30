@@ -19,6 +19,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -143,11 +144,9 @@ fun CashFlowChart(
         layout?.let { nodeDrawing(flow, it, caretTexts, labels, units, measurer, style, density, metrics, detail, size.width.toFloat(), size.height.toFloat()) }
     }
     val icons = rememberNodeIcons(flow)
-    val glyphs = CaretGlyphs(
-        other = painterResource(R.drawable.ph_dots_three),
-        adjust = painterResource(R.drawable.ph_pencil_simple),
-        accounts = painterResource(R.drawable.ph_swap_horizontal),
-    )
+    // Each node its own painter: a vector painter caches one size, so two nodes sharing one at
+    // different sizes (the joined account and a joined caret, say) would draw each other's leftovers.
+    val glyphs = flow.nodes.mapIndexed { i, node -> key(i) { glyphOf(node)?.let { painterResource(it) } } }
     val select by rememberUpdatedState(onSelect)
     val picked by rememberUpdatedState(selected)
     // The focus crossfades: [focusFrom] fades out while [focusTo] fades in, as [focusMix] runs 0 to 1.
@@ -229,7 +228,7 @@ fun CashFlowChart(
                     when {
                         bitmap != null -> drawBitmap(bitmap, box, fade, ColorFilter.tint(color))
                         // The joined accounts have no icon of their own: the same dots as "Other" carets.
-                        node.refId == OTHER_NODE -> drawGlyph(glyphs.other, box, fade, ColorFilter.tint(color))
+                        node.refId == OTHER_NODE -> glyphs[i]?.let { drawGlyph(it, box, fade, ColorFilter.tint(color)) }
                     }
                 } else {
                     // The selection's outline under the caret, so it shows only around the edge: about as
@@ -247,7 +246,7 @@ fun CashFlowChart(
                     val tint = ColorFilter.tint(Color.White)
                     when {
                         bitmap != null -> drawBitmap(bitmap, box, fade, tint)
-                        node.iconId == null -> glyphs.of(node)?.let { drawGlyph(it, box, fade, tint) }
+                        node.iconId == null -> glyphs[i]?.let { drawGlyph(it, box, fade, tint) }
                     }
                 }
             }
@@ -355,14 +354,12 @@ private fun cashMetrics(full: Boolean, detail: Boolean, density: Density): CashN
     )
 }
 
-/** What a caret with no icon of its own shows. */
-private class CaretGlyphs(val other: Painter, val adjust: Painter, val accounts: Painter) {
-    fun of(node: CashNode): Painter? = when {
-        node.refId == OTHER_NODE -> other
-        node.kind == CashKind.ADJUST_IN || node.kind == CashKind.ADJUST_OUT -> adjust
-        node.kind == CashKind.OTHER_IN || node.kind == CashKind.OTHER_OUT -> accounts
-        else -> null
-    }
+/** What a node with no icon of its own shows: the joined ones dots, adjustments a pencil, accounts not shown arrows. */
+private fun glyphOf(node: CashNode): Int? = when {
+    node.refId == OTHER_NODE -> R.drawable.ph_dots_three
+    node.kind == CashKind.ADJUST_IN || node.kind == CashKind.ADJUST_OUT -> R.drawable.ph_pencil_simple
+    node.kind == CashKind.OTHER_IN || node.kind == CashKind.OTHER_OUT -> R.drawable.ph_swap_horizontal
+    else -> null
 }
 
 private fun DrawScope.drawGlyph(painter: Painter, box: Rect, alpha: Float, tint: ColorFilter) {
@@ -552,27 +549,59 @@ private fun nodeDrawing(
         }
     }
 
-    // A caret's label shows only while it is selected, on top of everything: beside the caret where
-    // it fits inside the chart, clear of the other nodes if it can be.
+    // A node's label shows only while it is selected, on top of everything: beside it (above, below,
+    // either side or at a corner), always inside the chart, where it covers least of the node's own
+    // links, then of the other nodes, then of the other links.
     val inset = LABEL_INSET.toPx()
     val away = 4.dp.toPx()
+    // How long a stretch of [l]'s route (lane-wide) runs under [r].
+    fun covered(l: Int, r: Rect): Float {
+        val pts = g.routes[l]
+        val t = g.linkW[l] / 2f
+        var len = 0f
+        for (k in 2 until pts.size step 2) {
+            val x0 = min(pts[k - 2], pts[k])
+            val x1 = max(pts[k - 2], pts[k])
+            val y0 = min(pts[k - 1], pts[k + 1])
+            val y1 = max(pts[k - 1], pts[k + 1])
+            if (x1 + t <= r.left || x0 - t >= r.right || y1 + t <= r.top || y0 - t >= r.bottom) continue
+            len += max(0f, if (y0 == y1) min(x1, r.right) - max(x0, r.left) else min(y1, r.bottom) - max(y0, r.top))
+        }
+        return len
+    }
+    // [r] moved the least way that brings it inside the chart (its top-left corner, if it is bigger).
+    fun inside(r: Rect): Rect {
+        val dx = if (r.right > width) width - r.right else 0f
+        val dy = if (r.bottom > height) height - r.bottom else 0f
+        val moved = r.translate(dx, dy)
+        return moved.translate(max(-moved.left, 0f), max(-moved.top, 0f))
+    }
     val focus = (0 until n).map { i ->
         val (name, amount) = caretTexts[i] ?: return@map emptyList()
         val w = max(name.size.width, amount.size.width) + 2 * inset
         val h = (name.size.height + amount.size.height).toFloat() + inset
         val b = body[i]
-        val spots = listOf(
-            Offset(b.center.x - w / 2f, b.bottom + away),
-            Offset(b.center.x - w / 2f, b.top - away - h),
-            Offset(b.right + away, b.center.y - h / 2f),
-            Offset(b.left - away - w, b.center.y - h / 2f),
-        ).map { Rect(it, Size(w, h)) }
-        fun inside(r: Rect) = r.left >= 0f && r.top >= 0f && r.right <= width && r.bottom <= height
-        fun clear(r: Rect) = (0 until n).none { it != i && body[it].overlaps(r) }
-        val box = spots.firstOrNull { inside(it) && clear(it) } ?: spots.firstOrNull(::inside) ?: spots.first().let { r ->
-            // Nowhere fits: below, pushed back inside.
-            r.translate(-min(r.left, 0f) - max(r.right - width, 0f), -min(r.top, 0f) - max(r.bottom - height, 0f))
-        }
+        val left = b.left - away - w
+        val right = b.right + away
+        val above = b.top - away - h
+        val below = b.bottom + away
+        val midX = b.center.x - w / 2f
+        val midY = b.center.y - h / 2f
+        // Above and below: centred, then from the middle to either side (clear of a link down the
+        // middle), then past either side. Beside: centred, then from the middle up or down.
+        val besideX = listOf(right, left)
+        val spots = (
+            listOf(below, above).flatMap { y -> listOf(midX, b.center.x + away, b.center.x - away - w, right, left).map { Offset(it, y) } } +
+                listOf(midY, b.center.y + away, b.center.y - away - h).flatMap { y -> besideX.map { Offset(it, y) } }
+            ).map { inside(Rect(it, Size(w, h))) }
+        val own = flow.links.indices.filter { flow.links[it].from == i || flow.links[it].to == i }
+        val others = flow.links.indices.filter { it !in own }
+        val box = spots.withIndex().minBy { (k, r) ->
+            // Its own node and the others under it count as much as the longest link could; then its
+            // own links, then the others'; the earlier spot wins a tie.
+            val nodes = (0 until n).count { body[it].overlaps(r) } * (width + height) * 4f
+            nodes + own.sumOf { covered(it, r).toDouble() }.toFloat() * 3f + others.sumOf { covered(it, r).toDouble() }.toFloat() + k * 0.01f
+        }.value
         val top = box.top + inset / 2f
         listOf(
             NodeText(name, Offset(box.center.x - name.size.width / 2f, top), null, box, pill = true),
