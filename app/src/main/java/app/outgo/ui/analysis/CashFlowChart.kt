@@ -505,11 +505,31 @@ private fun nodeDrawing(
     for (i in 0 until n) {
         val node = flow.nodes[i]
         if (account[i] && !detail) {
-            // Just the icon, centred; the name and net change show on focus.
+            // The icon, centred; and under it the name, then the net change, when the rectangle (sized
+            // for its links) has room for them whole. The rest shows on focus.
             val r = body[i]
             val s = accountIcon(r.width, density)
-            icon += Rect(Offset(r.center.x - s / 2f, r.center.y - s / 2f), Size(s, s))
-            texts += emptyList<NodeText>()
+            val pad = 4.dp.toPx()
+            val gap = 2.dp.toPx()
+            val bold = style.copy(fontWeight = FontWeight.Medium)
+            val textW = r.width - 2 * pad
+            val room = r.height - 2 * pad
+            val name = measurer.line(labels.of(node), bold, textW, lines = 2)
+            val net = measurer.line(signedNet(node, units), bold, textW)
+            fun whole(t: TextLayoutResult) = !t.hasVisualOverflow && t.size.width <= textW
+            val withName = s + gap + name.size.height
+            val shown = when {
+                textW <= 0f || !whole(name) || withName > room -> emptyList()
+                whole(net) && withName + net.size.height <= room -> listOf(name, net)
+                else -> listOf(name)
+            }
+            var top = r.center.y - (s + if (shown.isEmpty()) 0f else gap + shown.sumOf { it.size.height }.toFloat()) / 2f
+            icon += Rect(Offset(r.center.x - s / 2f, top), Size(s, s))
+            top += s + gap
+            texts += shown.mapIndexed { k, t ->
+                NodeText(t, Offset(r.center.x - t.size.width / 2f, top), if (k == 1) netColor(node) else null)
+                    .also { top += t.size.height }
+            }
         } else if (account[i]) {
             val r = body[i]
             val c = accountContent(node, r.width, labels, units, measurer, style, density)

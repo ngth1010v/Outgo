@@ -176,8 +176,18 @@ internal fun routeCashLinks(
         // [run]: on a lengthened port, the cells between the node and [cell], in path order; [runCost]
         // what entering them costs.
         data class Port(val cell: Int, val dir: Int, val x: Float, val y: Float, val bias: Int, val run: IntArray = IntArray(0), val runCost: Int = 0)
-        fun accountPorts(i: Int, out: Boolean): List<Port> {
+        // [ox], [oy]: the link's other end. Only the sides that face it, so the link never leaves (or
+        // enters) the account going away from that end and has to turn back past it; every side when
+        // none does (the other end overlaps the account). Of those, money comes in at the top and left
+        // and goes out at the bottom and right, where possible: the account is sized for that
+        // (cashNodeSizes), so the ways in don't take the lanes meant for the ways out.
+        fun accountPorts(i: Int, out: Boolean, ox: Float, oy: Float): List<Port> {
             val (left, top, right, bottom) = boxes[i].toList()
+            var facing = booleanArrayOf(ox > right, oy > bottom, ox < left, oy < top)
+            if (facing.none { it }) facing = BooleanArray(4) { true }
+            val own = if (out) booleanArrayOf(true, true, false, false) else booleanArrayOf(false, false, true, true)
+            val preferred = BooleanArray(4) { facing[it] && own[it] }
+            if (preferred.any { it }) facing = preferred
             val ports = ArrayList<Port>()
             // Only the straight part of a side: the rounded corners are no place to start or end.
             val corner = m.accountRadius
@@ -187,15 +197,17 @@ internal fun routeCashLinks(
             for (c in col(left + inset)..col(right - inset)) {
                 if (cx(c) - w / 2f < left + corner || cx(c) + w / 2f > right - corner) continue
                 val bias = abs(cx(c) - layout.x[i]).toInt() / g.toInt()
-                ports += Port(row(top - g / 2f) * cols + c, if (out) UP else DOWN, cx(c), top, bias)
-                ports += Port(row(bottom + g / 2f) * cols + c, if (out) DOWN else UP, cx(c), bottom, bias)
+                if (facing[UP]) ports += Port(row(top - g / 2f) * cols + c, if (out) UP else DOWN, cx(c), top, bias)
+                if (facing[DOWN]) ports += Port(row(bottom + g / 2f) * cols + c, if (out) DOWN else UP, cx(c), bottom, bias)
             }
             for (r in row(top + inset)..row(bottom - inset)) {
                 if (cy(r) - w / 2f < top + corner || cy(r) + w / 2f > bottom - corner) continue
                 val bias = abs(cy(r) - layout.y[i]).toInt() / g.toInt()
-                ports += Port(r * cols + col(left - g / 2f), if (out) LEFT else RIGHT, left, cy(r), bias)
-                ports += Port(r * cols + col(right + g / 2f), if (out) RIGHT else LEFT, right, cy(r), bias)
+                if (facing[LEFT]) ports += Port(r * cols + col(left - g / 2f), if (out) LEFT else RIGHT, left, cy(r), bias)
+                if (facing[RIGHT]) ports += Port(r * cols + col(right + g / 2f), if (out) RIGHT else LEFT, right, cy(r), bias)
             }
+            // The facing sides too short for this link: any side, as before.
+            if (ports.isEmpty() && !facing.all { it }) return accountPorts(i, out, Float.NaN, Float.NaN)
             return ports
         }
         fun caretPort(i: Int, out: Boolean): Port {
@@ -236,8 +248,12 @@ internal fun routeCashLinks(
         val bendRoom = m.linkCorner + w / 2f
         val leadOut = lead(bendRoom)
         val leadIn = lead(if (flow.isTransfer(link)) bendRoom + max(w * ARROW_LENGTH, m.arrow) else bendRoom)
-        val plainStarts = if (hub[link.from]) accountPorts(link.from, out = true) else listOf(caretPort(link.from, out = true))
-        val plainGoals = if (hub[link.to]) accountPorts(link.to, out = false) else listOf(caretPort(link.to, out = false))
+        val fromCaret = if (hub[link.from]) null else caretPort(link.from, out = true)
+        val toCaret = if (hub[link.to]) null else caretPort(link.to, out = false)
+        val plainStarts = fromCaret?.let { listOf(it) }
+            ?: accountPorts(link.from, out = true, toCaret?.x ?: layout.x[link.to], toCaret?.y ?: layout.y[link.to])
+        val plainGoals = toCaret?.let { listOf(it) }
+            ?: accountPorts(link.to, out = false, fromCaret?.x ?: layout.x[link.from], fromCaret?.y ?: layout.y[link.from])
         if (plainStarts.isEmpty() || plainGoals.isEmpty()) {
             // An account too small for this link on every side: straight between the middles.
             routes[l] = floatArrayOf(layout.x[link.from], layout.y[link.from], layout.x[link.to], layout.y[link.to])

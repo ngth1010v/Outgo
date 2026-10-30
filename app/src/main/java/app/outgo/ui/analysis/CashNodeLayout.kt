@@ -68,31 +68,77 @@ class CashNodeSizes(
     /** An account's height, a caret's thickness. */
     val h: FloatArray,
     val linkW: FloatArray,
+    /**
+     * The least width an account keeps when the layout shrinks the accounts to fit: room for its
+     * links side by side along one side. 0 for carets.
+     */
+    val minW: FloatArray = FloatArray(w.size),
 )
 
-/** The sizes of [flow]'s nodes and links, square-root relative to the money (see [CashNodeMetrics]). */
+/**
+ * The sizes of [flow]'s nodes and links (see [CashNodeMetrics]). Carets and links go by the money,
+ * square-root relative. An account is the smallest of its range, or just big enough for its links
+ * each to have its own lane between the rounded corners (as the router spaces them) if that is more.
+ */
 fun cashNodeSizes(flow: CashFlowUi, m: CashNodeMetrics): CashNodeSizes {
     val nodes = flow.nodes
     val links = flow.links
     val hub = BooleanArray(nodes.size) { nodes[it].column == CashColumn.ACCOUNT }
     fun ClosedFloatingPointRange<Float>.at(t: Float) = start + (endInclusive - start) * t
     fun share(v: Long, most: Long) = sqrt(v.toDouble() / most.coerceAtLeast(1L)).toFloat().coerceIn(0f, 1f)
-    val mostHub = nodes.filterIndexed { i, _ -> hub[i] }.maxOfOrNull { it.total } ?: 1L
     val mostCaret = nodes.filterIndexed { i, _ -> !hub[i] }.maxOfOrNull { it.total } ?: 1L
     val mostLink = links.maxOfOrNull { it.total } ?: 1L
+    val linkW = FloatArray(links.size) { m.link.at(share(links[it].total, mostLink)) }
+
+    // How the router spaces links side by side (see routeCashLinks): a link keeps [keep] cells clear
+    // either side of its centre, and takes [wide] cells either side itself.
+    val g = m.cell
+    fun wide(l: Int) = floor(linkW[l] / 2f / g + 0.5f)
+    fun keep(l: Int) = floor((linkW[l] / 2f + m.linkGap) / g)
+    // The length of side the links [ids] need, side by side between the rounded corners: half the
+    // outer two, the router's least spacing between each two, and a cell for the grid's rounding.
+    fun need(ids: List<Int>): Float {
+        if (ids.isEmpty()) return 0f
+        // Two cells: one for the grid's rounding, one spare, as the router may not pack them tight.
+        var len = 2 * m.accountRadius + 2 * g + (linkW[ids.first()] + linkW[ids.last()]) / 2f
+        for (k in 1 until ids.size) {
+            val a = ids[k - 1]
+            val b = ids[k]
+            len += (max(wide(a) + keep(b), wide(b) + keep(a)) + 1f) * g
+        }
+        return len
+    }
+    // The least width for a way's links (in or out), which leave or enter by two sides (out: bottom
+    // and right; in: top and left). The upright side is [ACCOUNT_ASPECT] times the level one, so it
+    // takes its share of them: the widest first, each to the side that keeps the width smaller.
+    fun least(ids: List<Int>): Float {
+        val level = ArrayList<Int>()
+        val upright = ArrayList<Int>()
+        ids.sortedByDescending { linkW[it] }.forEach { l ->
+            val onLevel = max(need(level + l), need(upright) / ACCOUNT_ASPECT)
+            val onUpright = max(need(level), need(upright + l) / ACCOUNT_ASPECT)
+            if (onLevel <= onUpright) level += l else upright += l
+        }
+        return max(need(level), need(upright) / ACCOUNT_ASPECT)
+    }
+
     val w = FloatArray(nodes.size)
     val h = FloatArray(nodes.size)
-    nodes.forEachIndexed { i, node ->
+    val minW = FloatArray(nodes.size)
+    nodes.indices.forEach { i ->
         if (hub[i]) {
-            val t = share(node.total, mostHub)
-            w[i] = m.accountW.at(t)
-            h[i] = max(m.accountH.at(t), w[i] * ACCOUNT_ASPECT)
+            val outs = links.indices.filter { links[it].from == i }
+            val ins = links.indices.filter { links[it].to == i }
+            minW[i] = max(least(outs), least(ins))
+            // The range's smallest, or just enough for the links.
+            w[i] = max(m.accountW.start, minW[i])
+            h[i] = max(m.accountH.start, w[i] * ACCOUNT_ASPECT)
         } else {
-            w[i] = m.caret.at(share(node.total, mostCaret))
+            w[i] = m.caret.at(share(nodes[i].total, mostCaret))
             h[i] = w[i] * CARET_HEIGHT
         }
     }
-    return CashNodeSizes(w, h, FloatArray(links.size) { m.link.at(share(links[it].total, mostLink)) })
+    return CashNodeSizes(w, h, linkW, minW)
 }
 
 /**
@@ -104,7 +150,7 @@ fun CashNodeSizes.halveAccountPadding(contentH: FloatArray): CashNodeSizes {
     contentH.forEachIndexed { i, c ->
         if (c > 0f) nh[i] = maxOf((h[i] + c) / 2f, c, w[i] * ACCOUNT_ASPECT)
     }
-    return CashNodeSizes(w, nh, linkW)
+    return CashNodeSizes(w, nh, linkW, minW)
 }
 
 /**
@@ -349,11 +395,15 @@ fun layoutCashNodes(
     val midB = snapEdge(height - bottomH - m.lanes)
     val midW = max(midR - midL, 1f)
     val midH = max(midB - midT, 1f)
+    // Shrinking never takes an account below the width its links need ([CashNodeSizes.minW]).
+    val minW = sizes.minW
+    fun shrunkW(i: Int, f: Float) = max(w[i] * f, minW[i])
+    fun shrunkH(i: Int, f: Float) = max(h[i] * f, shrunkW(i, f) * ACCOUNT_ASPECT)
     if (order.size > 1) {
         val gaps = (order.size - 1).toFloat()
         fun fits(f: Float): Boolean {
-            val bw = order.maxOf { w[it] } * f
-            val bh = order.maxOf { h[it] } * f
+            val bw = order.maxOf { shrunkW(it, f) }
+            val bh = order.maxOf { shrunkH(it, f) }
             return (midW - bw) / gaps >= bw + m.lanes || (midH - bh) / gaps >= bh + m.lanes
         }
         if (!fits(1f)) {
@@ -364,14 +414,15 @@ fun layoutCashNodes(
                 if (fits(mid)) lo = mid else hi = mid
             }
             order.forEach {
-                w[it] *= lo
-                h[it] = max(h[it] * lo, w[it] * ACCOUNT_ASPECT)
+                val nh = shrunkH(it, lo)
+                w[it] = shrunkW(it, lo)
+                h[it] = nh
             }
         }
     } else if (order.size == 1) {
         val i = order.first()
         if (h[i] > midH) {
-            w[i] = min(w[i], midH / ACCOUNT_ASPECT)
+            w[i] = max(min(w[i], midH / ACCOUNT_ASPECT), minW[i])
             h[i] = max(midH, w[i] * ACCOUNT_ASPECT)
         }
     }
