@@ -519,6 +519,8 @@ private fun nodeDrawing(
             fun whole(t: TextLayoutResult) = !t.hasVisualOverflow && t.size.width <= textW
             val withName = s + gap + name.size.height
             val shown = when {
+                // The joined accounts: their dots alone, the names and sum show on focus.
+                node.refId == OTHER_NODE -> emptyList()
                 textW <= 0f || !whole(name) || withName > room -> emptyList()
                 whole(net) && withName + net.size.height <= room -> listOf(name, net)
                 else -> listOf(name)

@@ -178,16 +178,11 @@ internal fun routeCashLinks(
         data class Port(val cell: Int, val dir: Int, val x: Float, val y: Float, val bias: Int, val run: IntArray = IntArray(0), val runCost: Int = 0)
         // [ox], [oy]: the link's other end. Only the sides that face it, so the link never leaves (or
         // enters) the account going away from that end and has to turn back past it; every side when
-        // none does (the other end overlaps the account). Of those, money comes in at the top and left
-        // and goes out at the bottom and right, where possible: the account is sized for that
-        // (cashNodeSizes), so the ways in don't take the lanes meant for the ways out.
+        // none does (the other end overlaps the account). Money may come in or go out by any of them.
         fun accountPorts(i: Int, out: Boolean, ox: Float, oy: Float): List<Port> {
             val (left, top, right, bottom) = boxes[i].toList()
             var facing = booleanArrayOf(ox > right, oy > bottom, ox < left, oy < top)
             if (facing.none { it }) facing = BooleanArray(4) { true }
-            val own = if (out) booleanArrayOf(true, true, false, false) else booleanArrayOf(false, false, true, true)
-            val preferred = BooleanArray(4) { facing[it] && own[it] }
-            if (preferred.any { it }) facing = preferred
             val ports = ArrayList<Port>()
             // Only the straight part of a side: the rounded corners are no place to start or end.
             val corner = m.accountRadius

@@ -109,8 +109,9 @@ fun cashNodeSizes(flow: CashFlowUi, m: CashNodeMetrics): CashNodeSizes {
         }
         return len
     }
-    // The least width for a way's links (in or out), which leave or enter by two sides (out: bottom
-    // and right; in: top and left). The upright side is [ACCOUNT_ASPECT] times the level one, so it
+    // The least width for a way's links (in or out), as if they shared two sides between them (a
+    // level one and an upright one; the router may use any side that faces a link's other end, so
+    // this leaves room enough). The upright side is [ACCOUNT_ASPECT] times the level one, so it
     // takes its share of them: the widest first, each to the side that keeps the width smaller.
     fun least(ids: List<Int>): Float {
         val level = ArrayList<Int>()
@@ -422,8 +423,8 @@ fun cashNaturalHeight(flow: CashFlowUi, width: Float, sizes: CashNodeSizes, labe
  * Lays [flow] out [width] by [height] px as a frame: incomes along the top edge and down the left
  * edge, spending along the bottom edge and down the right edge, the accounts in the middle. Money
  * only flows down and to the right: an income's caret points down (top row) or right (left column)
- * at its account, a spending's caret points down or right away from it, and an account takes money
- * in at its top and left sides and pays it out at its bottom and right sides.
+ * at its account, and a spending's caret points down or right away from it. A link may leave or
+ * enter an account by any side that faces its other end.
  *
  * The accounts stand in lines by transfer level (an account that gets more from another by transfer
  * than it sends back comes in a later line), so transfers run down or right too. The lines are rows,
