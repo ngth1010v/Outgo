@@ -2,6 +2,7 @@ package app.outgo.ui.analysis
 
 import androidx.compose.runtime.Immutable
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.max
@@ -228,7 +229,7 @@ private const val BOTTOM = 2
 private const val RIGHT = 3
 
 /**
- * The part of [layoutCashNodes] that needs only the width: the accounts' staircase order, each
+ * The part of [layoutCashNodes] that needs only the width: the accounts' transfer levels, each
  * caret's account, and which edge each caret goes to (rows first, the rest to the columns).
  */
 private class FramePlan(
@@ -236,6 +237,8 @@ private class FramePlan(
     val h: FloatArray,
     val hub: BooleanArray,
     val order: List<Int>,
+    /** [order] by transfer level: no account gets more by transfer from one of its own level or a later one. */
+    val levels: List<List<Int>>,
     val step: (Int) -> Float,
     val home: IntArray,
     val incomes: List<Int>,
@@ -247,6 +250,9 @@ private class FramePlan(
     val bottomH: Float,
     /** A column caret's room, label included. */
     val colH: (Int) -> Float,
+    /** The left and right edges of the room the accounts stand in. */
+    val midL: Float,
+    val midR: Float,
 )
 
 private fun planFrame(flow: CashFlowUi, width: Float, sizes: CashNodeSizes, labelW: FloatArray, labelH: FloatArray, m: CashNodeMetrics): FramePlan {
@@ -271,7 +277,8 @@ private fun planFrame(flow: CashFlowUi, width: Float, sizes: CashNodeSizes, labe
     val order = hubs.sortedWith(compareBy<Int> { level[it] }.thenBy { it })
     val rank = IntArray(n)
     order.forEachIndexed { k, i -> rank[i] = k }
-    // Where along the staircase each account stands, 0 (top-left) to 1 (bottom-right).
+    val levels = order.groupBy { level[it] }.values.toList()
+    // Roughly how far right (or down) each account stands, 0 to 1: which carets go to the rows.
     fun step(i: Int) = if (order.size == 1) 0.5f else rank[i].toFloat() / (order.size - 1)
 
     // Each caret's account: the one it trades most with.
@@ -318,20 +325,91 @@ private fun planFrame(flow: CashFlowUi, width: Float, sizes: CashNodeSizes, labe
     val topH = incomes.filter { side[it] == TOP }.maxOfOrNull { rowH(it) } ?: 0f
     val bottomH = spends.filter { side[it] == BOTTOM }.maxOfOrNull { rowH(it) } ?: 0f
 
-    return FramePlan(w, h, hub, order, ::step, home, incomes, spends, side, leftW, rightW, topH, bottomH, ::colH)
+    val g = m.cell
+    val midL = Math.round((leftW + m.lanes) / g) * g
+    val midR = Math.round((width - rightW - m.lanes) / g) * g
+    return FramePlan(w, h, hub, order, levels, ::step, home, incomes, spends, side, leftW, rightW, topH, bottomH, ::colH, midL, midR)
+}
+
+/**
+ * [levels]' accounts in lines [crossLen] long: each level's in order along a line, a lane apart, and
+ * a new line (of the same level) where the next one doesn't fit. [cross] is an account's size along
+ * a line. No account gets money by transfer from one in its own line or a later one.
+ */
+private fun packLines(levels: List<List<Int>>, cross: (Int) -> Float, crossLen: Float, lane: Float): List<List<Int>> {
+    val lines = ArrayList<List<Int>>()
+    levels.forEach { level ->
+        var line = ArrayList<Int>()
+        var len = 0f
+        level.forEach { i ->
+            val next = if (line.isEmpty()) cross(i) else len + lane + cross(i)
+            if (line.isNotEmpty() && next > crossLen) {
+                lines += line
+                line = arrayListOf(i)
+                len = cross(i)
+            } else {
+                line += i
+                len = next
+            }
+        }
+        if (line.isNotEmpty()) lines += line
+    }
+    return lines
+}
+
+/** How deep [lines] stand together, each as deep as its deepest account ([main]), a lane between. */
+private fun linesDepth(lines: List<List<Int>>, main: (Int) -> Float, lane: Float): Float =
+    lines.sumOf { line -> line.maxOf(main).toDouble() }.toFloat() + lane * (lines.size - 1).coerceAtLeast(0)
+
+/** How long the longest of [lines] is, its accounts ([cross]) a lane apart. */
+private fun linesLength(lines: List<List<Int>>, cross: (Int) -> Float, lane: Float): Float =
+    lines.maxOfOrNull { line -> line.sumOf { cross(it).toDouble() }.toFloat() + lane * (line.size - 1) } ?: 0f
+
+/**
+ * The room links need in each gap of [lines]: before the first line, between each two, after the
+ * last. A link crosses the gaps between its account's line and the edge its caret is on, when that
+ * caret faces the lines (the top row for rows, the left column for columns; the bottom row or right
+ * column on the far side), and a transfer the gaps between its accounts' lines. [across]: the lines
+ * are columns, the levels going left to right.
+ */
+private fun gapNeeds(flow: CashFlowUi, lines: List<List<Int>>, side: IntArray, linkW: FloatArray, across: Boolean, m: CashNodeMetrics): FloatArray {
+    val lineOf = IntArray(flow.nodes.size) { -1 }
+    lines.forEachIndexed { k, line -> line.forEach { lineOf[it] = k } }
+    val before = if (across) LEFT else TOP
+    val after = if (across) RIGHT else BOTTOM
+    val need = FloatArray(lines.size + 1)
+    flow.links.forEachIndexed { l, link ->
+        val a = lineOf[link.from]
+        val b = lineOf[link.to]
+        val crossed = when {
+            a >= 0 && b >= 0 -> (min(a, b) + 1)..max(a, b)
+            b >= 0 && side[link.from] == before -> 0..b
+            a >= 0 && side[link.to] == after -> (a + 1)..lines.size
+            else -> IntRange.EMPTY
+        }
+        crossed.forEach { need[it] += linkW[l] + m.linkGap }
+    }
+    return need
 }
 
 /**
  * How tall [layoutCashNodes] needs [width] px to be for every node to keep its own size: the
- * accounts' staircase at full size with a lane between each two, and each side column's carets.
- * A scrolling full screen draws the chart this tall (or the screen's height, if that is more).
+ * accounts' rows at full size with the room their links need between them (or their columns, if
+ * there are more levels and they fit side by side, when that is less), and each side column's
+ * carets. A scrolling full screen draws the chart this tall (or the screen's height, if that is more).
  */
 fun cashNaturalHeight(flow: CashFlowUi, width: Float, sizes: CashNodeSizes, labelW: FloatArray, labelH: FloatArray, m: CashNodeMetrics): Float {
     val p = planFrame(flow, width, sizes, labelW, labelH, m)
-    // The staircase steps by the tallest account; a lane above, below and between each two, and a
-    // cell either end for the grid's rounding.
-    val tallest = p.order.maxOfOrNull { p.h[it] } ?: 0f
-    val accounts = tallest * p.order.size + m.lanes * (p.order.size + 1) + 2 * m.cell
+    val midW = max(p.midR - p.midL, 1f)
+    val rows = packLines(p.levels, { p.w[it] }, midW, m.lanes)
+    val need = gapNeeds(flow, rows, p.side, sizes.linkW, across = false, m)
+    var depth = rows.sumOf { line -> line.maxOf { p.h[it] }.toDouble() }.toFloat() +
+        need.indices.sumOf { k -> max(need[k], if (k == 0 || k == rows.size) 0f else m.lanes).toDouble() }.toFloat()
+    if (p.levels.size > 1 && linesDepth(p.levels, { p.w[it] }, m.lanes) <= midW) {
+        depth = min(depth, linesLength(p.levels, { p.h[it] }, m.lanes))
+    }
+    // A lane above and below, and a cell either end for the grid's rounding.
+    val accounts = if (p.order.isEmpty()) 0f else depth + 2 * m.lanes + 2 * m.cell
     fun column(edge: Int, ids: List<Int>): Float {
         val inColumn = ids.filter { p.side[it] == edge }
         return inColumn.sumOf { p.colH(it).toDouble() }.toFloat() + m.gap * (inColumn.size + 1)
@@ -347,12 +425,18 @@ fun cashNaturalHeight(flow: CashFlowUi, width: Float, sizes: CashNodeSizes, labe
  * at its account, a spending's caret points down or right away from it, and an account takes money
  * in at its top and left sides and pays it out at its bottom and right sides.
  *
- * The accounts stand in a staircase from the top-left to the bottom-right, an account that gets more
- * from another by transfer than it sends back after that one, so transfers run down and right too.
- * Each caret goes as close as its row (or column) allows to the account it trades most with; the top
- * and bottom rows fill first, the carets that don't fit go to the columns. Then [routeCashLinks] finds
- * each link's way around the nodes and the other links. [sizes] come from [cashNodeSizes]; [labelW]
- * and [labelH] are each caret's label size (0 for accounts, whose label goes inside).
+ * The accounts stand in lines by transfer level (an account that gets more from another by transfer
+ * than it sends back comes in a later line), so transfers run down or right too. The lines are rows,
+ * levels top to bottom, or columns, levels left to right: whichever keeps the accounts biggest, and
+ * when both do, rows if there is one level (side by side, each under its incomes and over its
+ * spending), else the levels along the longer side. A level too long for one line takes more. The
+ * room between the lines goes by how many links cross it; along a line, each account stands as near
+ * the middle of its links' other ends as the others allow, reordered a few times to find the order
+ * with the shortest links and fewest crossings. Each caret goes as close as its row (or column)
+ * allows to the account it trades most with; the top and bottom rows fill first, the carets that
+ * don't fit go to the columns. Then [routeCashLinks] finds each link's way around the nodes and the
+ * other links. [sizes] come from [cashNodeSizes]; [labelW] and [labelH] are each caret's label size
+ * (0 for accounts, whose label goes inside).
  */
 fun layoutCashNodes(
     flow: CashFlowUi,
@@ -365,14 +449,14 @@ fun layoutCashNodes(
 ): CashNodeLayout {
     val p = planFrame(flow, width, sizes, labelW, labelH, m)
     val nodes = flow.nodes
+    val links = flow.links
     val n = nodes.size
     val w = p.w
     val h = p.h
+    val hub = p.hub
     val g = m.cell
     fun snapCentre(v: Float) = (floor(v / g) + 0.5f) * g
     fun snapEdge(v: Float) = Math.round(v / g) * g
-    val order = p.order
-    val step = p.step
     val home = p.home
     val incomes = p.incomes
     val spends = p.spends
@@ -384,115 +468,316 @@ fun layoutCashNodes(
     fun rowW(i: Int) = max(h[i], labelW[i])
     val colH = p.colH
 
-    // The accounts' staircase, in the middle, from its top-left corner to its bottom-right one. Two
-    // accounts in a row must clear each other one way or the other, with a lane between: if neither
-    // way has the room, every account shrinks until one has (never wider than tall).
     val x = FloatArray(n)
     val y = FloatArray(n)
-    val midL = snapEdge(leftW + m.lanes)
-    val midR = snapEdge(width - rightW - m.lanes)
+    val midL = p.midL
     val midT = snapEdge(topH + m.lanes)
     val midB = snapEdge(height - bottomH - m.lanes)
-    val midW = max(midR - midL, 1f)
+    val midW = max(p.midR - midL, 1f)
     val midH = max(midB - midT, 1f)
-    // Shrinking never takes an account below the width its links need ([CashNodeSizes.minW]).
-    val minW = sizes.minW
-    fun shrunkW(i: Int, f: Float) = max(w[i] * f, minW[i])
-    fun shrunkH(i: Int, f: Float) = max(h[i] * f, shrunkW(i, f) * ACCOUNT_ASPECT)
-    if (order.size > 1) {
-        val gaps = (order.size - 1).toFloat()
-        fun fits(f: Float): Boolean {
-            val bw = order.maxOf { shrunkW(it, f) }
-            val bh = order.maxOf { shrunkH(it, f) }
-            return (midW - bw) / gaps >= bw + m.lanes || (midH - bh) / gaps >= bh + m.lanes
-        }
-        if (!fits(1f)) {
-            var lo = 0.3f
-            var hi = 1f
-            repeat(16) {
-                val mid = (lo + hi) / 2f
-                if (fits(mid)) lo = mid else hi = mid
-            }
-            order.forEach {
-                val nh = shrunkH(it, lo)
-                w[it] = shrunkW(it, lo)
-                h[it] = nh
-            }
-        }
-    } else if (order.size == 1) {
-        val i = order.first()
-        if (h[i] > midH) {
-            w[i] = max(min(w[i], midH / ACCOUNT_ASPECT), minW[i])
-            h[i] = max(midH, w[i] * ACCOUNT_ASPECT)
-        }
-    }
-    order.forEach { i ->
-        val left = snapEdge(midL + (midW - w[i]).coerceAtLeast(0f) * step(i))
-        val top = snapEdge(midT + (midH - h[i]).coerceAtLeast(0f) * step(i))
-        x[i] = left + w[i] / 2f
-        y[i] = top + h[i] / 2f
-    }
-
-    // Carets: each as near its account as its row or column allows, kept in order, apart, inside.
-    val down = BooleanArray(n)
-    val labelX = FloatArray(n)
-    val labelTop = FloatArray(n)
-    // Each wants to stand halfway between its account and its share of the row, so the carets of one
-    // account don't bunch up (and crowd their links) while the others leave the row empty.
-    fun place(ids: List<Int>, along: (Int) -> Float, size: (Int) -> Float, from: Float, to: Float, put: (Int, Float) -> Unit) {
-        val sorted = ids.sortedBy(along)
-        val wants = sorted.mapIndexed { k, i ->
-            val slot = from + (to - from) * (k + 0.5f) / sorted.size
-            (along(i) + slot) / 2f
-        }
-        val starts = spreadStarts(wants, sorted.map(size), from, to, m.gap)
-        sorted.forEachIndexed { k, i -> put(i, snapCentre(starts[k] + size(i) / 2f)) }
-    }
-    fun homeX(i: Int) = if (home[i] >= 0) x[home[i]] else width / 2f
-    fun homeY(i: Int) = if (home[i] >= 0) y[home[i]] else height / 2f
     // Tips on one line under the top row, tails on one line above the bottom row, and the same down
     // the columns: the labels hang off the far side.
     val tipY = snapEdge(topH)
     val tailY = snapEdge(height - bottomH)
     val tipX = snapEdge(leftW)
     val tailX = snapEdge(width - rightW)
-    place(incomes.filter { side[it] == TOP }, ::homeX, ::rowW, leftW, width - rightW) { i, cx ->
-        down[i] = true
-        x[i] = cx
-        y[i] = tipY - w[i] / 2f
-        labelX[i] = cx
-        labelTop[i] = tipY - w[i] - m.labelGap - labelH[i]
+
+    // How far the accounts shrink to fit: as little as the lines allow, never below the width their
+    // links need ([CashNodeSizes.minW]), never wider than tall.
+    val fullW = w.copyOf()
+    val fullH = h.copyOf()
+    val minW = sizes.minW
+    fun shrunkW(i: Int, f: Float) = max(fullW[i] * f, minW[i])
+    fun shrunkH(i: Int, f: Float) = max(fullH[i] * f, shrunkW(i, f) * ACCOUNT_ASPECT)
+    // [across]: the lines are columns, the levels going left to right; else rows, top to bottom.
+    fun mainLen(across: Boolean) = if (across) midW else midH
+    fun crossLen(across: Boolean) = if (across) midH else midW
+    fun crossOf(i: Int, f: Float, across: Boolean) = if (across) shrunkH(i, f) else shrunkW(i, f)
+    fun mainOf(i: Int, f: Float, across: Boolean) = if (across) shrunkW(i, f) else shrunkH(i, f)
+    fun lines(across: Boolean, f: Float) = packLines(p.levels, { crossOf(it, f, across) }, crossLen(across), m.lanes)
+    fun fits(across: Boolean, f: Float): Boolean {
+        val ls = lines(across, f)
+        return linesDepth(ls, { mainOf(it, f, across) }, m.lanes) <= mainLen(across) &&
+            linesLength(ls, { crossOf(it, f, across) }, m.lanes) <= crossLen(across)
     }
-    place(spends.filter { side[it] == BOTTOM }, ::homeX, ::rowW, leftW, width - rightW) { i, cx ->
-        down[i] = true
-        x[i] = cx
-        y[i] = tailY + w[i] / 2f
-        labelX[i] = cx
-        labelTop[i] = tailY + w[i] + m.labelGap
+    fun largest(across: Boolean): Float {
+        if (fits(across, 1f)) return 1f
+        var lo = 0.3f
+        var hi = 1f
+        repeat(16) {
+            val mid = (lo + hi) / 2f
+            if (fits(across, mid)) lo = mid else hi = mid
+        }
+        return lo
     }
-    place(incomes.filter { side[it] == LEFT }, ::homeY, colH, topH, height - bottomH) { i, cy ->
-        x[i] = tipX - w[i] / 2f
-        y[i] = cy - (m.labelGap + labelH[i]) / 2f
-        labelX[i] = (tipX - labelW[i] / 2f).coerceAtMost(x[i])
-        labelTop[i] = y[i] + h[i] / 2f + m.labelGap
+    val fRows = if (p.order.isEmpty()) 1f else largest(false)
+    val fColumns = if (p.order.size < 2) 0f else largest(true)
+    // Carets' pointing and labels, set with the carets (see placeCarets).
+    val down = BooleanArray(n)
+    val labelX = FloatArray(n)
+    val labelTop = FloatArray(n)
+
+    // How hard each link pulls its ends together: by its money, as thick as the thickest link for the
+    // most (a link's own thickness goes by the square root, so many small links would outweigh a
+    // salary and pull the accounts away from it).
+    val mostMoney = links.maxOfOrNull { it.total }?.coerceAtLeast(1L) ?: 1L
+    val pull = FloatArray(links.size) { m.link.endInclusive * links[it].total / mostMoney }
+
+    // Everything placed for rows or columns ([across]); how bad it looks (see cost).
+    fun arrangeFor(across: Boolean): Float {
+        val f = if (across) fColumns else fRows
+        p.order.forEach {
+            w[it] = shrunkW(it, f)
+            h[it] = shrunkH(it, f)
+        }
+        val firstLines = lines(across, f)
+        fun mainSize(i: Int) = if (across) w[i] else h[i]
+        fun crossSize(i: Int) = if (across) h[i] else w[i]
+
+        // The gaps before, between and after the lines: each the room its links need (at least a lane
+        // between two lines), then what is left shared evenly. Short of room, each gets a lane and a
+        // share of what is left by how much more it needs.
+        val thick = firstLines.map { line -> line.maxOf(::mainSize) }
+        val base = FloatArray(firstLines.size + 1) { if (it == 0 || it == firstLines.size) 0f else m.lanes }
+        val need = gapNeeds(flow, firstLines, side, sizes.linkW, across, m)
+        val gapWant = FloatArray(base.size) { max(base[it], need[it]) }
+        val room = mainLen(across) - thick.sum()
+        val gap = if (gapWant.sum() <= room) {
+            val spare = (room - gapWant.sum()) / base.size
+            FloatArray(base.size) { gapWant[it] + spare }
+        } else {
+            val spare = (room - base.sum()).coerceAtLeast(0f)
+            val more = gapWant.sum() - base.sum()
+            FloatArray(base.size) { base[it] + if (more > 0f) spare * (gapWant[it] - base[it]) / more else 0f }
+        }
+        val mainFrom = if (across) midL else midT
+        val crossFrom = if (across) midT else midL
+        val crossTo = crossFrom + crossLen(across)
+        // Where each line stands across the levels: its first and last edge.
+        val bandFrom = FloatArray(firstLines.size)
+        val bandTo = FloatArray(firstLines.size)
+        run {
+            var at = mainFrom + gap[0]
+            firstLines.indices.forEach { k ->
+                bandFrom[k] = at
+                bandTo[k] = at + thick[k]
+                at += thick[k] + gap[k + 1]
+            }
+        }
+        val lineOf = IntArray(n) { -1 }
+        firstLines.forEachIndexed { k, line -> line.forEach { lineOf[it] = k } }
+
+        // Each line's accounts (in order of [want]) as near centred on its [want] as the others allow.
+        fun placeAccounts(lines: List<List<Int>>, want: FloatArray) {
+            var at = mainFrom + gap[0]
+            lines.forEachIndexed { k, line ->
+                val starts = spreadStarts(line.map { want[it] }, line.map(::crossSize), crossFrom, crossTo, m.lanes)
+                line.forEachIndexed { j, i ->
+                    val mainStart = at + (thick[k] - mainSize(i)) / 2f
+                    val left = snapEdge(if (across) mainStart else starts[j])
+                    val top = snapEdge(if (across) starts[j] else mainStart)
+                    x[i] = left + w[i] / 2f
+                    y[i] = top + h[i] / 2f
+                }
+                at += thick[k] + gap[k + 1]
+            }
+        }
+
+        // Carets: each as near its account as its row or column allows, kept in order, apart, inside.
+        // Each wants to stand halfway between its account and its share of the row, so the carets of one
+        // account don't bunch up (and crowd their links) while the others leave the row empty.
+        fun place(ids: List<Int>, along: (Int) -> Float, size: (Int) -> Float, from: Float, to: Float, put: (Int, Float) -> Unit) {
+            val sorted = ids.sortedBy(along)
+            val wants = sorted.mapIndexed { k, i ->
+                val slot = from + (to - from) * (k + 0.5f) / sorted.size
+                (along(i) + slot) / 2f
+            }
+            val starts = spreadStarts(wants, sorted.map(size), from, to, m.gap)
+            sorted.forEachIndexed { k, i -> put(i, snapCentre(starts[k] + size(i) / 2f)) }
+        }
+        fun homeX(i: Int) = if (home[i] >= 0) x[home[i]] else width / 2f
+        fun homeY(i: Int) = if (home[i] >= 0) y[home[i]] else height / 2f
+        fun placeCarets() {
+            place(incomes.filter { side[it] == TOP }, ::homeX, ::rowW, leftW, width - rightW) { i, cx ->
+                down[i] = true
+                x[i] = cx
+                y[i] = tipY - w[i] / 2f
+                labelX[i] = cx
+                labelTop[i] = tipY - w[i] - m.labelGap - labelH[i]
+            }
+            place(spends.filter { side[it] == BOTTOM }, ::homeX, ::rowW, leftW, width - rightW) { i, cx ->
+                down[i] = true
+                x[i] = cx
+                y[i] = tailY + w[i] / 2f
+                labelX[i] = cx
+                labelTop[i] = tailY + w[i] + m.labelGap
+            }
+            place(incomes.filter { side[it] == LEFT }, ::homeY, colH, topH, height - bottomH) { i, cy ->
+                x[i] = tipX - w[i] / 2f
+                y[i] = cy - (m.labelGap + labelH[i]) / 2f
+                labelX[i] = (tipX - labelW[i] / 2f).coerceAtMost(x[i])
+                labelTop[i] = y[i] + h[i] / 2f + m.labelGap
+            }
+            place(spends.filter { side[it] == RIGHT }, ::homeY, colH, topH, height - bottomH) { i, cy ->
+                x[i] = tailX + w[i] / 2f
+                y[i] = cy - (m.labelGap + labelH[i]) / 2f
+                labelX[i] = (tailX + labelW[i] / 2f).coerceAtLeast(x[i])
+                labelTop[i] = y[i] + h[i] / 2f + m.labelGap
+            }
+            // A column caret's centre goes on the grid too, so its link runs along a lane.
+            (0 until n).filter { side[it] == LEFT || side[it] == RIGHT }.forEach { i ->
+                val snapped = snapCentre(y[i])
+                labelTop[i] += snapped - y[i]
+                y[i] = snapped
+            }
+        }
+
+        // Where along the lines each node's links pull an account: a caret on an edge the lines run
+        // along counts where it stands, one on an edge across their ends counts as that edge.
+        fun cross(i: Int) = if (across) y[i] else x[i]
+        fun endCross(i: Int) = when (side[i]) {
+            TOP -> if (across) tipY else x[i]
+            BOTTOM -> if (across) tailY else x[i]
+            LEFT -> if (across) y[i] else tipX
+            RIGHT -> if (across) y[i] else tailX
+            else -> cross(i)
+        }
+        fun barycentres(): FloatArray {
+            val sum = FloatArray(n)
+            val weight = FloatArray(n)
+            links.forEachIndexed { l, link ->
+                val lw = pull[l]
+                if (hub[link.from]) {
+                    sum[link.from] += endCross(link.to) * lw
+                    weight[link.from] += lw
+                }
+                if (hub[link.to]) {
+                    sum[link.to] += endCross(link.from) * lw
+                    weight[link.to] += lw
+                }
+            }
+            return FloatArray(n) { if (weight[it] > 0f) sum[it] / weight[it] else cross(it) }
+        }
+        // How bad a placement looks, links taken between the nodes' middles: their length (the more
+        // money, the more it counts), and much more for each crossing, and for each account in the box between
+        // a link's ends (its level and upright runs go somewhere in there, so they must go round it).
+        fun cost(): Float {
+            val penalty = m.lanes * 4f
+            var c = 0f
+            links.forEachIndexed { l, link ->
+                c += pull[l] * (abs(x[link.to] - x[link.from]) + abs(y[link.to] - y[link.from]))
+                p.order.forEach { i ->
+                    if (i != link.from && i != link.to &&
+                        x[i] + w[i] / 2f > min(x[link.from], x[link.to]) && x[i] - w[i] / 2f < max(x[link.from], x[link.to]) &&
+                        y[i] + h[i] / 2f > min(y[link.from], y[link.to]) && y[i] - h[i] / 2f < max(y[link.from], y[link.to])
+                    ) {
+                        c += sizes.linkW[l] * penalty * 2f
+                    }
+                }
+            }
+            // A link that runs past a whole line of accounts it neither leaves nor enters has to weave
+            // between them.
+            links.forEachIndexed { l, link ->
+                val a = if (across) x[link.from] else y[link.from]
+                val b = if (across) x[link.to] else y[link.to]
+                bandFrom.indices.forEach { k ->
+                    if (k != lineOf[link.from] && k != lineOf[link.to] && min(a, b) < bandFrom[k] && max(a, b) > bandTo[k]) {
+                        c += sizes.linkW[l] * penalty
+                    }
+                }
+            }
+            for (a in links.indices) for (b in a + 1 until links.size) {
+                val la = links[a]
+                val lb = links[b]
+                if (la.from == lb.from || la.from == lb.to || la.to == lb.from || la.to == lb.to) continue
+                if (segmentsCross(x[la.from], y[la.from], x[la.to], y[la.to], x[lb.from], y[lb.from], x[lb.to], y[lb.to])) {
+                    c += (sizes.linkW[a] + sizes.linkW[b]) * penalty
+                }
+            }
+            return c
+        }
+
+        // Where each account wants to stand along its line.
+        var lines = firstLines
+        var want = FloatArray(n)
+        // Each wants to stand halfway between the middle of its links' other ends ([pull]) and its share
+        // of the line, so they don't bunch up.
+        fun shareLines(pull: FloatArray?) = lines.forEach { line ->
+            line.forEachIndexed { j, i ->
+                val slot = crossFrom + (crossTo - crossFrom) * (j + 0.5f) / line.size
+                want[i] = if (pull == null) slot else (pull[i] + slot) / 2f
+            }
+        }
+        fun arrange(ws: FloatArray): Float {
+            lines = lines.map { line -> line.sortedBy { ws[it] } }
+            placeAccounts(lines, ws)
+            placeCarets()
+            return cost()
+        }
+        shareLines(null)
+        var bestCost = Float.MAX_VALUE
+        var best = want.copyOf()
+        if (p.order.size > 1) {
+            // A few rounds: place, then sort each line by where its accounts' links pull them.
+            repeat(4) {
+                val c = arrange(want)
+                if (c < bestCost) {
+                    bestCost = c
+                    best = want.copyOf()
+                }
+                val b = barycentres()
+                lines = lines.map { line -> line.sortedBy { b[it] } }
+                shareLines(b)
+            }
+            // Then each account, the busiest first, tries a few places along its line (clear of the links
+            // passing by on their way to an edge, say), and keeps the best.
+            want = best
+            repeat(2) {
+                p.order.forEach { i ->
+                    val was = want[i]
+                    var at = was
+                    for (k in 0..CROSS_TRIES) {
+                        want[i] = crossFrom + (crossTo - crossFrom) * k / CROSS_TRIES
+                        val c = arrange(want)
+                        if (c < bestCost - 0.5f) {
+                            bestCost = c
+                            at = want[i]
+                        }
+                    }
+                    want[i] = at
+                }
+            }
+        }
+        return arrange(want)
     }
-    place(spends.filter { side[it] == RIGHT }, ::homeY, colH, topH, height - bottomH) { i, cy ->
-        x[i] = tailX + w[i] / 2f
-        y[i] = cy - (m.labelGap + labelH[i]) / 2f
-        labelX[i] = (tailX + labelW[i] / 2f).coerceAtLeast(x[i])
-        labelTop[i] = y[i] + h[i] / 2f + m.labelGap
+
+    // Whichever keeps the accounts bigger; when both keep them alike, rows for one level (side by
+    // side, each under its incomes and over its spending), else whichever looks better here.
+    val across = when {
+        fColumns > fRows + 0.02f -> true
+        fRows > fColumns + 0.02f -> false
+        p.levels.size < 2 -> false
+        else -> arrangeFor(true) < arrangeFor(false)
     }
-    // A column caret's centre goes on the grid too, so its link runs along a lane.
-    (0 until n).filter { side[it] == LEFT || side[it] == RIGHT }.forEach { i ->
-        val snapped = snapCentre(y[i])
-        labelTop[i] += snapped - y[i]
-        y[i] = snapped
-    }
+    arrangeFor(across)
 
     val frame = floatArrayOf(tipX, tipY, tailX, tailY)
     val layout = CashNodeLayout(x, y, w, h, down, labelX, labelTop, sizes.linkW, emptyList(), frame)
     val routes = routeCashLinks(flow, layout, labelW, labelH, width, height, m)
     return CashNodeLayout(x, y, w, h, down, labelX, labelTop, sizes.linkW, routes, frame)
+}
+
+/** How many places along its line, end to end less one, each account tries. */
+private const val CROSS_TRIES = 8
+
+/** Whether segments (ax, ay)-(bx, by) and (cx, cy)-(dx, dy) cross, each strictly through the other. */
+private fun segmentsCross(ax: Float, ay: Float, bx: Float, by: Float, cx: Float, cy: Float, dx: Float, dy: Float): Boolean {
+    fun turn(px: Float, py: Float, qx: Float, qy: Float, rx: Float, ry: Float) = (qx - px) * (ry - py) - (qy - py) * (rx - px)
+    val d1 = turn(cx, cy, dx, dy, ax, ay)
+    val d2 = turn(cx, cy, dx, dy, bx, by)
+    val d3 = turn(ax, ay, bx, by, cx, cy)
+    val d4 = turn(ax, ay, bx, by, dx, dy)
+    return d1 * d2 < 0f && d3 * d4 < 0f
 }
 
 /**
