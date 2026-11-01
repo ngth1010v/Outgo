@@ -554,19 +554,15 @@ SELECT b.*, COALESCE((
 FROM budget b LEFT JOIN account a ON a.id = b.account_id
 ORDER BY b.kind, b.sort_order;
 
--- Trade: 5 danh mục con dùng gần đây
-SELECT * FROM category
-WHERE type = :type AND parent_id IS NOT NULL AND archived = 0 AND last_used_at IS NOT NULL
-ORDER BY last_used_at DESC LIMIT 5;
-
--- Trade: 5 danh mục con dùng nhiều nhất (bỏ những mục đã có ở hàng 1)
-SELECT * FROM category
-WHERE type = :type AND parent_id IS NOT NULL AND archived = 0 AND use_count > 0
-  AND id NOT IN (:recentIds)
-ORDER BY use_count DESC LIMIT 5;
+-- Trade: mức dùng của từng danh mục (2 hàng gợi ý, xem §7.1). Kotlin cộng thêm các giao dịch
+-- nháp chưa đẩy lên, rồi xếp hạng.
+SELECT category_id AS id, MAX(occurred_at) AS lastAt,
+       SUM(occurred_at >= :since) AS recentCount, COUNT(*) AS totalCount
+FROM trade WHERE category_id IS NOT NULL
+GROUP BY category_id;
 ```
 
-Các truy vấn trên chỉ đọc bảng tổng hợp và bảng danh mục (vài trăm dòng), nên **không phụ thuộc vào số lượng giao dịch**. Khi chạy thử với 20k giao dịch, truy vấn chart mất khoảng 0.2ms.
+Các truy vấn chart/budget chỉ đọc bảng tổng hợp và bảng danh mục (vài trăm dòng), nên **không phụ thuộc vào số lượng giao dịch**. Khi chạy thử với 20k giao dịch, truy vấn chart mất khoảng 0.2ms. Truy vấn mức dùng danh mục quét bảng `trade` một lần (chạy trên IO, sau khi frame đầu đã vẽ).
 
 ---
 
@@ -717,13 +713,11 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    A["type đang chọn"] --> B["recent = 5 danh mục con có last_used_at mới nhất"]
-    B --> C{"recent đủ 5?"}
-    C -- "Chưa" --> D["Bù bằng danh mục con ngẫu nhiên<br/>(không trùng, seed cố định theo ngày)"]
-    C -- "Đủ" --> E
-    D --> E["top = 5 danh mục con có use_count cao nhất,<br/>loại những mục đã có ở recent"]
-    E --> F{"top đủ 5?"}
-    F -- "Chưa" --> G["Bù bằng danh mục ngẫu nhiên<br/>(không trùng cả 2 hàng)"]
+    A["type đang chọn"] --> A2["Mức dùng = giao dịch đã lưu + giao dịch nháp"]
+    A2 --> B["recent = 5 danh mục con có giao dịch<br/>với ngày giao dịch (occurred_at) mới nhất"]
+    B --> E["top = 5 danh mục con dùng nhiều nhất trong 90 ngày qua,<br/>hoà thì xét tổng số lần dùng, rồi lần dùng cuối;<br/>loại những mục đã có ở recent"]
+    E --> F{"recent / top đủ 5?"}
+    F -- "Chưa" --> G["Bù bằng danh mục con chưa dùng,<br/>theo thứ tự sắp xếp (không trùng cả 2 hàng)"]
     F -- "Đủ" --> H
     G --> H["Hàng 1 = recent, Hàng 2 = top"]
     H --> I{"Tổng số danh mục con < 10?"}
@@ -731,7 +725,10 @@ flowchart TD
     I -- "Không" --> K["Hiển thị"]
 ```
 
-- Phần ngẫu nhiên dùng **seed cố định theo ngày** để các ô không đổi chỗ mỗi lần mở app, người dùng dễ nhớ vị trí hơn.
+- **Giao dịch nháp** (danh sách nháp, chưa đẩy lên DB) được tính như giao dịch đã lưu, cả ở 2 hàng này lẫn phần dự đoán (tự điền danh mục, tài khoản, số tiền, ghi chú).
+- Hàng 1 xếp theo **ngày của giao dịch**, không phải lúc lưu: nhập bù một giao dịch của tuần trước không đẩy danh mục đó lên đầu.
+- Hàng 2 ưu tiên **thói quen gần đây** (90 ngày, `CategoryRepository.HABIT_DAYS`): danh mục đã thôi dùng sẽ tụt dần.
+- Phần bù dùng **thứ tự sắp xếp của danh mục**, không ngẫu nhiên, để các ô không đổi chỗ, người dùng dễ nhớ vị trí hơn.
 - Hàng 2 **loại những mục đã có ở hàng 1** để 10 ô luôn là 10 lựa chọn khác nhau. Trên thực tế, danh mục dùng gần đây và dùng nhiều thường trùng nhau. Có thể tắt hành vi này bằng một cờ trong code nếu muốn hiện đúng top 5.
 
 ### 7.2 Home

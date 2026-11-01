@@ -7,6 +7,7 @@ import app.outgo.data.db.entity.CategoryEntity
 import app.outgo.data.db.entity.TradeEntity
 import app.outgo.data.db.dao.BudgetWithProgress
 import app.outgo.data.draft.DraftStore
+import app.outgo.data.draft.DraftTrade
 import app.outgo.data.repo.AccountRepository
 import app.outgo.data.repo.BudgetRepository
 import app.outgo.data.repo.CategoryRepository
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 data class TradeUiState(
@@ -221,8 +223,9 @@ class TradeViewModel(
     private val _state = MutableStateFlow(raw)
     val state: StateFlow<TradeUiState> = _state.asStateFlow()
 
-    /** Past trades the predictions learn from, newest first, and the categories they can name. */
+    /** Past trades the predictions learn from, newest first: [savedHistory] plus the drafts. And the categories they can name. */
     private var history: List<TradeEntity> = emptyList()
+    private var savedHistory: List<TradeEntity> = emptyList()
     private var categories: Map<Long, CategoryEntity> = emptyMap()
     private var predictEnabled = false
     private var minConfidence = SettingRepository.DEFAULT_PREDICT_MIN_CONFIDENCE
@@ -245,6 +248,15 @@ class TradeViewModel(
         if (editingTradeId == null && editingDraftId == null) {
             viewModelScope.launch {
                 draftStore.drafts.collect { list -> edit { it.copy(draftCount = list.size) } }
+            }
+            viewModelScope.launch {
+                // Drafts count in the quick picks and predictions like saved trades (the first
+                // value is the list as it is now, which the loads below read anyway).
+                draftStore.drafts.drop(1).collect {
+                    withDraftsInHistory()
+                    edit { it }
+                    loadPickers()
+                }
             }
             viewModelScope.launch {
                 draftStore.pushed.collect { count ->
@@ -328,10 +340,37 @@ class TradeViewModel(
 
     private suspend fun loadPredictionData() {
         if (raw.isEditing) return
-        history = tradeRepository.recentForPrediction()
+        savedHistory = tradeRepository.recentForPrediction()
+        withDraftsInHistory()
         categories = categoryRepository.allActive().associateBy { it.id }
         edit { it }
     }
+
+    /** [history]: the saved trades and the drafts, newest first (a draft after a saved trade of the same moment). */
+    private fun withDraftsInHistory() {
+        if (raw.isEditing) return
+        val drafts = draftStore.drafts.value
+        history = if (drafts.isEmpty()) savedHistory else (savedHistory + drafts.map { it.asTradeEntity() })
+            .sortedWith(compareByDescending<TradeEntity> { it.occurredAt }.thenByDescending { it.id })
+    }
+
+    /** A draft as the trade it will be once pushed; a negative id, as it has none yet. */
+    private fun DraftTrade.asTradeEntity() = TradeEntity(
+        id = -id,
+        type = trade.type,
+        amount = trade.amount,
+        accountId = trade.accountId,
+        categoryId = trade.categoryId,
+        toAccountId = trade.toAccountId,
+        occurredAt = trade.occurredAt,
+        monthKey = MonthKey.of(trade.occurredAt),
+        note = trade.note,
+        createdAt = trade.occurredAt,
+        updatedAt = trade.occurredAt,
+        budgetExempt = trade.budgetExempt,
+        savingExempt = trade.savingExempt,
+        toCategoryId = trade.toCategoryId,
+    )
 
     /**
      * [s] with the predictions in the fields the user has neither filled nor touched. Only the
@@ -423,7 +462,7 @@ class TradeViewModel(
     }
 
     private suspend fun loadPicker(type: Int) {
-        val picker = categoryRepository.getPicker(type)
+        val picker = categoryRepository.getPicker(type, draftStore.drafts.value.map { it.trade })
         edit { it.copy(pickers = it.pickers + (type to picker)) }
     }
 
@@ -569,7 +608,8 @@ class TradeViewModel(
         val draft = validDraft(s) ?: return
         val id = draftStore.add(draft)
         lastDrafted = id to s
-        resetForm()
+        // The draft list's change reloads the quick picks.
+        resetForm(reloadPickers = false)
         _events.tryEmit(TradeEvent.Drafted(id))
     }
 
@@ -672,8 +712,8 @@ class TradeViewModel(
      * date/time stay for the next entry (e.g. several of yesterday's); the view model lives as long
      * as the process, so a fresh start of the app begins from a blank form.
      */
-    private fun resetForm() {
+    private fun resetForm(reloadPickers: Boolean = true) {
         edit { it.copy(amount = 0, note = "", showErrors = false, touched = it.touched - PredictField.NOTE) }
-        viewModelScope.launch { loadPickers() }
+        if (reloadPickers) viewModelScope.launch { loadPickers() }
     }
 }

@@ -3,8 +3,10 @@ package app.outgo.data.repo
 import androidx.room.withTransaction
 import app.outgo.data.db.OutgoDatabase
 import app.outgo.data.db.dao.CategoryDao
+import app.outgo.data.db.dao.CategoryUse
 import app.outgo.data.db.entity.CategoryEntity
 import app.outgo.domain.CategoryPicker
+import app.outgo.domain.TradeDraft
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -23,21 +25,42 @@ class CategoryRepository(
     suspend fun allActive(): List<CategoryEntity> = withContext(Dispatchers.IO) { categoryDao.allActive() }
 
     /**
-     * Builds the Trade screen's two quick-pick rows: up to 5 recently used and
-     * up to 5 most used child categories, each ranked independently (a category
-     * can appear in both rows) so "Most used" always reflects true trade-count
-     * order. Short rows are padded with never-used categories in their normal
-     * sort order, never randomly.
+     * Builds the Trade screen's two quick-pick rows of child categories, counting the saved trades
+     * and the [drafts] not pushed yet alike:
+     * - Recent: up to 5, by their latest trade's own date (a back-dated trade doesn't jump ahead).
+     * - Most used: up to 5 more, by trades in the last [HABIT_DAYS] days, then by trades in all, so
+     *   a category no longer used falls behind. One in the Recent row is left out of it, so the two
+     *   rows offer ten different picks.
+     * Short rows are padded with never-used categories in their normal sort order, never randomly.
      */
-    suspend fun getPicker(type: Int): CategoryPicker = withContext(Dispatchers.IO) {
-        // A category in the Recent row is left out of the Most used one, so the two rows offer
-        // ten different picks: Most used reads enough rows to still have five after that.
-        val recent = categoryDao.mostRecent(type, 5)
+    suspend fun getPicker(type: Int, drafts: List<TradeDraft> = emptyList()): CategoryPicker = withContext(Dispatchers.IO) {
+        val since = System.currentTimeMillis() - HABIT_DAYS * 24L * 60 * 60 * 1000
+        val use = categoryDao.useStats(since).associateByTo(HashMap()) { it.id }
+        for (d in drafts) {
+            val id = d.categoryId ?: continue
+            val u = use[id]
+            use[id] = CategoryUse(
+                id = id,
+                lastAt = maxOf(u?.lastAt ?: Long.MIN_VALUE, d.occurredAt),
+                recentCount = (u?.recentCount ?: 0) + if (d.occurredAt >= since) 1 else 0,
+                totalCount = (u?.totalCount ?: 0) + 1,
+            )
+        }
+
+        // Of this type, not archived, in sort order: the sorts below are stable, so ties keep it.
+        val allChildren = categoryDao.allChildrenOnce(type)
+        val used = allChildren.filter { it.id in use }
+        val recent = used.sortedByDescending { use.getValue(it.id).lastAt }.take(5)
         val recentIds = recent.map { it.id }.toSet()
-        val top = categoryDao.mostUsed(type, 5 + recent.size).filter { it.id !in recentIds }.take(5)
+        val top = used.filter { it.id !in recentIds }
+            .sortedWith(
+                compareByDescending<CategoryEntity> { use.getValue(it.id).recentCount }
+                    .thenByDescending { use.getValue(it.id).totalCount }
+                    .thenByDescending { use.getValue(it.id).lastAt },
+            )
+            .take(5)
         if (recent.size >= 5 && top.size >= 5) return@withContext CategoryPicker(recent, top)
 
-        val allChildren = categoryDao.allChildrenOnce(type)
         val recentFilled = recent + allChildren.filter { it.id !in recentIds }.take(5 - recent.size)
         val shownIds = recentFilled.map { it.id }.toSet() + top.map { it.id }
         val topFilled = top + allChildren.filter { it.id !in shownIds }.take(5 - top.size)
@@ -165,6 +188,11 @@ class CategoryRepository(
                 categoryDao.delete(parent)
             }
         }
+    }
+
+    companion object {
+        /** The "Most used" row ranks by the trades of this many last days first. */
+        const val HABIT_DAYS = 90
     }
 }
 

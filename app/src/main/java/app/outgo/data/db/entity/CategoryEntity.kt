@@ -10,8 +10,9 @@ import androidx.room.PrimaryKey
  * A parent ([parentId] == null) or child category. [type] mirrors
  * [app.outgo.domain.CategoryKind] and is always the same across a parent and
  * all of its children. [useCount] and [lastUsedAt] are maintained entirely by
- * SQL triggers on [TradeEntity] and power the Trade screen's "Recent" /
- * "Most used" quick-pick rows.
+ * SQL triggers on [TradeEntity]. The Trade screen's "Recent" / "Most used" rows
+ * no longer read them (they count drafts and rank by trade date): see
+ * CategoryRepository.getPicker.
  */
 @Entity(
     tableName = "category",

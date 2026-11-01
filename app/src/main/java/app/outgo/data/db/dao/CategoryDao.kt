@@ -8,6 +8,12 @@ import androidx.room.Update
 import app.outgo.data.db.entity.CategoryEntity
 import kotlinx.coroutines.flow.Flow
 
+/**
+ * A category's use: the date of its latest trade ([lastAt], the trade's own date, not when it was
+ * saved), how many trades it has since a cut-off ([recentCount]) and in all ([totalCount]).
+ */
+data class CategoryUse(val id: Long, val lastAt: Long, val recentCount: Int, val totalCount: Int)
+
 @Dao
 interface CategoryDao {
     @Insert
@@ -37,23 +43,16 @@ interface CategoryDao {
     @Query("SELECT * FROM category WHERE archived = 0")
     suspend fun allActive(): List<CategoryEntity>
 
+    /** How each category was used by saved trades: see [CategoryUse]. */
     @Query(
         """
-        SELECT * FROM category
-        WHERE type = :type AND parent_id IS NOT NULL AND archived = 0 AND last_used_at IS NOT NULL
-        ORDER BY last_used_at DESC LIMIT :limit
+        SELECT category_id AS id, MAX(occurred_at) AS lastAt,
+               SUM(occurred_at >= :since) AS recentCount, COUNT(*) AS totalCount
+        FROM trade WHERE category_id IS NOT NULL
+        GROUP BY category_id
         """,
     )
-    suspend fun mostRecent(type: Int, limit: Int): List<CategoryEntity>
-
-    @Query(
-        """
-        SELECT * FROM category
-        WHERE type = :type AND parent_id IS NOT NULL AND archived = 0 AND use_count > 0
-        ORDER BY use_count DESC LIMIT :limit
-        """,
-    )
-    suspend fun mostUsed(type: Int, limit: Int): List<CategoryEntity>
+    suspend fun useStats(since: Long): List<CategoryUse>
 
     @Query("SELECT * FROM category WHERE type = :type AND parent_id IS NOT NULL AND archived = 0 ORDER BY sort_order, id")
     suspend fun allChildrenOnce(type: Int): List<CategoryEntity>

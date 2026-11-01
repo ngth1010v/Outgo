@@ -91,8 +91,9 @@ doesn't know about (they're invisible to Room schema validation/migrations — a
 
 - adjust the owning `account.balance`,
 - upsert `category_month_stat` (total + trade_count per category per month, used by the Home chart),
-- maintain `category.use_count` / `last_used_at` (used to compute the Trade screen's "top 5 used" /
-  "recent 5" category grid).
+- maintain `category.use_count` / `last_used_at` (no longer read by the Trade screen's quick-pick
+  rows: `CategoryRepository.getPicker` ranks from `CategoryDao.useStats` over `trade` plus the
+  unpushed drafts, by trade date and 90-day use).
 
 **If you change trade semantics (new trade type, new balance-affecting field), update the trigger SQL
 in `OutgoDatabase.kt`, not just the Kotlin repository layer** — the repository never manually updates
