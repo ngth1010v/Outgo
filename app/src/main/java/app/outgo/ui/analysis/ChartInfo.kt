@@ -44,6 +44,10 @@ private val CategoryCountShare = ChartTexts(R.string.analysis_info_category_coun
 private val YearCategoryCountMonthly = ChartTexts(R.string.analysis_info_year_category_count_monthly_about, R.string.analysis_info_year_category_count_monthly_meaning, R.string.analysis_info_year_category_count_monthly_how)
 private val YearCategoryCountShare = ChartTexts(R.string.analysis_info_year_category_count_share_about, R.string.analysis_info_year_category_count_share_meaning, R.string.analysis_info_year_category_share_how)
 
+/** The year page's "average per month" pies: read like the year breakdown. */
+private val YearCategoryAvgShare = ChartTexts(R.string.analysis_info_year_category_avg_share_about, R.string.analysis_info_year_category_avg_share_meaning, R.string.analysis_info_year_category_share_how)
+private val YearCategoryCountAvgShare = ChartTexts(R.string.analysis_info_year_category_count_avg_share_about, R.string.analysis_info_year_category_count_avg_share_meaning, R.string.analysis_info_year_category_share_how)
+
 /** The year page's account and category charts' shared texts by shape: by month, breakdown, 5 years. */
 private val YearAccountMonthly = ChartTexts(R.string.analysis_info_year_account_monthly_about, R.string.analysis_info_year_account_monthly_meaning, R.string.analysis_info_year_account_monthly_how)
 private val YearAccountShare = ChartTexts(R.string.analysis_info_year_account_share_about, R.string.analysis_info_year_account_share_meaning, R.string.analysis_info_year_account_share_how)
@@ -73,6 +77,10 @@ private fun textsOf(type: ChartType): ChartTexts = when (type) {
     ChartType.YEAR_INCOME_CATEGORY_COUNT_MONTHLY, ChartType.YEAR_INCOME_SUBCATEGORY_COUNT_MONTHLY -> YearCategoryCountMonthly
     ChartType.YEAR_EXPENSE_CATEGORY_COUNT_SHARE, ChartType.YEAR_EXPENSE_SUBCATEGORY_COUNT_SHARE,
     ChartType.YEAR_INCOME_CATEGORY_COUNT_SHARE, ChartType.YEAR_INCOME_SUBCATEGORY_COUNT_SHARE -> YearCategoryCountShare
+    ChartType.YEAR_EXPENSE_CATEGORY_AVG_SHARE, ChartType.YEAR_EXPENSE_SUBCATEGORY_AVG_SHARE,
+    ChartType.YEAR_INCOME_CATEGORY_AVG_SHARE, ChartType.YEAR_INCOME_SUBCATEGORY_AVG_SHARE -> YearCategoryAvgShare
+    ChartType.YEAR_EXPENSE_CATEGORY_COUNT_AVG_SHARE, ChartType.YEAR_EXPENSE_SUBCATEGORY_COUNT_AVG_SHARE,
+    ChartType.YEAR_INCOME_CATEGORY_COUNT_AVG_SHARE, ChartType.YEAR_INCOME_SUBCATEGORY_COUNT_AVG_SHARE -> YearCategoryCountAvgShare
     ChartType.SUMMARY -> own(R.string.analysis_info_summary_about, R.string.analysis_info_summary_meaning, R.string.analysis_info_summary_how)
     ChartType.TRADE_CALENDAR -> own(R.string.analysis_info_trade_calendar_about, R.string.analysis_info_trade_calendar_meaning, R.string.analysis_info_trade_calendar_how)
     ChartType.TRADE_WEEK -> own(R.string.analysis_info_trade_week_about, R.string.analysis_info_trade_week_meaning, R.string.analysis_info_trade_week_how)

@@ -25,6 +25,7 @@ Type the amount, tap a category, save. That's it.
 
 - **Built for logging fast.** The app opens on the add screen, so a purchase takes a few taps.
 - **Private.** No account, no network, no ads. Your data stays on your phone.
+- **94 charts, your layout.** Build your own month and year dashboards from accounts, categories, transactions, savings and budget charts.
 - **One file holds everything.** Back up and restore with a single `.sqlite` file.
 - **Light.** About 4 MB, starts quickly, and stays smooth on older phones.
 - **English and Vietnamese.**
@@ -100,13 +101,21 @@ Back from a trip with a stack of receipts? Collect them first, save them togethe
   <img src="docs/analysis-categories.png" width="240" alt="Category charts" />
 </p>
 
+**94 charts to build your own dashboard**: 45 for a month and 49 for a year. Pick the ones you care about and lay them out your way.
+
 - **One page per month and one per year.** Swipe between them, or jump with the pickers in the top bar. Swipe right off December to reach that year's page.
-- **Your own layout:** a page is a list of chart cards you arrange. Long-press a card to drag it. Drag it to the right edge to remove it (with **Undo**). **Add chart** at the bottom offers every chart, grouped and with icons. The layout is saved in the database, so it travels with backups.
-- **Accounts:** balance by day, balance breakdown and the last 5 months, for all accounts or the subaccounts of one.
-- **Categories:** the same charts for expense and income, by category or by the subcategories of one category, in money or in number of transactions.
-- **Transactions:** a day calendar, weekday and time of day, transaction sizes, the largest transactions, transfer flows.
-- **Savings and budgets:** pace, month forecast, burn-down, savings rate, and the last months' targets and limits.
-- **Month summary:** total, change against last month, average per day, and money moved between accounts.
+- **Your own layout:** a page is a list of chart cards you arrange. Long-press a card to drag it. Drag it to the right edge to remove it (with **Undo**). **Add chart** at the bottom offers every chart, grouped and with icons. Press and hold one to read what it shows. The layout is saved in the database, so it travels with backups.
+- **Settings behind a gear:** each chart's options (expense or income, amount or number of transactions, which account or category, what to hide) sit behind the **gear** in its top-right corner, so the chart itself stays clean.
+- **Full screen:** any chart opens full screen for a bigger view.
+
+| Group | What you can chart |
+|---|---|
+| **Accounts** | Balance day by day (or month by month on the year page), a pie of the balances with each one's change, and the last 5 months (or 5 years). For all accounts, or the subaccounts of one. |
+| **Categories** | The same three charts for expense and income, by category or by the subcategories of one, in money or in **number of transactions**. The year page adds each category's **average per month**: only months with some spending (or income) count, and the month still under way is left out. |
+| **Transactions** | A day calendar shaded by spending, a weekday × time-of-day grid, transaction sizes, the largest transactions, how often you spend, transfers between accounts, and a **cash flow** chart from where money came in, through your accounts, to where it went. |
+| **Savings** | Pace against your targets, a month burn-up, the streak of targets hit, savings rate, and what moved one account's balance. |
+| **Budgets** | A month-end forecast for each budget, burn-down, the last months' use of each limit, how a limit came about, spending inside and outside budgets, and the day each budget ran out. |
+| **Summary** | Total, change against the last period, the average per day (or per month), and money moved between accounts. |
 
 ### History
 

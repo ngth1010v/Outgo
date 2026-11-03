@@ -330,11 +330,11 @@ class AnalysisViewModel(
             val names = accounts
             val ui = withContext(Dispatchers.Default) {
                 YearUi(
-                    buildYearSummary(totals, year, last),
+                    buildYearSummary(totals, year, last, live = last == currentMonth),
                     transfers.sumOf { it.total },
                     buildYearBalances(flows, opening, year, last, names),
-                    buildYearCategories(categoryTotals, year, last),
-                    buildYearCategories(categoryTotals, year, last) { it.tradeCount.toLong() },
+                    buildYearCategories(categoryTotals, year, last, live = last == currentMonth),
+                    buildYearCategories(categoryTotals, year, last, live = last == currentMonth) { it.tradeCount.toLong() },
                 )
             }
             yearCache[year] = if (ui.summary == null && ui.balances == null && ui.categories == null) Stage.Empty else Stage.Ready(ui)

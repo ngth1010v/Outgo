@@ -161,6 +161,17 @@ enum class ChartType(
     YEAR_INCOME_CATEGORY_COUNT_SHARE(R.drawable.ic_chart_count_pie_income, INCOME_CATEGORY_COUNT_SHARE),
     YEAR_INCOME_SUBCATEGORY_COUNT_SHARE(R.drawable.ic_chart_count_slices_income, INCOME_SUBCATEGORY_COUNT_SHARE),
 
+    // Year page, Categories averages: the year's pie of each one's average per month, against the
+    // year before's. A month counts only with a trade of the chart's kind, see [averageLines].
+    YEAR_EXPENSE_CATEGORY_AVG_SHARE(R.drawable.ic_chart_avg_pie_expense, EXPENSE_CATEGORY_SHARE),
+    YEAR_EXPENSE_SUBCATEGORY_AVG_SHARE(R.drawable.ic_chart_avg_slices_expense, EXPENSE_SUBCATEGORY_SHARE),
+    YEAR_INCOME_CATEGORY_AVG_SHARE(R.drawable.ic_chart_avg_pie_income, INCOME_CATEGORY_SHARE),
+    YEAR_INCOME_SUBCATEGORY_AVG_SHARE(R.drawable.ic_chart_avg_slices_income, INCOME_SUBCATEGORY_SHARE),
+    YEAR_EXPENSE_CATEGORY_COUNT_AVG_SHARE(R.drawable.ic_chart_avg_count_pie_expense, EXPENSE_CATEGORY_COUNT_SHARE),
+    YEAR_EXPENSE_SUBCATEGORY_COUNT_AVG_SHARE(R.drawable.ic_chart_avg_count_slices_expense, EXPENSE_SUBCATEGORY_COUNT_SHARE),
+    YEAR_INCOME_CATEGORY_COUNT_AVG_SHARE(R.drawable.ic_chart_avg_count_pie_income, INCOME_CATEGORY_COUNT_SHARE),
+    YEAR_INCOME_SUBCATEGORY_COUNT_AVG_SHARE(R.drawable.ic_chart_avg_count_slices_income, INCOME_SUBCATEGORY_COUNT_SHARE),
+
     // Year page, Trades: the month charts over the whole year (the frequency chart over its months).
     YEAR_TRADE_WEEK(R.drawable.ic_chart_week_clock, TRADE_WEEK),
     YEAR_TRADE_SIZES(R.drawable.ic_chart_sizes, TRADE_SIZES),
@@ -282,6 +293,8 @@ enum class LayoutSlot(
                             ChartType.YEAR_INCOME_CATEGORY_MONTHLY, ChartType.YEAR_INCOME_CATEGORY_SHARE, ChartType.YEAR_INCOME_CATEGORY_YEARS,
                             ChartType.YEAR_EXPENSE_CATEGORY_COUNT_MONTHLY, ChartType.YEAR_EXPENSE_CATEGORY_COUNT_SHARE,
                             ChartType.YEAR_INCOME_CATEGORY_COUNT_MONTHLY, ChartType.YEAR_INCOME_CATEGORY_COUNT_SHARE,
+                            ChartType.YEAR_EXPENSE_CATEGORY_AVG_SHARE, ChartType.YEAR_INCOME_CATEGORY_AVG_SHARE,
+                            ChartType.YEAR_EXPENSE_CATEGORY_COUNT_AVG_SHARE, ChartType.YEAR_INCOME_CATEGORY_COUNT_AVG_SHARE,
                         ),
                     ),
                     ChartGroup(
@@ -291,6 +304,8 @@ enum class LayoutSlot(
                             ChartType.YEAR_INCOME_SUBCATEGORY_MONTHLY, ChartType.YEAR_INCOME_SUBCATEGORY_SHARE, ChartType.YEAR_INCOME_SUBCATEGORY_YEARS,
                             ChartType.YEAR_EXPENSE_SUBCATEGORY_COUNT_MONTHLY, ChartType.YEAR_EXPENSE_SUBCATEGORY_COUNT_SHARE,
                             ChartType.YEAR_INCOME_SUBCATEGORY_COUNT_MONTHLY, ChartType.YEAR_INCOME_SUBCATEGORY_COUNT_SHARE,
+                            ChartType.YEAR_EXPENSE_SUBCATEGORY_AVG_SHARE, ChartType.YEAR_INCOME_SUBCATEGORY_AVG_SHARE,
+                            ChartType.YEAR_EXPENSE_SUBCATEGORY_COUNT_AVG_SHARE, ChartType.YEAR_INCOME_SUBCATEGORY_COUNT_AVG_SHARE,
                         ),
                     ),
                 ),
@@ -417,6 +432,9 @@ data class ChartCard(
     /** Only for the cash flow: accounts show their name and net change, not just their icon. */
     val accountDetail: Boolean = false,
 )
+
+/** A year "average per month" pie, see [averageLines]. */
+val ChartType.isAverage: Boolean get() = name.endsWith("_AVG_SHARE")
 
 /**
  * The day calendar and the weekday-and-time grid (month or year): shade by amount or by trade count

@@ -466,7 +466,7 @@ private fun ChartList(
     }
 }
 
-/** A card's title-row chips, or null for a chart without any. */
+/** A card's gear (its settings sheet), or null for a chart without settings. */
 private fun cardAction(card: ChartCard, state: AnalysisUiState, month: Int, onChange: (ChartCard) -> Unit): (@Composable () -> Unit)? =
     if (card.type.hasMode || card.type.hasParent || card.type.hasToggles || card.type.pick != null || card.type.hasMetric) {
         { CardChips(card, state, month, onChange) }
@@ -511,21 +511,14 @@ private val FullscreenPadding = 12.dp
 @Composable
 private fun CardChips(card: ChartCard, state: AnalysisUiState, month: Int, onChange: (ChartCard) -> Unit) {
     var showOptions by remember { mutableStateOf(false) }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        // A hasMetric chart picks its kind in the gear sheet, next to its amount / count switch.
-        if (card.type.hasMode && !card.type.hasMetric) {
-            ChoiceChip(modeLabel(card.mode), AnalysisMode.entries.map { it to modeLabel(it) }) { onChange(card.copy(mode = it)) }
-        }
-        if (card.type.pick != null || card.type.hasParent || card.type.hasToggles || card.type.hasMetric) {
-            IconButton(onClick = { showOptions = true }, modifier = Modifier.size(28.dp)) {
-                Icon(
-                    painter = painterResource(R.drawable.ph_gear_six),
-                    contentDescription = stringResource(R.string.analysis_chart_settings),
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-        }
+    // Every setting lives in the gear sheet: nothing else sits on the title row.
+    IconButton(onClick = { showOptions = true }, modifier = Modifier.size(28.dp)) {
+        Icon(
+            painter = painterResource(R.drawable.ph_gear_six),
+            contentDescription = stringResource(R.string.analysis_chart_settings),
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(18.dp),
+        )
     }
     if (showOptions && card.type.isCashFlow) {
         CashFlowOptionsSheet(
@@ -568,7 +561,7 @@ private fun chartOptions(card: ChartCard, state: AnalysisUiState, month: Int): C
         emptyList()
     }
     val pickedId = card.accountId?.takeIf { picked -> pick.any { it.id == picked } } ?: pick.firstOrNull()?.id
-    return ChartOptions(pickTitle, pick, pickedId, shown, metric = type.hasMetric)
+    return ChartOptions(pickTitle, pick, pickedId, shown, mode = type.hasMode, metric = type.hasMetric)
 }
 
 private val ChartType.isCashFlow: Boolean get() = (base ?: this) == ChartType.TRADE_CASH_FLOW
@@ -712,6 +705,8 @@ private fun shortChartName(type: ChartType): String {
         else -> R.string.analysis_short_income
     }
     val chart = when {
+        type.isAverage && type.count -> R.string.analysis_short_count_avg_share
+        type.isAverage -> R.string.analysis_short_avg_share
         type.count && name.endsWith("_DAILY") -> R.string.analysis_short_count_daily
         type.count && name.endsWith("_MONTHLY") -> R.string.analysis_short_count_monthly
         type.count -> R.string.analysis_short_count_share
@@ -757,6 +752,14 @@ fun chartName(type: ChartType): String = if (type.insight != null) insightChartN
         ChartType.INCOME_SUBCATEGORY_COUNT_SHARE -> R.string.analysis_income_subcategory_count_share_title
         ChartType.YEAR_EXPENSE_CATEGORY_COUNT_MONTHLY -> R.string.analysis_year_expense_category_count_monthly_title
         ChartType.YEAR_EXPENSE_SUBCATEGORY_COUNT_MONTHLY -> R.string.analysis_year_expense_subcategory_count_monthly_title
+        ChartType.YEAR_EXPENSE_CATEGORY_AVG_SHARE -> R.string.analysis_year_expense_category_avg_share_title
+        ChartType.YEAR_EXPENSE_SUBCATEGORY_AVG_SHARE -> R.string.analysis_year_expense_subcategory_avg_share_title
+        ChartType.YEAR_INCOME_CATEGORY_AVG_SHARE -> R.string.analysis_year_income_category_avg_share_title
+        ChartType.YEAR_INCOME_SUBCATEGORY_AVG_SHARE -> R.string.analysis_year_income_subcategory_avg_share_title
+        ChartType.YEAR_EXPENSE_CATEGORY_COUNT_AVG_SHARE -> R.string.analysis_year_expense_category_count_avg_share_title
+        ChartType.YEAR_EXPENSE_SUBCATEGORY_COUNT_AVG_SHARE -> R.string.analysis_year_expense_subcategory_count_avg_share_title
+        ChartType.YEAR_INCOME_CATEGORY_COUNT_AVG_SHARE -> R.string.analysis_year_income_category_count_avg_share_title
+        ChartType.YEAR_INCOME_SUBCATEGORY_COUNT_AVG_SHARE -> R.string.analysis_year_income_subcategory_count_avg_share_title
         ChartType.YEAR_EXPENSE_CATEGORY_COUNT_SHARE -> R.string.analysis_year_expense_category_count_share_title
         ChartType.YEAR_EXPENSE_SUBCATEGORY_COUNT_SHARE -> R.string.analysis_year_expense_subcategory_count_share_title
         ChartType.YEAR_INCOME_CATEGORY_COUNT_MONTHLY -> R.string.analysis_year_income_category_count_monthly_title
@@ -964,6 +967,24 @@ private fun YearLinesCard(card: ChartCard, height: Dp, data: Stage<YearLinesUi>,
                     if (year.months.isEmpty()) emptyList() else sumLines(year.monthly, groups, year.months.size).kept()
                 }
                 BalanceDaysSection(title, lines, MONTHS_IN_YEAR, animate, xLabels = months, counts = card.type.count)
+            }
+            card.type.isAverage -> {
+                val selection = remember(key, card.id) { AnalysisSelection() }
+                val rows = remember(year, groups, tree) {
+                    val average = year.average
+                    if (average == null) {
+                        emptyList()
+                    } else {
+                        // Every category of the kind, so a month counts for all of its charts alike.
+                        val ids = tree.flatMapTo(HashSet()) { node -> listOf(node.id) + node.children.map { it.id } }
+                        val lines = averageLines(average, sumLines(average.lines, groups, 3), ids, tenths = card.type.count)
+                        buildShare(lines.kept(), groups.associate { it.first.id to it.first })
+                    }
+                }
+                BalanceShareSection(
+                    title, rows, selection, animate, card.type.categoryKind ?: CategoryKind.INCOME,
+                    counts = card.type.count, tenths = card.type.count,
+                )
             }
             name.endsWith("_SHARE") -> {
                 val selection = remember(key, card.id) { AnalysisSelection() }

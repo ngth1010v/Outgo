@@ -50,11 +50,18 @@ data class OptionItem(val id: Long, val name: String, val iconId: Long?, val col
 /**
  * What a chart's settings sheet offers: [pick] to choose one of ([pickedId] is ringed) under
  * [pickTitle], and [shown] to switch on and off. Either list may be empty, and is then left out.
- * [metric] (only for [ChartType.hasMetric]) adds the Expense / Income / All switch, which such a
- * chart has here instead of a title-row chip, and the amount / trade count switch.
+ * [mode] (for [ChartType.hasMode]) adds the Expense / Income / All switch, and [metric] (only for
+ * [ChartType.hasMetric]) the amount / trade count switch. No chart has these on its title row.
  */
 @Immutable
-data class ChartOptions(val pickTitle: String, val pick: List<OptionItem>, val pickedId: Long?, val shown: List<OptionItem>, val metric: Boolean = false)
+data class ChartOptions(
+    val pickTitle: String,
+    val pick: List<OptionItem>,
+    val pickedId: Long?,
+    val shown: List<OptionItem>,
+    val mode: Boolean = false,
+    val metric: Boolean = false,
+)
 
 private const val CellsPerRow = 5
 
@@ -75,7 +82,7 @@ fun ChartOptionsSheet(title: String, card: ChartCard, options: ChartOptions, onC
             item(key = "title") {
                 Text(title, style = MaterialTheme.typography.titleMedium)
             }
-            if (options.metric) {
+            if (options.mode) {
                 item(key = "mode") {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         SectionTitle(stringResource(R.string.analysis_options_kind))
@@ -91,6 +98,8 @@ fun ChartOptionsSheet(title: String, card: ChartCard, options: ChartOptions, onC
                         }
                     }
                 }
+            }
+            if (options.metric) {
                 item(key = "metric") {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
                         SectionTitle(stringResource(R.string.analysis_options_show_by))

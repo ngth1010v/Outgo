@@ -18,8 +18,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentSize
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -237,50 +235,9 @@ fun Section(title: String, modifier: Modifier = Modifier, content: @Composable (
     if (showInfo && info != null) ChartInfoDialog(info, title) { showInfo = false }
 }
 
-/** Fits a chip, so a card with one is as tall as a card without. */
+/** Fits the gear, so a card with one is as tall as a card without. */
 private val SectionTitleHeight = 28.dp
 private val SectionGap = 8.dp
-
-/** A compact dropdown in a section's title row: the current choice and a caret. */
-@Composable
-fun <T> ChoiceChip(label: String, options: List<Pair<T, String>>, onSelect: (T) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    Box {
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .clickable { open = true }
-                .padding(horizontal = 6.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                label,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 120.dp),
-            )
-            Icon(
-                painter = painterResource(R.drawable.ph_caret_down),
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = 2.dp).size(12.dp),
-            )
-        }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            options.forEach { (value, text) ->
-                DropdownMenuItem(
-                    text = { Text(text) },
-                    onClick = {
-                        open = false
-                        onSelect(value)
-                    },
-                )
-            }
-        }
-    }
-}
 
 @Composable
 fun modeLabel(mode: AnalysisMode): String = stringResource(
@@ -665,6 +622,8 @@ fun BalanceShareSection(
     modifier: Modifier = Modifier,
     /** The rows are trade counts, not money. */
     counts: Boolean = false,
+    /** With [counts]: the counts are in tenths, an average per month like 2.5. */
+    tenths: Boolean = false,
 ) {
     val description = stringResource(R.string.analysis_cd_daily_lines, title, rows.size)
     val scroll = rememberScrollState()
@@ -686,7 +645,7 @@ fun BalanceShareSection(
                 Column(modifier = Modifier.fillMaxWidth().height(full.height), verticalArrangement = Arrangement.spacedBy(SectionGap)) {
                     PieChart(rows, { selection.rootId }, onSelect, introProgress(animate), Modifier.fillMaxWidth().height(pie))
                     Column(modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(scroll)) {
-                        rows.forEach { ShareRowItem(it, selection, kind, counts) }
+                        rows.forEach { ShareRowItem(it, selection, kind, counts, tenths) }
                     }
                 }
             } else {
@@ -701,7 +660,7 @@ fun BalanceShareSection(
                     )
                     Spacer(Modifier.width(10.dp))
                     Column(modifier = Modifier.weight(1f).fillMaxHeight().verticalScroll(scroll)) {
-                        rows.forEach { ShareRowItem(it, selection, kind, counts) }
+                        rows.forEach { ShareRowItem(it, selection, kind, counts, tenths) }
                     }
                 }
             }
@@ -710,7 +669,7 @@ fun BalanceShareSection(
 }
 
 @Composable
-private fun ShareRowItem(row: ShareRow, selection: AnalysisSelection, kind: Int, counts: Boolean) {
+private fun ShareRowItem(row: ShareRow, selection: AnalysisSelection, kind: Int, counts: Boolean, tenths: Boolean) {
     // Only the row whose selected-ness actually flips recomposes on a tap.
     val selected by remember(row.id) { derivedStateOf { selection.rootId == row.id } }
     val background by animateColorAsState(
@@ -741,12 +700,20 @@ private fun ShareRowItem(row: ShareRow, selection: AnalysisSelection, kind: Int,
         Spacer(Modifier.width(4.dp))
         Column(horizontalAlignment = Alignment.End) {
             Text(
-                if (counts) stringResource(R.string.analysis_trades_count, row.amount.toInt()) else Money.format(row.amount),
+                when {
+                    tenths -> stringResource(R.string.analysis_trades_count_text, tenthsText(row.amount))
+                    counts -> stringResource(R.string.analysis_trades_count, row.amount.toInt())
+                    else -> Money.format(row.amount)
+                },
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
             )
-            val delta = if (counts) (if (row.delta > 0) "+${row.delta}" else "${row.delta}") else Money.formatSignedNoCurrency(row.delta)
+            val delta = when {
+                tenths -> (if (row.delta > 0) "+" else "") + tenthsText(row.delta)
+                counts -> if (row.delta > 0) "+${row.delta}" else "${row.delta}"
+                else -> Money.formatSignedNoCurrency(row.delta)
+            }
             Text(
                 "$delta (${signedPercent(row.deltaPercent)})",
                 style = MaterialTheme.typography.labelSmall,
@@ -755,6 +722,12 @@ private fun ShareRowItem(row: ShareRow, selection: AnalysisSelection, kind: Int,
             )
         }
     }
+}
+
+/** 25 -> "2.5", with the user's decimal separator. */
+private fun tenthsText(tenths: Long): String {
+    val abs = kotlin.math.abs(tenths)
+    return (if (tenths < 0) "-" else "") + (abs / 10) + Money.style.decimal + (abs % 10)
 }
 
 val ShareRowHeight = 44.dp

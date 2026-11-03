@@ -937,6 +937,10 @@ flowchart LR
 
 Mỗi tháng một trang, mỗi năm một trang. Đầu màn là một bộ chọn kỳ duy nhất: mũi tên đi theo tháng (hoặc theo năm ở chế độ Năm), nút chuyển Tháng/Năm, và "Hiện tại" về tháng này. Trang năm có danh sách biểu đồ riêng (`LayoutSlot.YEAR`, lưu ở `analysis_layout_year_v2`) với đúng các nhóm của trang tháng (Accounts, Categories, Trades, Savings, Budgets, Other). Mỗi biểu đồ năm (`ChartType.YEAR_*`) trỏ tới biểu đồ tháng cùng dạng qua `base` và dùng lại card đó, chỉ đổi dữ liệu: Accounts/Categories từ `AnalysisYear.kt`, Trades/Savings/Budgets từ các hàm dựng của trang tháng chạy trên các tháng của năm.
 
+Mọi tuỳ chọn của một biểu đồ (Chi / Thu / Tất cả, số tiền hay số giao dịch, tài khoản/danh mục cha, ẩn mục nào) nằm sau **bánh răng** góc phải trên của card (`ChartOptionsSheet`, riêng Cash flow là `CashFlowOptionsSheet`); không biểu đồ nào đặt tuỳ chọn trực tiếp trên dòng tiêu đề.
+
+Biểu đồ **trung bình mỗi tháng** của năm (`YEAR_*_AVG_SHARE`, theo tiền và theo số giao dịch): `buildYearCategories` dựng `YearAverageUi` (tổng năm trước, năm nay trừ tháng đang chạy, tháng đang chạy, kèm bitmask các tháng có dữ liệu của từng danh mục); card gọi `averageLines` để chia cho số tháng có ít nhất một giao dịch **của loại đó** (gộp mọi danh mục của loại, nên các lát cộng lại đúng bằng trung bình tổng). Tháng đang chạy bị bỏ ra trừ khi chỉ có nó có dữ liệu; năm trước chia cho các tháng có dữ liệu của cả năm. Số giao dịch trung bình tính theo phần mười (2.5). Thẻ Tổng kết năm cũng chia trung bình mỗi tháng theo đúng quy tắc này.
+
 ### 7.7 Setting
 
 | Nhóm | Mục |

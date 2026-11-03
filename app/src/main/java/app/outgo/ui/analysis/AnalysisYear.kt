@@ -36,6 +36,7 @@ fun lastMonthOf(year: Int, currentMonth: Int): Int = minOf(year * 100 + 12, curr
  * - [monthly]: a point per month of [months] (the year so far).
  * - [share]: two points, the year before and this year, for [buildShare].
  * - [yearly]: a point per year of [years], this one last.
+ * - [average]: what the "average per month" pies divide, see [YearAverageUi]; categories only.
  */
 @Immutable
 data class YearLinesUi(
@@ -44,7 +45,48 @@ data class YearLinesUi(
     val share: List<BalanceLine>,
     val years: List<Int>,
     val yearly: List<BalanceLine>,
+    val average: YearAverageUi? = null,
 )
+
+/**
+ * The year's category totals for the "average per month" pies, which a card divides by the months
+ * that had any trade of its kind (see [averageLines]); the kind is only known from the card's tree.
+ * - [lines]: three points per category: the whole year before, this year without [live], and [live].
+ * - [masks]: per category, bit `m - 1` set for each month m with money: the year before, then this
+ *   year without [live].
+ * - [live]: the month still under way (it is left out unless it is the only month with data), or null.
+ */
+@Immutable
+data class YearAverageUi(val lines: List<BalanceLine>, val masks: Map<Long, Pair<Int, Int>>, val live: Int?)
+
+/**
+ * [average]'s lines for the categories [ids] of one kind as two points, the year before and this
+ * year, each its total over the months with data of that kind. With [tenths] the values are
+ * tenths (a trade count averages 2.5), else as stored. [lines] must be [average]'s lines summed
+ * the way the card draws them (see [sumLines] with 3 points).
+ */
+fun averageLines(average: YearAverageUi, lines: List<BalanceLine>, ids: Set<Long>, tenths: Boolean): List<BalanceLine> {
+    var before = 0
+    var current = 0
+    var live = false
+    average.masks.forEach { (id, masks) ->
+        if (id in ids) {
+            before = before or masks.first
+            current = current or masks.second
+        }
+    }
+    if (average.live != null) {
+        live = current == 0 && average.lines.any { it.accountId in ids && it.values[2] != 0L }
+    }
+    val beforeMonths = Integer.bitCount(before)
+    val currentMonths = if (live) 1 else Integer.bitCount(current)
+    val scale = if (tenths) 10 else 1
+    fun avg(total: Long, months: Int) = if (months == 0) 0L else Math.round(total.toDouble() * scale / months)
+    return lines.map { line ->
+        val now = if (live) line.values[2] else line.values[1]
+        line.copy(values = listOf(avg(line.values[0], beforeMonths), avg(now, currentMonths)))
+    }
+}
 
 /** A year page's own data; a null group had nothing to show. */
 @Immutable
@@ -61,13 +103,32 @@ data class YearUi(
  * The year's totals against the same months of the year before (the whole year once it is over),
  * averaged per month so far. [totals] must cover both years. Null when the year has nothing.
  */
-fun buildYearSummary(totals: List<MonthCategoryTotal>, year: Int, lastMonth: Int): SummaryUi? {
+fun buildYearSummary(totals: List<MonthCategoryTotal>, year: Int, lastMonth: Int, live: Boolean = false): SummaryUi? {
     val current = totals.filter { it.monthKey / 100 == year && it.monthKey <= lastMonth }
     if (current.isEmpty()) return null
     val previous = totals.filter { it.monthKey / 100 == year - 1 && it.monthKey % 100 <= lastMonth % 100 }
-    val months = lastMonth % 100
-    val expense = kindSummary(current.filter { it.type == CategoryKind.EXPENSE }, previous.filter { it.type == CategoryKind.EXPENSE }, months)
-    val income = kindSummary(current.filter { it.type == CategoryKind.INCOME }, previous.filter { it.type == CategoryKind.INCOME }, months)
+    val liveMonth = lastMonth.takeIf { live }
+    /**
+     * The months [rows] have money in, the live one left out unless it is the only one: an empty
+     * month, or one only begun, would pull the average per month down.
+     */
+    fun monthsWithData(rows: List<MonthCategoryTotal>): Int {
+        val months = rows.filter { it.total != 0L }.mapTo(HashSet()) { it.monthKey }
+        val done = months - setOfNotNull(liveMonth)
+        return if (done.isEmpty()) months.size else done.size
+    }
+    fun summary(kind: Int): KindSummary {
+        val rows = current.filter { it.type == kind }
+        val done = rows.filter { it.monthKey != liveMonth }
+        val months = monthsWithData(rows)
+        // The average counts the months it divides by: without the live month when that is left out.
+        val averaged = if (done.any { it.total != 0L }) done else rows
+        return kindSummary(rows, previous.filter { it.type == kind }, months).copy(
+            perPeriod = if (months > 0) averaged.sumOf { it.total } / months else 0L,
+        )
+    }
+    val expense = summary(CategoryKind.EXPENSE)
+    val income = summary(CategoryKind.INCOME)
     return SummaryUi(expense, income, net = income.total - expense.total, prevNet = income.prevTotal - expense.prevTotal)
 }
 
@@ -109,6 +170,8 @@ fun buildYearCategories(
     totals: List<CategoryMonthTotal>,
     year: Int,
     lastMonth: Int,
+    /** [lastMonth] is still under way: the averages leave it out. */
+    live: Boolean = false,
     value: (CategoryMonthTotal) -> Long = { it.total },
 ): YearLinesUi? {
     val inRange = totals.filter { it.monthKey <= lastMonth && value(it) != 0L }
@@ -130,5 +193,24 @@ fun buildYearCategories(
         val perYear = rows.groupBy { it.monthKey / 100 }.mapValues { (_, r) -> r.sumOf(value) }
         line(id, years.map { perYear[it] ?: 0L })
     }
-    return YearLinesUi(months, monthly, share, years, yearly)
+    val liveMonth = lastMonth.takeIf { live && it / 100 == year }
+    val averageRows = byCategory.mapValues { (_, rows) -> rows.filter { it.monthKey / 100 == year - 1 || it.monthKey / 100 == year } }
+    val average = YearAverageUi(
+        lines = averageRows.map { (id, rows) ->
+            line(
+                id,
+                listOf(
+                    rows.filter { it.monthKey / 100 == year - 1 }.sumOf(value),
+                    rows.filter { it.monthKey / 100 == year && it.monthKey != liveMonth }.sumOf(value),
+                    rows.filter { it.monthKey == liveMonth }.sumOf(value),
+                ),
+            )
+        },
+        masks = averageRows.mapValues { (_, rows) ->
+            fun mask(of: (CategoryMonthTotal) -> Boolean) = rows.filter(of).fold(0) { bits, it -> bits or (1 shl (it.monthKey % 100 - 1)) }
+            mask { it.monthKey / 100 == year - 1 } to mask { it.monthKey / 100 == year && it.monthKey != liveMonth }
+        },
+        live = liveMonth,
+    )
+    return YearLinesUi(months, monthly, share, years, yearly, average)
 }
