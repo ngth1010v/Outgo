@@ -434,6 +434,9 @@
     <string name="analysis_options_shown">Shown: %1$d of %2$d</string>
     <string name="analysis_options_none">None</string>
     <string name="progress_per_day">%1$s/day</string>
+    <string name="progress_plan_per_day">Plan: %1$s/day</string>
+    <string name="progress_plan_spent_by_today">Plan: %1$s spent by today</string>
+    <string name="progress_plan_saved_by_today">Plan: %1$s saved by today</string>
     <string name="progress_today_spend">%1$s can spend today</string>
     <string name="progress_today_over">%1$s over today\'s budget</string>
     <string name="progress_today_save">%1$s need to save today</string>

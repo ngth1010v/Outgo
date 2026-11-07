@@ -139,23 +139,41 @@ private fun PacePanel(
     val planName = stringResource(R.string.progress_line_plan)
     Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(
-                stringResource(R.string.progress_per_day, Money.format(perDay)),
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.alignByBaseline(),
-                fontWeight = FontWeight.Bold,
-                color = color,
-            )
-            Text(
-                when {
-                    !greenWhenLower -> stringResource(R.string.progress_today_save, Money.format(todayAmount.coerceAtLeast(0)))
-                    todayAmount >= 0 -> stringResource(R.string.progress_today_spend, Money.format(todayAmount))
-                    else -> stringResource(R.string.progress_today_over, Money.format(-todayAmount))
-                },
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.alignByBaseline(),
-                color = color,
-            )
+            // A Column's first baseline is its first child's, so the right label stays level with the bold one.
+            Column(modifier = Modifier.alignByBaseline()) {
+                Text(
+                    stringResource(R.string.progress_per_day, Money.format(perDay)),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = color,
+                )
+                // The even daily share of [total]: what following the plan from the 1st means per day.
+                Text(
+                    stringResource(R.string.progress_plan_per_day, Money.format(total / daysInMonth)),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Column(modifier = Modifier.alignByBaseline(), horizontalAlignment = Alignment.End) {
+                Text(
+                    when {
+                        !greenWhenLower -> stringResource(R.string.progress_today_save, Money.format(todayAmount.coerceAtLeast(0)))
+                        todayAmount >= 0 -> stringResource(R.string.progress_today_spend, Money.format(todayAmount))
+                        else -> stringResource(R.string.progress_today_over, Money.format(-todayAmount))
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = color,
+                )
+                // Where the plan line is today: its running total from the 1st through today.
+                Text(
+                    stringResource(
+                        if (greenWhenLower) R.string.progress_plan_spent_by_today else R.string.progress_plan_saved_by_today,
+                        Money.format(pace),
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         val lines = remember(days, total, color, planColor, lineName, planName, draft) {
             val plan = (0 until daysInMonth).map { total * it / (daysInMonth - 1).coerceAtLeast(1) }
