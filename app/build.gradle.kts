@@ -26,8 +26,8 @@ android {
         applicationId = "app.outgo"
         minSdk = 30
         targetSdk = 34
-        versionCode = 61
-        versionName = "4.29.0"
+        versionCode = 62
+        versionName = "4.29.1"
 
         vectorDrawables.useSupportLibrary = true
         // Only ship the languages the app actually has strings for.
