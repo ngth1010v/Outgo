@@ -154,26 +154,16 @@ private fun PacePanel(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Column(modifier = Modifier.alignByBaseline(), horizontalAlignment = Alignment.End) {
-                Text(
-                    when {
-                        !greenWhenLower -> stringResource(R.string.progress_today_save, Money.format(todayAmount.coerceAtLeast(0)))
-                        todayAmount >= 0 -> stringResource(R.string.progress_today_spend, Money.format(todayAmount))
-                        else -> stringResource(R.string.progress_today_over, Money.format(-todayAmount))
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = color,
-                )
-                // Where the plan line is today: its running total from the 1st through today.
-                Text(
-                    stringResource(
-                        if (greenWhenLower) R.string.progress_plan_spent_by_today else R.string.progress_plan_saved_by_today,
-                        Money.format(pace),
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            Text(
+                when {
+                    !greenWhenLower -> stringResource(R.string.progress_today_save, Money.format(todayAmount.coerceAtLeast(0)))
+                    todayAmount >= 0 -> stringResource(R.string.progress_today_spend, Money.format(todayAmount))
+                    else -> stringResource(R.string.progress_today_over, Money.format(-todayAmount))
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = color,
+                modifier = Modifier.alignByBaseline(),
+            )
         }
         val lines = remember(days, total, color, planColor, lineName, planName, draft) {
             val plan = (0 until daysInMonth).map { total * it / (daysInMonth - 1).coerceAtLeast(1) }
