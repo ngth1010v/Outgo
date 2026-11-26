@@ -10,31 +10,26 @@ import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
 
 /**
- * A tree row's name, an optional gray [label] (Savings, budget exception…) and the first line of
- * its [description] in italics, "…" when cut or when the description has more lines.
- * Under the name, the line-height padding is trimmed, halving the gap to the first gray line.
+ * A tree row's name and the first line of its [description] in gray italics, "…" when cut or when
+ * the description has more lines. Under the name, the line-height padding is trimmed, halving the
+ * gap to the description.
  */
 @Composable
-fun RowTitle(name: String, label: String?, description: String?, modifier: Modifier = Modifier) = Column(modifier) {
+fun RowTitle(name: String, description: String?, modifier: Modifier = Modifier) = Column(modifier) {
     val lines = description?.trim()?.lines().orEmpty()
     val desc = lines.firstOrNull()?.let { if (lines.size > 1) "${it.trimEnd()}…" else it }
-    val hasSub = label != null || desc != null
     val body = MaterialTheme.typography.bodyLarge
     Text(
         name,
-        style = if (hasSub) body.copy(lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.LastLineBottom)) else body,
+        style = if (desc != null) body.copy(lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.LastLineBottom)) else body,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
     )
-    val small = MaterialTheme.typography.labelSmall
-    val firstSmall = small.copy(lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.FirstLineTop))
-    val gray = MaterialTheme.colorScheme.onSurfaceVariant
-    if (label != null) Text(label, style = firstSmall, color = gray, maxLines = 1, overflow = TextOverflow.Ellipsis)
     if (desc != null) {
         Text(
             desc,
-            style = if (label == null) firstSmall else small,
-            color = gray,
+            style = MaterialTheme.typography.labelSmall.copy(lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.FirstLineTop)),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontStyle = FontStyle.Italic,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,

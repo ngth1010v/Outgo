@@ -263,7 +263,6 @@ private fun CategoryRow(
             Spacer(Modifier.width(12.dp))
             RowTitle(
                 name = category.name,
-                label = if (category.isExempt) stringResource(R.string.category_parent_budget_exception) else null,
                 description = category.description,
                 modifier = Modifier.weight(1f),
             )

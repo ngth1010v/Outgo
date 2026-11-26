@@ -85,7 +85,18 @@ fun IconView(iconId: Long?, modifier: Modifier = Modifier, size: Dp = 28.dp, col
  * that icon: hung off its bottom-right corner like the budget badge on a History transfer.
  */
 @Composable
-fun BoxScope.ExceptionBadge(iconSize: Dp) {
+fun BoxScope.ExceptionBadge(iconSize: Dp) =
+    IconBadge(iconSize, R.drawable.ph_prohibit, stringResource(R.string.category_parent_budget_exception), MaterialTheme.colorScheme.error)
+
+/** The "savings account" badge, hung off the account icon like [ExceptionBadge]: a filled green tip jar. */
+@Composable
+fun BoxScope.SavingsBadge(iconSize: Dp) =
+    IconBadge(iconSize, R.drawable.ph_tip_jar_fill, stringResource(R.string.balance_savings_label), SavingsBadgeColor)
+
+private val SavingsBadgeColor = Color(0xFF2E7D32)
+
+@Composable
+private fun BoxScope.IconBadge(iconSize: Dp, icon: Int, description: String, tint: Color) {
     val size = iconSize * 0.616f
     Box(
         contentAlignment = Alignment.Center,
@@ -97,9 +108,9 @@ fun BoxScope.ExceptionBadge(iconSize: Dp) {
             .background(MaterialTheme.colorScheme.surface, CircleShape),
     ) {
         Icon(
-            painter = painterResource(R.drawable.ph_prohibit),
-            contentDescription = stringResource(R.string.category_parent_budget_exception),
-            tint = MaterialTheme.colorScheme.error,
+            painter = painterResource(icon),
+            contentDescription = description,
+            tint = tint,
             modifier = Modifier.size(size * 0.8f),
         )
     }

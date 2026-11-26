@@ -74,6 +74,7 @@ import app.outgo.ui.component.ConfirmDialog
 import app.outgo.ui.component.EditorScaffold
 import app.outgo.ui.component.IconPickerSheet
 import app.outgo.ui.component.ExceptionBadge
+import app.outgo.ui.component.SavingsBadge
 import app.outgo.ui.component.IconView
 import app.outgo.ui.component.MonthPicker
 import app.outgo.ui.component.SwitchField
@@ -182,14 +183,13 @@ private fun AccountRow(
         ) {
             Box {
                 IconView(iconId = account.iconId, size = 28.dp, color = account.color)
+                // An exception account is always a savings one: its badge stands in for the savings badge.
                 if (account.isExempt) ExceptionBadge(28.dp)
+                else if (account.accountType == AccountType.SAVINGS) SavingsBadge(28.dp)
             }
             Spacer(Modifier.width(12.dp))
-            val savings = stringResource(R.string.balance_savings_label)
-            val exception = stringResource(R.string.balance_parent_saving_exception)
             RowTitle(
                 name = account.name,
-                label = if (account.accountType != AccountType.SAVINGS) null else if (account.isExempt) "$savings · $exception" else savings,
                 description = account.description,
                 modifier = Modifier.weight(1f),
             )
