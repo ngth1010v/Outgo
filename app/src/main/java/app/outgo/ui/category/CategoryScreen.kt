@@ -578,19 +578,27 @@ internal fun SectionHeader(title: String, info: String, action: (@Composable () 
         // Title sits 10dp below the section above and 8dp above its content.
         modifier = Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 4.dp).heightIn(min = 28.dp),
     ) {
-        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier.padding(start = 2.dp).size(28.dp).clip(CircleShape).clickable { showInfo = true },
-        ) {
-            Icon(
-                painterResource(R.drawable.ph_info),
-                contentDescription = stringResource(R.string.home_balance_info, title),
-                modifier = Modifier.size(16.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        // The title wraps within what the action leaves, so a long one (large font) keeps the info
+        // button and the action on screen instead of pushing them off the edge.
+        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f, fill = false),
             )
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.padding(start = 2.dp).size(28.dp).clip(CircleShape).clickable { showInfo = true },
+            ) {
+                Icon(
+                    painterResource(R.drawable.ph_info),
+                    contentDescription = stringResource(R.string.home_balance_info, title),
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
-        Spacer(Modifier.weight(1f))
         action?.invoke()
     }
     if (showInfo) {

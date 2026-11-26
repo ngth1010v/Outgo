@@ -40,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
@@ -633,7 +634,18 @@ private fun PrivacySection(own: AccountPrivacy, parent: AccountEntity?, savings:
                     onClick = { onChange(own.copy(progressHide = mode)) },
                     enabled = !progressLocked,
                     shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
-                ) { Text(stringResource(label)) }
+                ) {
+                    // The full label when it fits on one line, else the short one ("Reached"). Re-measured
+                    // when the check mark comes or goes, or the font size changes.
+                    var short by remember(progress.progressHide == mode, LocalDensity.current.fontScale) { mutableStateOf(false) }
+                    val shortLabel = if (mode == SavingProgressHide.WHEN_REACHED) R.string.balance_hide_progress_reached_short else null
+                    Text(
+                        stringResource(if (short && shortLabel != null) shortLabel else label),
+                        maxLines = 1,
+                        softWrap = false,
+                        onTextLayout = { if (it.hasVisualOverflow) short = true },
+                    )
+                }
             }
         }
         // Only while the progress is hidden somewhere: it keeps it in Analysis.

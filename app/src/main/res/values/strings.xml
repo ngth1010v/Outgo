@@ -197,6 +197,7 @@
     <string name="balance_hide_progress">Hide savings progress</string>
     <string name="balance_hide_progress_never">Never</string>
     <string name="balance_hide_progress_reached">When reached</string>
+    <string name="balance_hide_progress_reached_short">Reached</string>
     <string name="balance_hide_progress_always">Always</string>
     <string name="balance_progress_in_analysis">Show in Analysis</string>
     <string name="balance_privacy_from_parent">Set by the parent account %1$s.</string>

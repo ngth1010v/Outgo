@@ -190,6 +190,7 @@
     <string name="balance_hide_progress">Ẩn tiến độ tiết kiệm</string>
     <string name="balance_hide_progress_never">Không</string>
     <string name="balance_hide_progress_reached">Khi đạt</string>
+    <string name="balance_hide_progress_reached_short">Đạt</string>
     <string name="balance_hide_progress_always">Luôn ẩn</string>
     <string name="balance_progress_in_analysis">Hiện trong Phân tích</string>
     <string name="balance_privacy_from_parent">Đặt bởi tài khoản cha %1$s.</string>
