@@ -1,5 +1,6 @@
 package app.outgo.ui.balance
 
+import app.outgo.ui.component.RowTitle
 import app.outgo.ui.component.MoneyTextField
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
@@ -184,17 +185,14 @@ private fun AccountRow(
                 if (account.isExempt) ExceptionBadge(28.dp)
             }
             Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(account.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (account.accountType == AccountType.SAVINGS) {
-                    val savings = stringResource(R.string.balance_savings_label)
-                    Text(
-                        if (account.isExempt) savings + " · " + stringResource(R.string.balance_parent_saving_exception) else savings,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+            val savings = stringResource(R.string.balance_savings_label)
+            val exception = stringResource(R.string.balance_parent_saving_exception)
+            RowTitle(
+                name = account.name,
+                label = if (account.accountType != AccountType.SAVINGS) null else if (account.isExempt) "$savings · $exception" else savings,
+                description = account.description,
+                modifier = Modifier.weight(1f),
+            )
             Text(
                 if (privacy.hideBalance) Money.formatHidden() else Money.format(row.totalBalance),
                 fontWeight = FontWeight.Bold,

@@ -1,5 +1,6 @@
 package app.outgo.ui.category
 
+import app.outgo.ui.component.RowTitle
 import app.outgo.ui.component.SectionSwitch
 import app.outgo.ui.component.MoneyTextField
 import app.outgo.util.MonthKey
@@ -260,16 +261,12 @@ private fun CategoryRow(
                 if (category.isExempt) ExceptionBadge(28.dp)
             }
             Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(category.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (category.isExempt) {
-                    Text(
-                        stringResource(R.string.category_parent_budget_exception),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+            RowTitle(
+                name = category.name,
+                label = if (category.isExempt) stringResource(R.string.category_parent_budget_exception) else null,
+                description = category.description,
+                modifier = Modifier.weight(1f),
+            )
             trailing?.invoke()
         }
         if (budget != null) {
