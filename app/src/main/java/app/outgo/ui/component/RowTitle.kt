@@ -5,12 +5,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
 
 /**
- * A tree row's name and the first line of its [description] in gray italics, "…" when cut or when
+ * A tree row's name and the first line of its [description] in gray, "…" when cut or when
  * the description has more lines. Under the name, the line-height padding is trimmed, halving the
  * gap to the description.
  */
@@ -30,7 +29,6 @@ fun RowTitle(name: String, description: String?, modifier: Modifier = Modifier) 
             desc,
             style = MaterialTheme.typography.labelSmall.copy(lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.FirstLineTop)),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontStyle = FontStyle.Italic,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
