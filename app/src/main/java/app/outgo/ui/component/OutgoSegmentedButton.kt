@@ -2,6 +2,7 @@ package app.outgo.ui.component
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.offset
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
@@ -9,6 +10,7 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRowScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.IntOffset
@@ -47,7 +49,14 @@ fun SingleChoiceSegmentedButtonRowScope.OutgoSegmentedButton(
         icon = {
             SegmentedButtonDefaults.Icon(
                 active = selected,
-                activeContent = { Box(Modifier.offset { IntOffset((4.dp + shift).roundToPx(), 0) }) { SegmentedButtonDefaults.ActiveIcon() } },
+                // Material places the icon at the top of the label's line; fill that line's height and
+                // centre the check in it, or it rides high once a large font makes the line taller.
+                activeContent = {
+                    Box(
+                        Modifier.fillMaxHeight().offset { IntOffset((4.dp + shift).roundToPx(), 0) },
+                        contentAlignment = Alignment.Center,
+                    ) { SegmentedButtonDefaults.ActiveIcon() }
+                },
             )
         },
         label = { Box(Modifier.offset { IntOffset(shift.roundToPx(), 0) }) { label() } },
