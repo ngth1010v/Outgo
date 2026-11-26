@@ -426,7 +426,7 @@ private fun GridPickerSheet(
         id = { it.id },
         name = { it.name },
         selectedId = selectedId,
-        cell = { item, selected, onClick, modifier -> PickCell(item.name, item.iconId, item.color, selected, onClick, modifier, wrap = true) },
+        cell = { item, selected, onClick, modifier -> PickCell(item.name, item.iconId, item.color, selected, onClick, modifier) },
         onSelect = { onSelect(it.id); dismiss() },
         onDismiss = dismiss,
         header = {

@@ -30,6 +30,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -51,8 +52,6 @@ import app.outgo.ui.LocalAppContainer
 fun PickCell(
     name: String, iconId: Long?, color: Int, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier,
     exception: Boolean = false,
-    /** Wrap a long name onto more lines instead of cutting it at one. */
-    wrap: Boolean = false,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -85,7 +84,8 @@ fun PickCell(
         Text(
             name,
             style = MaterialTheme.typography.labelSmall,
-            maxLines = if (wrap) Int.MAX_VALUE else 1,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
         )
     }
@@ -101,7 +101,7 @@ fun AccountSheet(accounts: List<AccountEntity>, selectedId: Long?, onSelect: (Ac
         id = { it.id },
         name = { it.name },
         selectedId = selectedId,
-        cell = { item, selected, onClick, modifier -> PickCell(item.name, item.iconId, item.color, selected, onClick, modifier, exception = item.isExempt, wrap = true) },
+        cell = { item, selected, onClick, modifier -> PickCell(item.name, item.iconId, item.color, selected, onClick, modifier, exception = item.isExempt) },
         onSelect = onSelect,
         onDismiss = onDismiss,
     )
@@ -141,7 +141,7 @@ fun BudgetSheet(
         id = { it.id },
         name = { it.name },
         selectedId = selectedId,
-        cell = { item, selected, onClick, modifier -> PickCell(item.name, item.iconId, item.color, selected, onClick, modifier, wrap = true) },
+        cell = { item, selected, onClick, modifier -> PickCell(item.name, item.iconId, item.color, selected, onClick, modifier) },
         onSelect = { onSelect(it.id) },
         onDismiss = onDismiss,
         header = {
@@ -211,7 +211,7 @@ fun <T> GroupedPickerSheet(
                         Column {
                             // A blank parent name: one untitled section (a flat grid).
                             if (name(parent).isNotBlank()) {
-                                Text(name(parent), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium)
+                                Text(name(parent), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Spacer(Modifier.height(8.dp))
                             }
                             children.chunked(5).forEach { rowItems ->

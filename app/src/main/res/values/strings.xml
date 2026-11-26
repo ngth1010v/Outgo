@@ -60,6 +60,7 @@
     <string name="trade_expense">Expense</string>
     <string name="trade_income">Income</string>
     <string name="trade_transfer">Transfer</string>
+    <string name="trade_transfer_short">Xfer</string>
     <string name="trade_recent">Recent</string>
     <string name="trade_top_used">Most used</string>
     <string name="trade_all_categories">All</string>
@@ -231,7 +232,6 @@
     <string name="analysis_period_month">%1$s %2$d</string>
     <string name="analysis_mode_month">Month</string>
     <string name="analysis_mode_year">Year</string>
-    <string name="analysis_go_now">Now</string>
     <string name="analysis_transfer_line">Moved %1$s between accounts</string>
     <string name="analysis_summary_title">Month summary</string>
     <string name="analysis_avg_per_day">%1$s per day</string>

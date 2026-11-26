@@ -78,7 +78,3 @@ fun yearStepTarget(pages: List<AnalysisPage>, currentIndex: Int, yearDelta: Int)
 
 /** Index of the year summary page for [year], or -1. */
 fun yearlyPageIndex(pages: List<AnalysisPage>, year: Int): Int = pages.indexOf(AnalysisPage.Year(year))
-
-/** Index of today's month page, or -1 — the target of the "Now" button. */
-fun currentMonthIndex(pages: List<AnalysisPage>, currentMonth: Int): Int =
-    pages.indexOf(AnalysisPage.Month(currentMonth))

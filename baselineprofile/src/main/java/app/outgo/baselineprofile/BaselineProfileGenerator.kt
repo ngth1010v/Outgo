@@ -101,7 +101,6 @@ internal fun MacrobenchmarkScope.animationJourney() {
     flingDownAndUp()
     tap(By.text("Year"))
     flingDownAndUp()
-    tap(By.text("Now"))
 }
 
 /** Opens an editor section's month picker (its "MM/yyyy" label), then closes it with Back. */

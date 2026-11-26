@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -71,6 +72,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -532,7 +535,7 @@ private fun TradeForm(
         fun saveButton(modifier: Modifier) = androidx.compose.material3.Button(
             onClick = viewModel::save,
             enabled = !state.isSaving,
-            modifier = modifier.height(52.dp),
+            modifier = modifier.heightIn(min = 52.dp),
         ) {
             // With a draft list started, Save adds to it too (see TradeViewModel.save).
             Text(
@@ -561,7 +564,7 @@ private fun TradeForm(
                 OutlinedButton(
                     onClick = if (state.drafting) onOpenDrafts else viewModel::addToDraft,
                     enabled = !state.isSaving,
-                    modifier = Modifier.weight(1f).height(52.dp),
+                    modifier = Modifier.weight(1f).heightIn(min = 52.dp),
                 ) {
                     Text(
                         if (state.drafting) stringResource(R.string.draft_view, state.draftCount) else stringResource(R.string.draft_add),
@@ -582,19 +585,30 @@ private fun ExpenseIncomeToggle(type: Int, onTypeChange: (Int) -> Unit, enabled:
             onClick = { onTypeChange(CategoryKind.EXPENSE) },
             enabled = enabled,
             shape = SegmentedButtonDefaults.itemShape(0, 3),
-        ) { Text(stringResource(R.string.trade_expense)) }
+        ) { Text(stringResource(R.string.trade_expense), maxLines = 1) }
         OutgoSegmentedButton(
             selected = type == CategoryKind.INCOME,
             onClick = { onTypeChange(CategoryKind.INCOME) },
             enabled = enabled,
             shape = SegmentedButtonDefaults.itemShape(1, 3),
-        ) { Text(stringResource(R.string.trade_income)) }
+        ) { Text(stringResource(R.string.trade_income), maxLines = 1) }
+        val transfer = type == TradeType.TRANSFER
+        // The full label when it fits on one line, else the short one ("CK"). Re-measured when the
+        // check mark comes or goes, or the font size changes.
+        var short by remember(transfer, LocalDensity.current.fontScale) { mutableStateOf(false) }
         OutgoSegmentedButton(
-            selected = type == TradeType.TRANSFER,
+            selected = transfer,
             onClick = { onTypeChange(TradeType.TRANSFER) },
             enabled = enabled,
             shape = SegmentedButtonDefaults.itemShape(2, 3),
-        ) { Text(stringResource(R.string.trade_transfer)) }
+        ) {
+            Text(
+                stringResource(if (short) R.string.trade_transfer_short else R.string.trade_transfer),
+                maxLines = 1,
+                softWrap = false,
+                onTextLayout = { if (it.hasVisualOverflow) short = true },
+            )
+        }
     }
 }
 
@@ -655,7 +669,7 @@ private fun SelectedCategoryChip(parent: CategoryEntity?, category: CategoryEnti
         if (parent != null) {
             IconView(iconId = parent.iconId, size = 20.dp, color = parent.color)
             Spacer(Modifier.width(6.dp))
-            Text(parent.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            Text(parent.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.width(6.dp))
             Text("/", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.width(6.dp))
@@ -665,7 +679,7 @@ private fun SelectedCategoryChip(parent: CategoryEntity?, category: CategoryEnti
             if (category.isExempt) ExceptionBadge(20.dp)
         }
         Spacer(Modifier.width(6.dp))
-        Text(category.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+        Text(category.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -765,7 +779,7 @@ private fun AccountDropdown(
                 if (selectedAccount?.isExempt == true) ExceptionBadge(24.dp)
             }
             Spacer(Modifier.width(8.dp))
-            Text(selectedAccount?.name ?: "—", modifier = Modifier.weight(1f).predictedAlpha(predicted))
+            Text(selectedAccount?.name ?: "—", maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).predictedAlpha(predicted))
             Icon(painterResource(R.drawable.ph_caret_down), contentDescription = null)
         }
         ErrorText(error)
@@ -897,7 +911,8 @@ private fun DateTimeRow(occurredAt: Long, onDateChange: (Long) -> Unit, onTimeCh
         OutlineBox(
             text = formatDate(occurredAt),
             icon = R.drawable.ph_calendar_blank,
-            modifier = Modifier.weight(1f),
+            // 6/4: "dd/MM/yyyy" is twice as long as "HH:mm".
+            modifier = Modifier.weight(6f),
             onClick = {
                 val cal = Calendar.getInstance().apply { timeInMillis = occurredAt }
                 DatePickerDialog(
@@ -915,7 +930,7 @@ private fun DateTimeRow(occurredAt: Long, onDateChange: (Long) -> Unit, onTimeCh
         OutlineBox(
             text = formatTime(occurredAt),
             icon = R.drawable.ph_clock,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(4f),
             onClick = {
                 val cal = Calendar.getInstance().apply { timeInMillis = occurredAt }
                 TimePickerDialog(
@@ -941,7 +956,7 @@ private fun OutlineBox(text: String, icon: Int, modifier: Modifier = Modifier, o
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Icon(painterResource(icon), contentDescription = null)
-        Text(text)
+        Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 

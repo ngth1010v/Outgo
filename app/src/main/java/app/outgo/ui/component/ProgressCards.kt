@@ -13,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
@@ -72,7 +73,7 @@ fun BudgetRow(budget: BudgetWithProgress, modifier: Modifier = Modifier, draft: 
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconView(iconId = budget.displayIconId, size = 32.dp, color = budget.categoryColor)
             Spacer(Modifier.width(12.dp))
-            Text(budget.displayName, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Text(budget.displayName, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             MonthAmountBlock(spent, budget.prevSpent, greenWhenLower = true, draftDelta = draft?.let { spent - before })
         }
         BudgetProgressBlock(
@@ -107,7 +108,7 @@ fun SavingsAccountRow(row: AccountWithProgress, modifier: Modifier = Modifier, d
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconView(iconId = account.iconId, size = 32.dp, color = account.color)
             Spacer(Modifier.width(12.dp))
-            Text(account.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Text(account.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             MonthAmountBlock(saved, row.prevMonthlyIncome, greenWhenLower = false, draftDelta = draft?.let { saved - before })
         }
         val target = row.monthlyTarget

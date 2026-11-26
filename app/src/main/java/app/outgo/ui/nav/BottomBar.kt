@@ -24,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -51,10 +52,17 @@ internal val bottomItems = listOf(
 @Composable
 fun OutgoBottomBar(selectedRoute: String?, onSelect: (String) -> Unit, warnedRoutes: Set<String> = emptySet()) {
     // Own items, not NavigationBarItem: its 64x32dp indicator can't be resized.
+    // The bar's own height scales with the font size, from 1x to 1.3x. The system navigation
+    // inset is added under it, so a phone's 3-button bar or a hidden gesture bar no longer
+    // squeezes or stretches it.
+    // Everything in the bar (icons, indicator, badge, ripple) grows by the same factor.
+    val scale = LocalDensity.current.fontScale.coerceIn(1f, 1.3f)
+    val height = BarHeight * scale
     Surface(color = NavigationBarDefaults.containerColor, tonalElevation = NavigationBarDefaults.Elevation) {
         Row(
-            modifier = Modifier.fillMaxWidth().height(64.dp)
+            modifier = Modifier.fillMaxWidth()
                 .windowInsetsPadding(NavigationBarDefaults.windowInsets)
+                .height(height)
                 .padding(horizontal = 8.dp)
                 .selectableGroup(),
             verticalAlignment = Alignment.CenterVertically,
@@ -71,13 +79,13 @@ fun OutgoBottomBar(selectedRoute: String?, onSelect: (String) -> Unit, warnedRou
                         onClick = { onSelect(item.route) },
                         role = Role.Tab,
                         interactionSource = null,
-                        indication = ripple(bounded = false, radius = 24.dp),
+                        indication = ripple(bounded = false, radius = 24.dp * scale),
                     ),
                     contentAlignment = Alignment.Center,
                 ) {
                     // 0.8x the Material indicator (as drawn at this bar's item width).
                     Box(
-                        Modifier.size(width = 48.dp, height = 26.dp).background(indicator, CircleShape),
+                        Modifier.size(width = 48.dp * scale, height = 26.dp * scale).background(indicator, CircleShape),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
@@ -88,15 +96,15 @@ fun OutgoBottomBar(selectedRoute: String?, onSelect: (String) -> Unit, warnedRou
                             } else {
                                 MaterialTheme.colorScheme.onSurfaceVariant
                             },
-                            modifier = Modifier.size(20.dp),
+                            modifier = Modifier.size(20.dp * scale),
                         )
                         if (item.route in warnedRoutes) {
                             Icon(
                                 painter = painterResource(R.drawable.ph_warning),
                                 contentDescription = stringResource(R.string.balance_negative_warning),
                                 tint = WarningDarkYellow,
-                                // On the 20dp icon's bottom-right corner.
-                                modifier = Modifier.offset(x = 9.dp, y = 7.dp).size(12.dp)
+                                // On the icon's bottom-right corner.
+                                modifier = Modifier.offset(x = 9.dp * scale, y = 7.dp * scale).size(12.dp * scale)
                                     .background(MaterialTheme.colorScheme.surface, CircleShape).padding(1.dp),
                             )
                         }
@@ -106,3 +114,6 @@ fun OutgoBottomBar(selectedRoute: String?, onSelect: (String) -> Unit, warnedRou
         }
     }
 }
+
+/** The bar above the system navigation inset at the default font: 64dp less a 24dp gesture inset. */
+private val BarHeight = 40.dp

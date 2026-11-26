@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -494,6 +495,7 @@ internal fun AccountLegend(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -679,7 +681,9 @@ private fun ShareRowItem(row: ShareRow, selection: AnalysisSelection, kind: Int,
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(ShareRowHeight)
+            // Grows with a large font, so the two lines are never cut. ponytail: the tap-to-scroll
+            // target still assumes ShareRowHeight, a little short of a grown row.
+            .heightIn(min = ShareRowHeight)
             .clip(RoundedCornerShape(10.dp))
             .background(background)
             .clickable { selection.toggle(row.id) }

@@ -3,6 +3,7 @@ package app.outgo.ui.history
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
 import app.outgo.ui.theme.OnPendingContainer
 import app.outgo.ui.theme.PendingContainer
 import app.outgo.ui.theme.WarningDarkYellow
@@ -344,6 +345,8 @@ private fun TradeRowContent(
                         },
                     ),
                 style = MaterialTheme.typography.bodyLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             if (!trade.note.isNullOrBlank()) {
                 Text(trade.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)

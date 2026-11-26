@@ -134,6 +134,21 @@ The category picker also offers Tabler Icons as VectorDrawables (`res/drawable/i
 rewrites `data/icon/TablerIcons.kt`. Never remove or rename a shipped icon key: it is stored in users'
 databases and backups.
 
+### Large fonts
+
+`OutgoTheme` caps the font scale at 1.3 (`MaxFontScale` in `ui/theme/Theme.kt`); design and test up to
+that. On a debug emulator: `adb shell settings put system font_scale 1.3`.
+
+- A container that holds `Text` takes `heightIn(min = …)`, never a fixed `height(…)`. A fixed height
+  cuts the text once the font grows. A size that must stay compact grows by exactly what its label's
+  line grows (see the Month / Year switch in `AnalysisScreen.kt`).
+- The bottom bar (`ui/nav/BottomBar.kt`) is 40dp x the font scale (1-1.3), its icons scaled alike, with the system navigation
+  inset added under it, never taken out of it.
+- Names (category, account, budget…) are one line: `maxLines = 1, overflow = TextOverflow.Ellipsis`.
+- A short label that may not fit falls back to a shorter string through `onTextLayout` +
+  `hasVisualOverflow` (see `ExpenseIncomeToggle` in `TradeScreen.kt`, "Chuyển khoản" -> "CK", and
+  the Analysis header, "Tháng 11, 2026" -> "11/2026").
+
 ### Key implementation detail: manual dependency wiring
 
 When adding a new screen/feature, the pattern is: entity (`data/db/entity/`) -> DAO

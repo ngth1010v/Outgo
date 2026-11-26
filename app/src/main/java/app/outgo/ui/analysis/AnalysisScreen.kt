@@ -37,6 +37,9 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -56,7 +59,6 @@ import app.outgo.ui.component.SwipeableSnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -86,6 +88,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.util.Locale
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
@@ -250,7 +253,7 @@ private data class SyncPoint(val leader: Boolean, val index: Int, val offset: In
 /**
  * One period picker: the arrows step through the periods of the mode shown (months, or years),
  * the label names the period, and the Month / Year switch changes the mode (a year's months, or
- * its summary). "Now" comes back to this month. The pager's swipe still walks the flat page list,
+ * its summary). The pager's swipe still walks the flat page list,
  * a year's summary after its December, and the switch follows the page it settles on.
  */
 @Composable
@@ -263,7 +266,6 @@ private fun AnalysisHeader(
     val current = pages.getOrNull(index)
     val year = current?.year ?: (currentMonth / 100)
     val yearMode = current is AnalysisPage.Year
-    val nowIndex = currentMonthIndex(pages, currentMonth)
     // The neighbouring period of the same mode: the month (or year summary) before or after.
     fun step(delta: Int): Int? {
         var i = index + delta
@@ -278,47 +280,57 @@ private fun AnalysisHeader(
     val yearIndex = yearlyPageIndex(pages, year).takeIf { it >= 0 }
 
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp).height(HeaderRowHeight),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp).heightIn(min = HeaderRowHeight),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ArrowButton(step(-1), stringResource(if (yearMode) R.string.analysis_previous_year else R.string.analysis_previous_month), rotation = 180f, onGoTo = onGoTo)
-        Text(
-            when (current) {
-                is AnalysisPage.Month -> stringResource(R.string.analysis_period_month, monthName(current.monthKey), current.year)
-                else -> year.toString()
-            },
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-        )
-        ArrowButton(step(1), stringResource(if (yearMode) R.string.analysis_next_year else R.string.analysis_next_month), rotation = 0f, onGoTo = onGoTo)
-        Spacer(Modifier.weight(1f))
-        val action = if (nowIndex >= 0 && nowIndex != index) ({ onGoTo(nowIndex) }) else null
-        TextButton(
-            onClick = { action?.invoke() },
-            enabled = action != null,
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-            modifier = Modifier.alpha(if (action != null) 1f else 0.3f),
-        ) {
-            Text(stringResource(R.string.analysis_go_now), style = MaterialTheme.typography.labelLarge)
+        // Arrows and period take what the switch leaves. A month that doesn't fit ("Tháng 11, 2026"
+        // on a large font) falls back to "11/2026".
+        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            ArrowButton(step(-1), stringResource(if (yearMode) R.string.analysis_previous_year else R.string.analysis_previous_month), rotation = 180f, onGoTo = onGoTo)
+            var short by remember(current, LocalDensity.current.fontScale) { mutableStateOf(false) }
+            Text(
+                when (current) {
+                    is AnalysisPage.Month ->
+                        if (short) String.format(Locale.US, "%02d/%d", current.monthKey % 100, current.year)
+                        else stringResource(R.string.analysis_period_month, monthName(current.monthKey), current.year)
+                    else -> year.toString()
+                },
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                softWrap = false,
+                onTextLayout = { if (it.hasVisualOverflow) short = true },
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            ArrowButton(step(1), stringResource(if (yearMode) R.string.analysis_next_year else R.string.analysis_next_month), rotation = 0f, onGoTo = onGoTo)
         }
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.width(ModeSwitchWidth).height(ModeSwitchHeight)) {
+        // 28dp at the default font, plus however much the label's line grows on a larger one.
+        val label = MaterialTheme.typography.labelMedium.lineHeight
+        val switchHeight = ModeSwitchHeight + with(LocalDensity.current) { label.toDp() } - label.value.dp
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.widthIn(min = ModeSwitchWidth).height(switchHeight)) {
             OutgoSegmentedButton(
                 selected = !yearMode,
                 onClick = { if (yearMode) monthOfYear?.let(onGoTo) },
                 enabled = !yearMode || monthOfYear != null,
                 shape = SegmentedButtonDefaults.itemShape(0, 2),
-            ) { Text(stringResource(R.string.analysis_mode_month), style = MaterialTheme.typography.labelMedium, maxLines = 1) }
+            ) { Text(stringResource(R.string.analysis_mode_month), style = MaterialTheme.typography.labelMedium, maxLines = 1, modifier = FullLine) }
             OutgoSegmentedButton(
                 selected = yearMode,
                 onClick = { if (!yearMode) yearIndex?.let(onGoTo) },
                 enabled = yearMode || yearIndex != null,
                 shape = SegmentedButtonDefaults.itemShape(1, 2),
-            ) { Text(stringResource(R.string.analysis_mode_year), style = MaterialTheme.typography.labelMedium, maxLines = 1) }
+            ) { Text(stringResource(R.string.analysis_mode_year), style = MaterialTheme.typography.labelMedium, maxLines = 1, modifier = FullLine) }
         }
     }
 }
 
 private val ModeSwitchWidth = 148.dp
+
+/**
+ * The switch's labels at their full line height: the button's 8dp vertical padding leaves less
+ * than a line inside 28dp, which cut the descenders ("g" in "Tháng").
+ */
+private val FullLine = Modifier.wrapContentHeight(unbounded = true)
 
 /** 70% of a segmented button's 40dp height. */
 private val ModeSwitchHeight = 28.dp

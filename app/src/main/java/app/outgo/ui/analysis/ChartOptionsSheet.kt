@@ -165,7 +165,7 @@ internal fun LazyListScope.cellRows(
                 if (item.icon != null) {
                     SwitchCell(item.name, item.icon, Color(item.color), selected(item.id), { onClick(item.id) }, Modifier.weight(1f))
                 } else {
-                    PickCell(item.name, item.iconId, item.color, selected(item.id), { onClick(item.id) }, Modifier.weight(1f), wrap = true)
+                    PickCell(item.name, item.iconId, item.color, selected(item.id), { onClick(item.id) }, Modifier.weight(1f))
                 }
             }
             repeat(perRow - row.size) { Spacer(Modifier.weight(1f)) }

@@ -4,6 +4,7 @@ import app.outgo.ui.component.SectionSwitch
 import app.outgo.ui.component.MoneyTextField
 import app.outgo.util.MonthKey
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.rotate
 import androidx.compose.material3.AlertDialog
@@ -260,7 +261,7 @@ private fun CategoryRow(
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(category.name, style = MaterialTheme.typography.bodyLarge)
+                Text(category.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (category.isExempt) {
                     Text(
                         stringResource(R.string.category_parent_budget_exception),
