@@ -25,9 +25,9 @@ class BalanceViewModel(private val accountRepository: AccountRepository) : ViewM
 
     fun create(
         name: String, iconId: Long?, color: Int, balance: Long, accountType: Int, savings: SavingsSetting?, monthKey: Int, description: String?, parentId: Long?,
-        parentSavingExempt: Boolean, privacy: AccountPrivacy, openingAt: Long, defaultSubName: String,
+        parentSavingExempt: Boolean, privacy: AccountPrivacy, openingAt: Long,
     ) {
-        write { accountRepository.create(name, iconId, color, balance, accountType, savings, monthKey, description, parentId, parentSavingExempt, privacy, openingAt, defaultSubName) }
+        write { accountRepository.create(name, iconId, color, balance, accountType, savings, monthKey, description, parentId, parentSavingExempt, privacy, openingAt) }
     }
 
     fun setParentSavingExempt(accountId: Long, exempt: Boolean) {

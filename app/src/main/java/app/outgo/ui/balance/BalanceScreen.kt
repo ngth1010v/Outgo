@@ -300,7 +300,7 @@ private fun EditAccountScreen(
     val canSumChildren = account?.isParent ?: (parent == null)
     // The shown month's sum of subaccount targets, read while the target sums them.
     var childSum by remember { mutableLongStateOf(0L) }
-    var iconId by remember { mutableStateOf(account?.iconId) }
+    var iconId by remember { mutableStateOf(if (account != null) account.iconId else parent?.iconId) }
     var color by remember { mutableStateOf(account?.color ?: parent?.color ?: DefaultCategoryColor) }
     var showIconPicker by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -316,7 +316,6 @@ private fun EditAccountScreen(
         tradesKnown = true
         if (account != null && editingParent) childCount = viewModel.childCount(account.id)
     }
-    val defaultSubName = stringResource(R.string.balance_default_sub_name)
     // With no history yet, the balance typed is the account's opening balance, dated by the user.
     val opening = !editingParent && tradesKnown && !hasTrades
 
@@ -393,7 +392,7 @@ private fun EditAccountScreen(
         } else {
             {
                 val savings = form.toSetting().takeIf { savingsShown }
-                viewModel.create(name.trim(), iconId, color, Money.parseInput(balanceText), accountType, savings, month, description.trim().ifEmpty { null }, parent?.id, exempt, privacy, openingAt, defaultSubName)
+                viewModel.create(name.trim(), iconId, color, Money.parseInput(balanceText), accountType, savings, month, description.trim().ifEmpty { null }, parent?.id, exempt, privacy, openingAt)
                 onDismiss()
             }
         }

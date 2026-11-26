@@ -109,7 +109,7 @@ import kotlinx.coroutines.launch
 
 private sealed interface EditTarget {
     data object NewParent : EditTarget
-    data class NewChild(val parentId: Long, val parentColor: Int) : EditTarget
+    data class NewChild(val parentId: Long, val parentColor: Int, val parentIconId: Long?) : EditTarget
     data class Edit(val category: CategoryEntity) : EditTarget
 }
 
@@ -198,7 +198,7 @@ fun CategoryEditScreen(categoryId: Long?, parentId: Long?, onClose: () -> Unit, 
     // Nothing to draw for the moment a deleted category is still on screen before the pop.
     val target = when {
         categoryId != null -> all.firstOrNull { it.id == categoryId }?.let { EditTarget.Edit(it) }
-        parentId != null -> all.firstOrNull { it.id == parentId }?.let { EditTarget.NewChild(it.id, it.color) }
+        parentId != null -> all.firstOrNull { it.id == parentId }?.let { EditTarget.NewChild(it.id, it.color, it.iconId) }
         else -> EditTarget.NewParent
     } ?: return
     EditCategoryScreen(target, state.type, state.budgetsByCategory, state.accounts, viewModel, onClose, openBudget)
@@ -223,7 +223,7 @@ private fun CategoryList(
         expanded = expanded,
         onToggle = onToggle,
         onOpen = { onEdit(EditTarget.Edit(it)) },
-        onAddChild = { onEdit(EditTarget.NewChild(it.id, it.color)) },
+        onAddChild = { onEdit(EditTarget.NewChild(it.id, it.color, it.iconId)) },
         onAddParent = { onEdit(EditTarget.NewParent) },
         addChildLabel = stringResource(R.string.category_add_sub),
         addParentLabel = stringResource(R.string.category_add),
@@ -307,7 +307,7 @@ private fun EditCategoryScreen(
     val effectiveType = existing?.type ?: currentType
     var name by remember { mutableStateOf(existing?.name.orEmpty()) }
     var description by remember { mutableStateOf(existing?.description.orEmpty()) }
-    var iconId by remember { mutableStateOf(existing?.iconId) }
+    var iconId by remember { mutableStateOf(if (existing != null) existing.iconId else (target as? EditTarget.NewChild)?.parentIconId) }
     var color by remember {
         mutableStateOf(existing?.color ?: (target as? EditTarget.NewChild)?.parentColor ?: DefaultCategoryColor)
     }
@@ -323,7 +323,6 @@ private fun EditCategoryScreen(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var hasTrades by remember { mutableStateOf(false) }
     var childCount by remember { mutableStateOf(0) }
-    val defaultChildName = stringResource(R.string.category_default_child_name)
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(existing?.id) {
@@ -404,7 +403,7 @@ private fun EditCategoryScreen(
                 if (target is EditTarget.NewChild) {
                     viewModel.createChild(target.parentId, name, iconId, color, setting, month, description.trim().ifEmpty { null }, exempt)
                 } else {
-                    viewModel.createParent(name, iconId, color, setting, month, defaultChildName, description.trim().ifEmpty { null })
+                    viewModel.createParent(name, iconId, color, setting, month, description.trim().ifEmpty { null })
                 }
                 onDismiss()
             }

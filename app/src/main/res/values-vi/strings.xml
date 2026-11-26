@@ -145,7 +145,6 @@
     <string name="balance_edit_sub_title">Sửa tài khoản con</string>
     <string name="balance_add_sub">Thêm tài khoản con</string>
     <string name="balance_add">Thêm tài khoản</string>
-    <string name="balance_default_sub_name">Chính</string>
     <string name="category_add_sub">Thêm danh mục con</string>
     <string name="category_add">Thêm danh mục</string>
     <string name="balance_delete_confirm_title">Xoá tài khoản?</string>
@@ -212,7 +211,6 @@
     <string name="category_archive_confirm_message">Danh mục đã có giao dịch nên không thể xoá. Danh mục sẽ được ẩn đi, lịch sử vẫn được giữ lại.</string>
     <string name="category_spent_of_budget">%1$s / %2$s</string>
     <string name="category_budget_over">Vượt %1$s</string>
-    <string name="category_default_child_name">Khác</string>
 
     <!-- Analysis -->
     <string name="analysis_previous_month">Tháng trước</string>

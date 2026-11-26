@@ -70,9 +70,9 @@ class CategoryRepository(
     /**
      * A parent with no children is invisible to the Trade screen (which only ever
      * picks a child), so a budget set on it could never accrue spend. Every new
-     * parent gets one default child up front so it's reachable right away.
+     * parent gets one default child (same name, icon and color) up front so it's reachable right away.
      */
-    suspend fun createParent(type: Int, name: String, iconId: Long?, color: Int, budget: BudgetSetting?, monthKey: Int, defaultChildName: String, description: String?): Long =
+    suspend fun createParent(type: Int, name: String, iconId: Long?, color: Int, budget: BudgetSetting?, monthKey: Int, description: String?): Long =
         withContext(Dispatchers.IO) {
             db.withTransaction {
                 val order = categoryDao.maxSortOrder(null) + 1
@@ -93,7 +93,7 @@ class CategoryRepository(
                     CategoryEntity(
                         parentId = id,
                         type = type,
-                        name = defaultChildName,
+                        name = name,
                         iconId = iconId,
                         color = color,
                         sortOrder = 0,

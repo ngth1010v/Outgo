@@ -70,8 +70,8 @@ class CategoryViewModel(
     suspend fun childCount(parentId: Long): Int = categoryRepository.childCount(parentId)
     suspend fun hasTrades(categoryId: Long): Boolean = categoryRepository.hasTrades(categoryId)
 
-    fun createParent(name: String, iconId: Long?, color: Int, budget: BudgetSetting?, monthKey: Int, defaultChildName: String, description: String?) {
-        write { categoryRepository.createParent(type.value, name, iconId, color, budget, monthKey, defaultChildName, description) }
+    fun createParent(name: String, iconId: Long?, color: Int, budget: BudgetSetting?, monthKey: Int, description: String?) {
+        write { categoryRepository.createParent(type.value, name, iconId, color, budget, monthKey, description) }
     }
 
     fun createChild(parentId: Long, name: String, iconId: Long?, color: Int, budget: BudgetSetting?, monthKey: Int, description: String?, parentBudgetExempt: Boolean) {

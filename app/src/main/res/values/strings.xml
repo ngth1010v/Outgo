@@ -151,7 +151,6 @@
     <string name="balance_edit_sub_title">Edit subaccount</string>
     <string name="balance_add_sub">Add subaccount</string>
     <string name="balance_add">Add account</string>
-    <string name="balance_default_sub_name">Main</string>
     <string name="category_add_sub">Add subcategory</string>
     <string name="category_add">Add category</string>
     <string name="balance_delete_confirm_title">Delete account?</string>
@@ -220,7 +219,6 @@
     <string name="category_archive_confirm_message">This category has transactions, so it can\'t be deleted. It will be hidden instead, and its history is kept.</string>
     <string name="category_spent_of_budget">%1$s / %2$s</string>
     <string name="category_budget_over">%1$s over</string>
-    <string name="category_default_child_name">General</string>
 
     <!-- Analysis -->
     <string name="analysis_previous_month">Previous month</string>
