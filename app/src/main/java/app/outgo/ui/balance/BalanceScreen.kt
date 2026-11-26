@@ -481,6 +481,9 @@ private fun EditAccountScreen(
         Spacer(Modifier.height(8.dp))
         ColorPickerGrid(selected = color, onSelect = { color = it })
 
+        Spacer(Modifier.height(24.dp))
+        PrivacySection(privacy, parent, accountType == AccountType.SAVINGS) { privacy = it }
+
         // A savings parent's subaccount can stay out of its savings progress.
         if (parent?.accountType == AccountType.SAVINGS) {
             Spacer(Modifier.height(24.dp))
@@ -531,9 +534,6 @@ private fun EditAccountScreen(
                 }
             }
         }
-
-        Spacer(Modifier.height(24.dp))
-        PrivacySection(privacy, parent, accountType == AccountType.SAVINGS) { privacy = it }
     }
 
     if (showConvertConfirm) {
